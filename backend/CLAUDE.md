@@ -435,6 +435,22 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
 ```
 
 
+## Deletion Strategy
+
+# --- ADDED 2026-04-06 during pre-build harness review ---
+# Reason: No project-wide default for soft vs hard deletes. CRUD prompt asks but harness didn't answer.
+# Impact: Claude Code applies consistent deletion patterns across all modules.
+
+- **User-facing entities** (users, products, orders, invoices, catalogs, sub-brands):
+  Use **soft delete** with a `deleted_at` (DateTime, nullable) column. Soft-deleted
+  records are excluded from queries by default but retained for audit trails and
+  potential recovery. Add a `deleted_at IS NULL` filter in service layer queries.
+- **Transient/internal data** (invite tokens, rate limit counters, session data):
+  Use **hard delete**. No audit trail needed for ephemeral records.
+- **Org codes:** Use **deactivation** (`is_active = false`), not deletion. Org codes
+  are never deleted because they may be referenced by user `org_code_id` foreign keys.
+
+
 ## Error Handling
 
 # --- WHY THIS SECTION EXISTS ---
@@ -532,6 +548,15 @@ async def corporate_admin_token(company_a):
         company_id=company_a[0].id,
         sub_brand_id=None,
         role="corporate_admin",
+    )
+
+@pytest.fixture
+async def reel48_admin_token():
+    """JWT token for a Reel48 platform admin (no company, no sub-brand)."""
+    return create_test_token(
+        company_id=None,
+        sub_brand_id=None,
+        role="reel48_admin",
     )
 
 @pytest.fixture

@@ -270,6 +270,17 @@ src/app/
 # auth token and handles errors consistently. Without this, Claude Code might
 # create fetch calls with different patterns in different components.
 
+### API Naming Convention
+# --- ADDED 2026-04-06 during pre-build harness review ---
+# Reason: Backend uses snake_case (Python), frontend uses camelCase (TypeScript).
+# Impact: Prevents confusion during API integration about key naming.
+
+The backend API returns JSON with **snake_case** keys (`company_id`, `sub_brand_id`).
+The frontend API client should transform these to **camelCase** (`companyId`, `subBrandId`)
+when parsing responses, and transform back to snake_case when sending requests. Use a
+utility like a custom `fetch` wrapper or a library that handles key transformation
+automatically. The `TenantContext` interface above uses camelCase — this is intentional.
+
 Create a centralized API client in `src/lib/api/client.ts` that:
 1. Automatically attaches the Cognito JWT token to every request
 2. Handles token refresh when a 401 is received

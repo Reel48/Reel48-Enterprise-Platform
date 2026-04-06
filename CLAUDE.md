@@ -68,6 +68,7 @@ brands or subsidiaries.
 - **Email:** Amazon SES (transactional emails, bulk order reminders)
 - **File Storage:** Amazon S3 with CloudFront CDN
 - **Invoicing & Payments:** Stripe (invoice generation, client billing, webhook processing)
+- **Logging:** structlog (structured JSON logging with tenant context binding)
 
 ### Frontend
 - **Framework:** Next.js 14+ (App Router)
@@ -610,7 +611,7 @@ codebase. Claude Code should **not modify or reference these** during module bui
 
 - `shim-lib/`, `shim-perm/` — Development harness tooling (permission shims)
 - `uploads/` — Project planning documents
-- `Guide.docx` — Build process guide
+- `Reel48+ Harness Companion Guide.docx` — Build process guide
 - `audit.jsonl`, `.audit-key` — Harness audit logs
 - `README.md` — Repo-level readme
 

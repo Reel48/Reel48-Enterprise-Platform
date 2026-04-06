@@ -30,6 +30,59 @@
 
 ---
 
+## 2026-04-06 — Pre-Build Harness Review (Pre-Module 1)
+
+**Type:** End-of-session self-audit (full harness consistency review)
+**Author:** Claude Code
+
+### Changes Made
+- **File:** `prompts/harness-review.md`
+  - **Change:** Updated ADR range from `001-006` to `001-007`
+  - **Reason:** ADR-007 was added but harness-review prompt wasn't updated to include it
+  - **Impact:** Post-module reviews now check all 7 ADRs
+
+- **File:** `CLAUDE.md` (root)
+  - **Change:** Fixed `Guide.docx` reference to `Reel48+ Harness Companion Guide.docx`
+  - **Reason:** Filename in harness didn't match actual file on disk
+  - **Impact:** Prevents confusion about non-application file inventory
+
+- **File:** `CLAUDE.md` (root)
+  - **Change:** Added `structlog` to backend technology stack
+  - **Reason:** `backend/CLAUDE.md` specifies structlog for logging but root tech stack omitted it
+  - **Impact:** Root tech stack is now complete and consistent with backend CLAUDE.md
+
+- **File:** `docs/adr/006-stripe-for-invoicing.md`
+  - **Change:** Updated "only API endpoint" language to "one of a small number" with reference to ADR-007
+  - **Reason:** After ADR-007, there are three unauthenticated endpoints, not one
+  - **Impact:** ADR-006 no longer contains outdated claim about webhook being the sole exception
+
+- **File:** `frontend/CLAUDE.md`
+  - **Change:** Added "API Naming Convention" section documenting snake_case (backend) to camelCase (frontend) transformation
+  - **Reason:** No guidance existed on how API key naming transforms between backend and frontend
+  - **Impact:** Prevents confusion during API integration; establishes that the API client handles key transformation
+
+- **File:** `backend/CLAUDE.md`
+  - **Change:** Added "Deletion Strategy" section establishing soft delete (user-facing entities) vs hard delete (transient data) defaults
+  - **Reason:** CRUD prompt template asks "soft delete or hard delete" but no harness file provided a project-wide default
+  - **Impact:** Claude Code applies consistent deletion patterns without needing per-entity guidance
+
+- **File:** `backend/CLAUDE.md`
+  - **Change:** Added `reel48_admin_token` fixture to conftest.py example
+  - **Reason:** Test fixture examples included corporate_admin and brand_admin tokens but not the platform admin token
+  - **Impact:** Claude Code includes reel48_admin in test setups for cross-company visibility testing
+
+### Gaps Identified
+- `.env.example` files — deferred to Module 1 setup
+- Bulk order data model guidance — deferred to Module 5
+- Invoice prompt template — deferred to Module 7 (per existing changelog note)
+
+### Notes
+- 7 files updated, 0 new files created
+- All changes are minor consistency fixes and gap fills — no architectural changes
+- Harness is now ready for Module 1 (Auth & Multi-Tenancy) development
+
+---
+
 ## 2026-04-06 — Self-Registration: Sub-Brand Selection by Employee
 
 **Type:** Reactive update (user requirement — employees should choose their sub-brand)

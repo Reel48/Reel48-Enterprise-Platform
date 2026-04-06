@@ -44,9 +44,10 @@ invoice data fetched through Reel48+ API endpoints, never directly from Stripe.
 - Approved orders generate draft Stripe Invoices with line items
 - Payment status flows back via Stripe webhooks
 
-**Webhook exception:** The Stripe webhook endpoint is the only API endpoint
-that does not require JWT authentication. It is secured by Stripe webhook
-signature verification instead.
+**Webhook exception:** The Stripe webhook endpoint is one of a small number of
+API endpoints that do not require JWT authentication. It is secured by Stripe
+webhook signature verification instead. (See also ADR-007 for the self-registration
+endpoints, which are the other unauthenticated exceptions.)
 
 ## Alternatives Considered
 
