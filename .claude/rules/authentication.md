@@ -1,3 +1,7 @@
+---
+globs: "**/auth/**,**/security/**,**/middleware/auth*,**/login*,**/cognito*"
+---
+
 # Rule: Authentication & Authorization
 #
 # ╔══════════════════════════════════════════════════════════════════════════════╗

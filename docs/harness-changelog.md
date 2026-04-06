@@ -30,6 +30,34 @@
 
 ---
 
+## 2026-04-06 — Rule File Frontmatter Fix (Pre-Stage 1)
+
+**Type:** Reactive update
+**Author:** Claude Code
+
+### Changes Made
+- **File:** All 6 rule files in `.claude/rules/`
+  - **Change:** Added YAML frontmatter with `globs:` patterns for conditional activation
+  - **Reason:** Rule files used comment-based activation patterns (`# Activates for: ...`) which Claude Code does not parse. Without proper `globs:` frontmatter, all rules load in every session regardless of which files are being edited, wasting context and diluting focused guidance.
+  - **Impact:** Rules now activate only when Claude Code works on matching file paths (e.g., `database-migrations.md` only loads when editing files in `**/migrations/**` or `**/models/**`).
+
+- **File:** `Reel48+ Harness Companion Guide.docx`
+  - **Change:** Updated Section 3.1 to explain YAML frontmatter requirement for rule file activation.
+  - **Reason:** The guide described rule activation conceptually but did not mention the required frontmatter format.
+  - **Impact:** Team members understand that rule files require `globs:` frontmatter, not just descriptive comments.
+
+### Glob patterns applied
+| Rule File | Globs |
+|-----------|-------|
+| `database-migrations.md` | `**/migrations/**,**/models/**,**/*alembic*` |
+| `api-endpoints.md` | `**/api/**,**/routes/**,**/endpoints/**` |
+| `authentication.md` | `**/auth/**,**/security/**,**/middleware/auth*,**/login*,**/cognito*` |
+| `testing.md` | `**/tests/**,**/test_*,**/*_test.py,**/*.test.ts,**/*.spec.ts` |
+| `s3-storage.md` | `**/storage/**,**/upload*,**/s3*,**/assets/**,**/media/**` |
+| `harness-maintenance.md` | `**/CLAUDE.md,**/.claude/**,**/docs/adr/**,**/prompts/**` |
+
+---
+
 ## 2026-04-06 — Repo Structure Fix (Pre-Stage 1)
 
 **Type:** Reactive update
