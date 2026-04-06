@@ -57,6 +57,9 @@ corporate_admin          → Full access across ALL sub-brands within their comp
 | Create bulk orders       | ✅ | ✅ | ✅ | ❌ |
 | Approve orders           | ✅ | ✅ | ✅ | ❌ |
 | Place individual orders  | ✅ | ✅ | ✅ | ✅ |
+| Create/send invoices     | ✅ | ✅ | ❌ | ❌ |
+| View invoices (all)      | ✅ | ❌ | ❌ | ❌ |
+| View invoices (brand)    | ✅ | ✅ | ✅ | ❌ |
 | Manage own profile       | ✅ | ✅ | ✅ | ✅ |
 | View analytics (all)     | ✅ | ❌ | ❌ | ❌ |
 | View analytics (brand)   | ✅ | ✅ | ❌ | ❌ |

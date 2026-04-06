@@ -67,6 +67,7 @@ brands or subsidiaries.
 - **Task Queue:** Amazon SQS (for async processing like bulk order aggregation)
 - **Email:** Amazon SES (transactional emails, bulk order reminders)
 - **File Storage:** Amazon S3 with CloudFront CDN
+- **Invoicing & Payments:** Stripe (invoice generation, client billing, webhook processing)
 
 ### Frontend
 - **Framework:** Next.js 14+ (App Router)
@@ -286,6 +287,69 @@ URLs to the frontend. Pre-signed URLs expire after 1 hour for downloads, 15 minu
 for uploads.
 
 
+## Invoicing & Client Billing Conventions
+
+# --- WHY THIS SECTION EXISTS ---
+# Invoicing is how Reel48+ monetizes the platform. Every order (individual or bulk)
+# ultimately generates an invoice that is sent to the client company. Without clear
+# conventions here, Claude Code might build invoicing as an afterthought, miss the
+# Stripe integration patterns, or fail to scope invoices to the correct tenant and
+# sub-brand. Invoicing data also feeds the analytics dashboard, so the data model
+# must be designed for both billing accuracy and reporting flexibility.
+
+### Stripe Integration Model
+Reel48+ uses **Stripe** as the invoicing and payment platform. The integration follows
+a **server-side only** pattern — the backend creates and manages Stripe objects; the
+frontend displays invoice data fetched through our API (never directly from Stripe).
+
+**Stripe Object Mapping:**
+| Reel48+ Entity | Stripe Object | Relationship |
+|----------------|---------------|-------------|
+| Company | Stripe Customer | 1:1 — created when company onboards |
+| Sub-Brand | Stripe Customer metadata | Company's Stripe Customer tagged with sub-brand context |
+| Approved Order | Stripe Invoice + Line Items | Invoice created when order is approved |
+| Bulk Order | Stripe Invoice + Line Items | Single consolidated invoice per bulk order session |
+
+### Tenant Isolation in Stripe
+- Each **company** maps to a **Stripe Customer** (`stripe_customer_id` stored on the `companies` table)
+- Invoices are always created against the company's Stripe Customer
+- Sub-brand context is stored as **Stripe metadata** on invoices (`sub_brand_id`, `sub_brand_name`)
+  so invoices can be filtered and reported by sub-brand
+- **CRITICAL:** Never create Stripe objects using tenant IDs from request parameters.
+  Always derive them from the authenticated TenantContext, same as every other operation.
+
+### Invoice Lifecycle
+```
+Order Approved → Invoice Created (draft) → Invoice Finalized → Invoice Sent → Payment Received
+                     ↓                          ↓                   ↓              ↓
+              Stripe: draft invoice      Stripe: finalized     Email via SES   Stripe webhook
+              with line items            + auto-numbering      with PDF link   updates status
+```
+
+### Invoice Data Model Rules
+- The `invoices` table stores a local copy of invoice data alongside the `stripe_invoice_id`
+  for cross-referencing. Stripe is the source of truth for payment status; the local table
+  enables fast queries, tenant-scoped access, and analytics integration.
+- Every invoice row MUST include `company_id` and `sub_brand_id` (standard tenant isolation)
+- Invoice line items reference `order_id` or `bulk_order_id` to trace back to the originating order
+- Store `stripe_invoice_id`, `stripe_invoice_url`, and `stripe_payment_status` on the local record
+- Payment status is updated via **Stripe webhooks**, not polling
+
+### Webhook Security
+- Verify webhook signatures using `stripe.Webhook.construct_event()` with the webhook signing secret
+- The webhook endpoint (`/api/v1/webhooks/stripe`) is the ONE endpoint that does NOT require
+  JWT authentication (Stripe calls it directly), but it MUST verify the Stripe signature
+- Process webhooks idempotently — the same event may be delivered multiple times
+
+### API Endpoints for Invoicing
+- `GET /api/v1/invoices` — List invoices (tenant-scoped, paginated)
+- `GET /api/v1/invoices/{invoice_id}` — Invoice detail with line items
+- `POST /api/v1/invoices` — Create a draft invoice from an approved order (admin only)
+- `POST /api/v1/invoices/{invoice_id}/finalize` — Finalize and send (admin only)
+- `GET /api/v1/invoices/{invoice_id}/pdf` — Get Stripe-hosted invoice PDF URL
+- `POST /api/v1/webhooks/stripe` — Stripe webhook receiver (no JWT, signature-verified)
+
+
 ## Testing Requirements
 
 # --- WHY THIS SECTION EXISTS ---
@@ -349,8 +413,9 @@ for uploads.
 4. **Ordering Flow** (depends on Profiles + Catalog)
 5. **Bulk Ordering System** (depends on Ordering)
 6. **Approval Workflows** (depends on Ordering)
-7. **Analytics Dashboard** (depends on Ordering)
-8. **Employee Engagement** (depends on Profiles)
+7. **Invoicing & Client Billing** (depends on Ordering + Approval Workflows)
+8. **Analytics Dashboard** (depends on Ordering + Invoicing)
+9. **Employee Engagement** (depends on Profiles)
 
 
 ## Claude Code Session Rules
@@ -392,7 +457,8 @@ reel48-plus/
 │       ├── api-endpoints.md
 │       ├── authentication.md
 │       ├── testing.md
-│       └── s3-storage.md
+│       ├── s3-storage.md
+│       └── stripe-invoicing.md
 ├── docs/
 │   └── adr/                           # Architectural Decision Records
 │       ├── 001-shared-database-multi-tenancy.md
@@ -400,6 +466,7 @@ reel48-plus/
 │       ├── 003-default-sub-brand-pattern.md
 │       ├── 004-rest-before-graphql.md
 │       ├── 005-cognito-over-third-party-auth.md
+│       ├── 006-stripe-for-invoicing.md
 │       └── TEMPLATE.md
 ├── prompts/                           # Reusable prompt templates
 │   ├── crud-endpoint.md
@@ -559,6 +626,7 @@ helps during the post-module review when deciding whether guidance is still rele
 | Auth or security pattern              | `.claude/rules/authentication.md`       |
 | Testing requirement                   | `.claude/rules/testing.md`              |
 | S3 / file storage pattern             | `.claude/rules/s3-storage.md`           |
+| Stripe / invoicing / billing pattern  | `.claude/rules/stripe-invoicing.md`     |
 | Harness maintenance process itself    | `.claude/rules/harness-maintenance.md`  |
 | An architectural decision (why)       | `docs/adr/{NNN}-{title}.md` (new file)  |
 | A reusable task pattern               | `prompts/{task-name}.md` (new file)     |

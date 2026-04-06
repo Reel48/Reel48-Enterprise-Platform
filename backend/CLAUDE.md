@@ -55,12 +55,14 @@ backend/
 │   │   ├── user.py
 │   │   ├── product.py
 │   │   ├── order.py
-│   │   └── bulk_order.py
+│   │   ├── bulk_order.py
+│   │   └── invoice.py
 │   ├── schemas/                   # Pydantic models for API request/response
 │   │   ├── common.py              # Shared schemas (pagination, error response)
 │   │   ├── company.py
 │   │   ├── product.py
 │   │   ├── order.py
+│   │   ├── invoice.py
 │   │   └── user.py
 │   ├── api/
 │   │   └── v1/
@@ -73,6 +75,8 @@ backend/
 │   │       ├── orders.py
 │   │       ├── bulk_orders.py
 │   │       ├── approvals.py
+│   │       ├── invoices.py
+│   │       ├── webhooks.py            # Stripe webhook receiver
 │   │       └── analytics.py
 │   └── services/                  # Business logic (called by routes)
 │       ├── company_service.py
@@ -83,7 +87,9 @@ backend/
 │       ├── bulk_order_service.py
 │       ├── approval_service.py
 │       ├── analytics_service.py
-│       └── email_service.py       # SES integration
+│       ├── email_service.py       # SES integration
+│       ├── invoice_service.py     # Stripe invoice lifecycle
+│       └── stripe_service.py      # Stripe API client wrapper
 ├── migrations/
 │   ├── env.py
 │   └── versions/                  # Alembic migration files
@@ -92,6 +98,7 @@ backend/
 │   ├── test_auth.py
 │   ├── test_products.py
 │   ├── test_orders.py
+│   ├── test_invoices.py
 │   ├── test_isolation.py          # Cross-tenant and cross-sub-brand access tests
 │   └── factories/                 # Test data factories
 │       ├── company_factory.py

@@ -132,6 +132,10 @@ src/
 │       ├── orders/
 │       │   ├── OrderSummary.tsx
 │       │   └── CartDrawer.tsx
+│       ├── invoices/
+│       │   ├── InvoiceTable.tsx
+│       │   ├── InvoiceDetail.tsx
+│       │   └── CreateInvoiceForm.tsx
 │       └── analytics/
 │           ├── SpendChart.tsx
 │           └── SizeDistribution.tsx
@@ -192,6 +196,10 @@ src/app/
 │   │   ├── page.tsx           # Bulk order sessions list
 │   │   ├── new/page.tsx       # Create bulk order session
 │   │   └── [id]/page.tsx      # Bulk order session detail + dashboard
+│   ├── invoices/
+│   │   ├── page.tsx           # Invoice list (admin: all, manager: view-only)
+│   │   ├── new/page.tsx       # Create invoice from approved order (admin only)
+│   │   └── [id]/page.tsx      # Invoice detail with PDF download
 │   ├── admin/
 │   │   ├── users/page.tsx     # User management (admin only)
 │   │   ├── brands/page.tsx    # Sub-brand management (corporate_admin only)

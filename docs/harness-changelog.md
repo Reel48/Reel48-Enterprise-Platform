@@ -30,6 +30,55 @@
 
 ---
 
+## 2026-04-06 — Stripe Invoicing & Client Billing (Pre-Stage 1)
+
+**Type:** Reactive update (gap identified — missing core business functionality)
+**Author:** Claude Code
+
+### Changes Made
+- **File:** `CLAUDE.md` (root)
+  - **Change:** Added Stripe to technology stack. Added "Invoicing & Client Billing Conventions" section with Stripe object mapping, tenant isolation patterns, invoice lifecycle, webhook security, and API endpoints. Updated module build order to include Module 7 (Invoicing & Client Billing) and renumbered subsequent modules (now 9 total). Updated directory structure to include `stripe-invoicing.md` rule and `006-stripe-for-invoicing.md` ADR.
+  - **Reason:** Invoicing is a critical revenue function that was entirely missing from the harness. Without this, Claude Code would have no guidance for Stripe integration, invoice data modeling, or the webhook authentication exception.
+  - **Impact:** Claude Code now has complete guidance for building the invoicing module, including the one endpoint that breaks the JWT-auth-everywhere pattern (Stripe webhooks).
+
+- **File:** `backend/CLAUDE.md`
+  - **Change:** Added `invoice.py` to models, schemas, routes, and services directories. Added `webhooks.py` route, `stripe_service.py` service, and `test_invoices.py` to directory structure.
+  - **Reason:** Backend needs invoice-specific files in each architectural layer.
+  - **Impact:** Claude Code knows exactly where to create invoicing files.
+
+- **File:** `frontend/CLAUDE.md`
+  - **Change:** Added `/invoices` routes (list, new, detail) and invoice components (InvoiceTable, InvoiceDetail, CreateInvoiceForm) to component architecture.
+  - **Reason:** Frontend needs invoice management pages and components.
+  - **Impact:** Claude Code knows the frontend invoice page structure and component organization.
+
+- **File:** `.claude/rules/authentication.md`
+  - **Change:** Added invoice permissions to the role-based access matrix: Create/send invoices (admin only), View invoices (all) for corporate_admin, View invoices (brand) for admin + manager.
+  - **Reason:** Invoicing has distinct role requirements not covered by the existing matrix.
+  - **Impact:** Claude Code applies correct role checks on invoice endpoints.
+
+- **File:** `.claude/rules/stripe-invoicing.md` (NEW)
+  - **Change:** Created new rule file with globs for invoice/billing/stripe/webhook files. Covers Stripe API patterns, company-to-customer mapping, invoice creation from orders, webhook handling, data model, environment variables, and testing requirements.
+  - **Reason:** Stripe integration introduces unique patterns (server-side only, webhook auth exception, cents-vs-dollars conversion, idempotent processing) that need dedicated rule guidance.
+  - **Impact:** When Claude Code works on any invoice or Stripe file, it gets focused guidance specific to billing.
+
+- **File:** `docs/adr/006-stripe-for-invoicing.md` (NEW)
+  - **Change:** Created ADR documenting the choice of Stripe over custom invoicing, QuickBooks/Xero, and Square. Covers consequences, risks, and mitigation strategies.
+  - **Reason:** Stripe is a significant technology decision affecting revenue, data model, and security patterns.
+  - **Impact:** Claude Code understands WHY Stripe was chosen and won't suggest alternatives.
+
+- **File:** `Reel48+ Harness Companion Guide.docx`
+  - **Change:** Updated to v2.2. Added stripe-invoicing.md to rule file inventory, ADR 006 to ADR inventory, new files to complete inventory, updated total file count to 24.
+  - **Reason:** Guide must reflect all harness additions.
+  - **Impact:** Team members have accurate documentation of the full harness.
+
+### New Module Added
+- **Module 7: Invoicing & Client Billing** — positioned after Approval Workflows (depends on approved orders), before Analytics Dashboard (which now incorporates invoice/revenue data).
+
+### Gaps Identified
+- Invoice-related prompt template (`prompts/invoice-module.md`) may be needed when Module 7 build begins. Defer creation until then.
+
+---
+
 ## 2026-04-06 — Rule File Frontmatter Fix (Pre-Stage 1)
 
 **Type:** Reactive update
