@@ -1,8 +1,9 @@
 # macOS
 .DS_Store
 
-# Claude Code session data
-.claude/
+# Claude Code session data (but keep rules/)
+.claude/*
+!.claude/rules/
 audit.jsonl
 .audit-key
 
