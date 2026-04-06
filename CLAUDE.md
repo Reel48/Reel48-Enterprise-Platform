@@ -554,8 +554,10 @@ reel48-plus/
 │       ├── authentication.md
 │       ├── testing.md
 │       ├── s3-storage.md
-│       └── stripe-invoicing.md
+│       ├── stripe-invoicing.md
+│       └── harness-maintenance.md
 ├── docs/
+│   ├── api/                           # OpenAPI schemas (populated as endpoints are built)
 │   └── adr/                           # Architectural Decision Records
 │       ├── 001-shared-database-multi-tenancy.md
 │       ├── 002-rls-over-application-isolation.md
@@ -600,6 +602,17 @@ reel48-plus/
 └── shared/
     └── types/                         # Shared TypeScript types / API contracts
 ```
+
+### Non-Application Files (Ignore During Implementation)
+The following files and directories exist at the repo root for development tooling
+and project management purposes. They are NOT part of the Reel48+ application
+codebase. Claude Code should **not modify or reference these** during module builds:
+
+- `shim-lib/`, `shim-perm/` — Development harness tooling (permission shims)
+- `uploads/` — Project planning documents
+- `Guide.docx` — Build process guide
+- `audit.jsonl`, `.audit-key` — Harness audit logs
+- `README.md` — Repo-level readme
 
 
 ## ⚙ Harness Maintenance Protocol (MANDATORY)

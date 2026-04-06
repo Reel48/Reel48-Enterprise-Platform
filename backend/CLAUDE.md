@@ -163,13 +163,15 @@ async def get_tenant_context(
     # CRITICAL: Set PostgreSQL session variables so RLS policies can reference them.
     # Without this, RLS policies have no way to know which tenant is making the request.
     # For reel48_admin: company_id is empty string, which triggers the RLS bypass.
+    # NOTE: Use parameterized queries (not f-strings) for defense-in-depth, even though
+    # these values come from validated JWTs.
     if context.is_reel48_admin:
         await db.execute(text("SET app.current_company_id = ''"))
         await db.execute(text("SET app.current_sub_brand_id = ''"))
     else:
-        await db.execute(text(f"SET app.current_company_id = '{context.company_id}'"))
+        await db.execute(text("SET app.current_company_id = :cid"), {"cid": str(context.company_id)})
         if context.sub_brand_id:
-            await db.execute(text(f"SET app.current_sub_brand_id = '{context.sub_brand_id}'"))
+            await db.execute(text("SET app.current_sub_brand_id = :sbid"), {"sbid": str(context.sub_brand_id)})
         else:
             await db.execute(text("SET app.current_sub_brand_id = ''"))
 
@@ -177,7 +179,7 @@ async def get_tenant_context(
 ```
 
 ### Unauthenticated Endpoint Exceptions
-Two endpoints do NOT use `get_tenant_context` because they receive requests without JWTs:
+Three endpoints do NOT use `get_tenant_context` because they receive requests without JWTs:
 1. **`POST /api/v1/webhooks/stripe`** — Stripe webhook. Secured by signature verification.
 2. **`POST /api/v1/auth/validate-org-code`** — Validates an org code and returns the
    company name + list of sub-brands. Rate-limited (5 attempts per IP per 15 minutes).
@@ -216,6 +218,14 @@ class TenantContext:
     def is_admin(self) -> bool:
         return self.role in ("reel48_admin", "corporate_admin", "sub_brand_admin")
 ```
+
+### `reel48_admin` and `company_id`: NULL vs Empty String
+**Important distinction:** The `reel48_admin` role has `company_id = None` in the Python
+`TenantContext` dataclass (because platform admins don't belong to any company). However,
+the auth middleware sets the PostgreSQL session variable `app.current_company_id` to an
+**empty string** (`''`), not NULL. This is because PostgreSQL's `current_setting()` returns
+a string, and the RLS company isolation policy checks for `= ''` as the bypass signal.
+In short: **`None` in Python, `''` in PostgreSQL** — both represent "no company scope."
 
 
 ## Endpoint Pattern
