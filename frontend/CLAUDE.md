@@ -72,7 +72,7 @@ and `custom:role`. Extract these in the auth context provider:
 ```typescript
 // WHY: This type ensures we never accidentally treat the role as a freeform
 // string. TypeScript will catch any typo in role names at compile time.
-type UserRole = 'corporate_admin' | 'sub_brand_admin' | 'regional_manager' | 'employee';
+type UserRole = 'reel48_admin' | 'corporate_admin' | 'sub_brand_admin' | 'regional_manager' | 'employee';
 
 interface TenantContext {
   companyId: string;
@@ -206,6 +206,22 @@ src/app/
 │   │   ├── approvals/page.tsx # Approval queue
 │   │   └── analytics/page.tsx # Analytics dashboard
 │   └── settings/page.tsx      # Account settings
+├── (platform)/                # Reel48 admin routes (reel48_admin only)
+│   ├── layout.tsx             # Platform admin layout with reel48_admin guard
+│   ├── dashboard/page.tsx     # Platform overview (all companies, revenue)
+│   ├── companies/
+│   │   ├── page.tsx           # All client companies list
+│   │   └── [id]/page.tsx      # Company detail and management
+│   ├── catalogs/
+│   │   ├── page.tsx           # All catalogs across companies
+│   │   ├── new/page.tsx       # Create catalog for a client company
+│   │   └── [id]/
+│   │       ├── page.tsx       # Catalog detail (products, pricing, approval)
+│   │       └── approve/page.tsx  # Review and approve catalog
+│   └── invoices/
+│       ├── page.tsx           # All invoices across companies
+│       ├── new/page.tsx       # Create invoice for a client company
+│       └── [id]/page.tsx      # Invoice detail and management
 ```
 
 

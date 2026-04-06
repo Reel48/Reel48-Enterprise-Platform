@@ -77,7 +77,11 @@ backend/
 │   │       ├── approvals.py
 │   │       ├── invoices.py
 │   │       ├── webhooks.py            # Stripe webhook receiver
-│   │       └── analytics.py
+│   │       ├── analytics.py
+│   │       └── platform/              # Reel48 admin endpoints (cross-company)
+│   │           ├── catalogs.py        # Catalog management, pricing, approval
+│   │           ├── invoices.py        # Invoice creation for client companies
+│   │           └── companies.py       # Client company management
 │   └── services/                  # Business logic (called by routes)
 │       ├── company_service.py
 │       ├── sub_brand_service.py
@@ -153,11 +157,16 @@ async def get_tenant_context(
 
     # CRITICAL: Set PostgreSQL session variables so RLS policies can reference them.
     # Without this, RLS policies have no way to know which tenant is making the request.
-    await db.execute(text(f"SET app.current_company_id = '{context.company_id}'"))
-    if context.sub_brand_id:
-        await db.execute(text(f"SET app.current_sub_brand_id = '{context.sub_brand_id}'"))
-    else:
+    # For reel48_admin: company_id is empty string, which triggers the RLS bypass.
+    if context.is_reel48_admin:
+        await db.execute(text("SET app.current_company_id = ''"))
         await db.execute(text("SET app.current_sub_brand_id = ''"))
+    else:
+        await db.execute(text(f"SET app.current_company_id = '{context.company_id}'"))
+        if context.sub_brand_id:
+            await db.execute(text(f"SET app.current_sub_brand_id = '{context.sub_brand_id}'"))
+        else:
+            await db.execute(text("SET app.current_sub_brand_id = ''"))
 
     return context
 ```
@@ -175,9 +184,13 @@ from uuid import UUID
 @dataclass
 class TenantContext:
     user_id: str
-    company_id: UUID
+    company_id: Optional[UUID]  # None for reel48_admin (cross-company access)
     sub_brand_id: Optional[UUID]
-    role: str  # One of: corporate_admin, sub_brand_admin, regional_manager, employee
+    role: str  # One of: reel48_admin, corporate_admin, sub_brand_admin, regional_manager, employee
+
+    @property
+    def is_reel48_admin(self) -> bool:
+        return self.role == "reel48_admin"
 
     @property
     def is_corporate_admin(self) -> bool:
@@ -185,7 +198,7 @@ class TenantContext:
 
     @property
     def is_admin(self) -> bool:
-        return self.role in ("corporate_admin", "sub_brand_admin")
+        return self.role in ("reel48_admin", "corporate_admin", "sub_brand_admin")
 ```
 
 

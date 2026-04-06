@@ -25,9 +25,9 @@ globs: "**/auth/**,**/security/**,**/middleware/auth*,**/login*,**/cognito*"
 
 ### Custom Attributes in the User Pool
 These custom attributes carry tenant context in every JWT token:
-- `custom:company_id` (String) — The user's company. Always set.
-- `custom:sub_brand_id` (String) — The user's sub-brand. NULL for corporate_admin.
-- `custom:role` (String) — One of: `corporate_admin`, `sub_brand_admin`, `regional_manager`, `employee`
+- `custom:company_id` (String) — The user's company. NULL for `reel48_admin` (cross-company access).
+- `custom:sub_brand_id` (String) — The user's sub-brand. NULL for `corporate_admin` and `reel48_admin`.
+- `custom:role` (String) — One of: `reel48_admin`, `corporate_admin`, `sub_brand_admin`, `regional_manager`, `employee`
 
 ### Token Validation Rules
 1. Validate the JWT signature against Cognito's JWKS endpoint
@@ -40,29 +40,34 @@ These custom attributes carry tenant context in every JWT token:
 ## Role Hierarchy
 
 ```
-corporate_admin          → Full access across ALL sub-brands within their company
-  └── sub_brand_admin    → Full access within ONE sub-brand
-       └── regional_manager  → Can manage orders and bulk orders within their sub-brand
-            └── employee      → Can manage their own profile and place orders
+reel48_admin                 → PLATFORM OPERATOR. Full access across ALL companies.
+                               Manages catalogs, pricing, product approvals, invoicing.
+  └── corporate_admin        → Full access across ALL sub-brands within their company
+       └── sub_brand_admin   → Full access within ONE sub-brand
+            └── regional_manager  → Can manage orders and bulk orders within their sub-brand
+                 └── employee      → Can manage their own profile and place orders
 ```
 
 ### Role-Based Access Matrix
-| Action                    | corporate_admin | sub_brand_admin | regional_manager | employee |
-|--------------------------|:-:|:-:|:-:|:-:|
-| Manage sub-brands        | ✅ | ❌ | ❌ | ❌ |
-| Manage users (all brands)| ✅ | ❌ | ❌ | ❌ |
-| Manage users (own brand) | ✅ | ✅ | ❌ | ❌ |
-| Manage catalog (master)  | ✅ | ❌ | ❌ | ❌ |
-| Manage catalog (brand)   | ✅ | ✅ | ❌ | ❌ |
-| Create bulk orders       | ✅ | ✅ | ✅ | ❌ |
-| Approve orders           | ✅ | ✅ | ✅ | ❌ |
-| Place individual orders  | ✅ | ✅ | ✅ | ✅ |
-| Create/send invoices     | ✅ | ✅ | ❌ | ❌ |
-| View invoices (all)      | ✅ | ❌ | ❌ | ❌ |
-| View invoices (brand)    | ✅ | ✅ | ✅ | ❌ |
-| Manage own profile       | ✅ | ✅ | ✅ | ✅ |
-| View analytics (all)     | ✅ | ❌ | ❌ | ❌ |
-| View analytics (brand)   | ✅ | ✅ | ❌ | ❌ |
+| Action                         | reel48_admin | corporate_admin | sub_brand_admin | regional_manager | employee |
+|-------------------------------|:-:|:-:|:-:|:-:|:-:|
+| Manage ALL client companies    | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Create/price/approve catalogs  | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Create/send invoices to clients| ✅ | ❌ | ❌ | ❌ | ❌ |
+| View invoices (all companies)  | ✅ | ❌ | ❌ | ❌ | ❌ |
+| View invoices (own company)    | ✅ | ✅ | ❌ | ❌ | ❌ |
+| View invoices (own brand)      | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Manage sub-brands              | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Manage users (all brands)      | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Manage users (own brand)       | ✅ | ✅ | ✅ | ❌ | ❌ |
+| Manage catalog (brand)         | ✅ | ✅ | ✅ | ❌ | ❌ |
+| Create bulk orders             | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Approve orders                 | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Place individual orders        | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Manage own profile             | ✅ | ✅ | ✅ | ✅ | ✅ |
+| View analytics (all companies) | ✅ | ❌ | ❌ | ❌ | ❌ |
+| View analytics (own company)   | ✅ | ✅ | ❌ | ❌ | ❌ |
+| View analytics (own brand)     | ✅ | ✅ | ✅ | ❌ | ❌ |
 
 ## Employee Invite Flow
 

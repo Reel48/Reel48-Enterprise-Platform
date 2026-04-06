@@ -121,28 +121,47 @@ ALTER TABLE {table_name} ENABLE ROW LEVEL SECURITY;
 -- Force RLS even for table owners (prevents bypassing)
 ALTER TABLE {table_name} FORCE ROW LEVEL SECURITY;
 
--- Company-level isolation (always applied)
+-- Company-level isolation (applied to all users; reel48_admin bypasses via NULL company_id)
 CREATE POLICY {table_name}_company_isolation ON {table_name}
-    USING (company_id = current_setting('app.current_company_id')::uuid);
+    USING (
+        current_setting('app.current_company_id', true) IS NULL
+        OR current_setting('app.current_company_id', true) = ''
+        OR company_id = current_setting('app.current_company_id')::uuid
+    );
 
 -- Sub-brand scoping (applied for non-corporate users)
--- Corporate admins (sub_brand_id IS NULL in their token) see all sub-brands
+-- Corporate admins and reel48_admins (sub_brand_id IS NULL in their token) see all sub-brands
 CREATE POLICY {table_name}_sub_brand_scoping ON {table_name}
     USING (
         current_setting('app.current_sub_brand_id', true) IS NULL
+        OR current_setting('app.current_sub_brand_id', true) = ''
         OR sub_brand_id = current_setting('app.current_sub_brand_id')::uuid
     );
 ```
 
+**CRITICAL: `reel48_admin` RLS bypass.** When a `reel48_admin` is authenticated, the
+tenant middleware sets `app.current_company_id` to empty string (not a UUID). The
+company isolation policy allows this through, giving platform admins cross-company
+visibility. This is intentional and ONLY applies to the `reel48_admin` role. The
+application layer MUST verify the role before setting an empty company_id — defense-
+in-depth ensures a non-admin user can never trigger this bypass.
+
 ### Role Model
-Four roles, in descending order of access:
+Five roles, in descending order of access:
 
 | Role | `company_id` | `sub_brand_id` | Access Scope |
 |------|-------------|----------------|--------------|
+| `reel48_admin` | NULL | NULL | **Platform operator.** Full access across ALL companies. Manages catalogs, pricing, product approvals, invoicing, and all client company data. This is a Reel48 employee, not a client user. |
 | `corporate_admin` | Set | NULL | All sub-brands within their company |
 | `sub_brand_admin` | Set | Set | Their assigned sub-brand only |
 | `regional_manager` | Set | Set | Their assigned sub-brand only |
 | `employee` | Set | Set | Their own profile + sub-brand catalog |
+
+**`reel48_admin` special handling:**
+- `company_id` is NULL because platform admins operate across all companies
+- RLS policies must allow `reel48_admin` to bypass company isolation (see RLS pattern below)
+- The `reel48_admin` role is set in the Cognito JWT `custom:role` claim, same as other roles
+- Platform admin endpoints live under `/api/v1/platform/` to separate them from tenant endpoints
 
 ### Default Sub-Brand Rule
 When a new company is created, a default sub-brand is AUTOMATICALLY created for it.
@@ -290,12 +309,70 @@ for uploads.
 ## Invoicing & Client Billing Conventions
 
 # --- WHY THIS SECTION EXISTS ---
-# Invoicing is how Reel48+ monetizes the platform. Every order (individual or bulk)
-# ultimately generates an invoice that is sent to the client company. Without clear
-# conventions here, Claude Code might build invoicing as an afterthought, miss the
-# Stripe integration patterns, or fail to scope invoices to the correct tenant and
-# sub-brand. Invoicing data also feeds the analytics dashboard, so the data model
-# must be designed for both billing accuracy and reporting flexibility.
+# Invoicing is how Reel48+ monetizes the platform. Reel48 (the platform operator)
+# creates and manages invoices for client companies. This is NOT self-billing —
+# Reel48 is the vendor, client companies are the customers being billed. Without
+# clear conventions here, Claude Code might build invoicing as client-managed,
+# miss the Stripe integration patterns, or fail to handle the three distinct
+# billing flows correctly.
+
+### Who Creates Invoices
+**CRITICAL:** Invoices are created by **Reel48 platform admins** (`reel48_admin` role),
+NOT by client company admins. Reel48 is the vendor selling apparel services; client
+companies are the customers being billed. Client company admins can VIEW their invoices
+but cannot create, edit, or send them.
+
+The one exception is the **self-service flow** where pre-approved, pre-priced products
+generate invoices automatically at checkout — but even then, the pricing and product
+approval was done by Reel48 ahead of time.
+
+### Three Billing Flows
+
+**Flow 1: Reel48-Assigned Invoices (Bulk Orders)**
+```
+Reel48 admin creates bulk order for client → Orders fulfilled →
+  Reel48 admin creates draft invoice → Reviews → Finalizes and sends →
+  Client company pays via Stripe hosted page
+```
+Used for: Custom bulk orders, unique pricing, non-catalog orders.
+Invoice created manually by `reel48_admin` after order completion.
+
+**Flow 2: Pre-Priced Self-Service (Catalog Purchases)**
+```
+Reel48 admin creates catalog → Sets prices → Approves products →
+  Catalog sent to client company → Employees browse and purchase →
+  Stripe invoice auto-generated at checkout → Client pays immediately
+```
+Used for: Standard catalog items with pre-set pricing.
+Products are approved by Reel48 ONCE; individual purchases do not need further approval.
+Catalog `payment_model` = `self_service`.
+
+**Flow 3: Post-Window Invoicing (Buying Window Catalogs)**
+```
+Reel48 admin creates catalog → Sets prices → Sets buying window →
+  Catalog sent to client company → Employees place orders during window →
+  Window closes → Orders tallied → Reel48 admin creates consolidated invoice →
+  Client company pays
+```
+Used for: Seasonal catalogs, event-based ordering, or when the client wants
+to pay once after all employees have ordered.
+Catalog `payment_model` = `invoice_after_close`.
+Buying window deadline can be set by Reel48 admin or adjusted by the client company admin.
+
+### Catalog Payment Model
+Every catalog has a `payment_model` field set at the catalog level:
+- **`self_service`** — Employees pay at checkout. Stripe invoice auto-created per order.
+- **`invoice_after_close`** — Orders tallied during buying window. Consolidated Stripe
+  invoice created by Reel48 admin after the window closes.
+
+This is a per-catalog setting that applies to ALL items in that catalog. A single
+catalog cannot mix payment models.
+
+### Product Approval by Reel48
+- Products and catalogs must be **approved by a `reel48_admin`** before going live
+- Once a product is approved and priced, individual employee purchases of that product
+  do NOT require further Reel48 approval
+- Approval status is tracked on the product/catalog record (`approved_by`, `approved_at`)
 
 ### Stripe Integration Model
 Reel48+ uses **Stripe** as the invoicing and payment platform. The integration follows
@@ -307,24 +384,17 @@ frontend displays invoice data fetched through our API (never directly from Stri
 |----------------|---------------|-------------|
 | Company | Stripe Customer | 1:1 — created when company onboards |
 | Sub-Brand | Stripe Customer metadata | Company's Stripe Customer tagged with sub-brand context |
-| Approved Order | Stripe Invoice + Line Items | Invoice created when order is approved |
-| Bulk Order | Stripe Invoice + Line Items | Single consolidated invoice per bulk order session |
+| Self-Service Order | Stripe Invoice + Line Items | Auto-created at checkout |
+| Bulk Order / Post-Window | Stripe Invoice + Line Items | Created by Reel48 admin |
 
 ### Tenant Isolation in Stripe
 - Each **company** maps to a **Stripe Customer** (`stripe_customer_id` stored on the `companies` table)
 - Invoices are always created against the company's Stripe Customer
 - Sub-brand context is stored as **Stripe metadata** on invoices (`sub_brand_id`, `sub_brand_name`)
   so invoices can be filtered and reported by sub-brand
-- **CRITICAL:** Never create Stripe objects using tenant IDs from request parameters.
-  Always derive them from the authenticated TenantContext, same as every other operation.
-
-### Invoice Lifecycle
-```
-Order Approved → Invoice Created (draft) → Invoice Finalized → Invoice Sent → Payment Received
-                     ↓                          ↓                   ↓              ↓
-              Stripe: draft invoice      Stripe: finalized     Email via SES   Stripe webhook
-              with line items            + auto-numbering      with PDF link   updates status
-```
+- **CRITICAL:** The `reel48_admin` creates invoices on behalf of client companies. The
+  Stripe Customer ID is looked up from the target company record, NOT from the admin's
+  own context (since `reel48_admin` has no `company_id`).
 
 ### Invoice Data Model Rules
 - The `invoices` table stores a local copy of invoice data alongside the `stripe_invoice_id`
@@ -333,6 +403,7 @@ Order Approved → Invoice Created (draft) → Invoice Finalized → Invoice Sen
 - Every invoice row MUST include `company_id` and `sub_brand_id` (standard tenant isolation)
 - Invoice line items reference `order_id` or `bulk_order_id` to trace back to the originating order
 - Store `stripe_invoice_id`, `stripe_invoice_url`, and `stripe_payment_status` on the local record
+- Store `billing_flow` on each invoice: `assigned`, `self_service`, or `post_window`
 - Payment status is updated via **Stripe webhooks**, not polling
 
 ### Webhook Security
@@ -342,12 +413,19 @@ Order Approved → Invoice Created (draft) → Invoice Finalized → Invoice Sen
 - Process webhooks idempotently — the same event may be delivered multiple times
 
 ### API Endpoints for Invoicing
-- `GET /api/v1/invoices` — List invoices (tenant-scoped, paginated)
+**Platform admin endpoints (reel48_admin only):**
+- `POST /api/v1/platform/invoices` — Create a draft invoice for a client company
+- `POST /api/v1/platform/invoices/{invoice_id}/finalize` — Finalize and send
+- `GET /api/v1/platform/invoices` — List all invoices across all companies
+- `POST /api/v1/platform/catalogs/{catalog_id}/approve` — Approve a catalog for client use
+
+**Client-facing endpoints (tenant-scoped):**
+- `GET /api/v1/invoices` — List invoices for the authenticated company (paginated)
 - `GET /api/v1/invoices/{invoice_id}` — Invoice detail with line items
-- `POST /api/v1/invoices` — Create a draft invoice from an approved order (admin only)
-- `POST /api/v1/invoices/{invoice_id}/finalize` — Finalize and send (admin only)
 - `GET /api/v1/invoices/{invoice_id}/pdf` — Get Stripe-hosted invoice PDF URL
-- `POST /api/v1/webhooks/stripe` — Stripe webhook receiver (no JWT, signature-verified)
+
+**Webhook endpoint (no JWT, signature-verified):**
+- `POST /api/v1/webhooks/stripe` — Stripe webhook receiver
 
 
 ## Testing Requirements

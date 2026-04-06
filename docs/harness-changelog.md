@@ -30,6 +30,51 @@
 
 ---
 
+## 2026-04-06 — Reel48 Admin Role & Billing Model Revision (Pre-Stage 1)
+
+**Type:** Reactive update (user correction — invoicing model was wrong)
+**Author:** Claude Code
+
+### Changes Made
+- **File:** `CLAUDE.md` (root)
+  - **Change:** Added `reel48_admin` as the top-level platform operator role. Expanded four-role model to five roles. Added RLS bypass mechanism (empty string `company_id`). Restructured invoicing conventions around three billing flows (assigned, self-service, post-window). Added per-catalog `payment_model` setting. Split API endpoints into platform admin vs client-facing.
+  - **Reason:** User clarified that Reel48 (platform operator) creates and assigns invoices to client companies — not client admins. This required a dedicated platform admin role with cross-company access.
+  - **Impact:** Claude Code now understands the full role hierarchy, knows reel48_admin bypasses RLS, and generates correct invoice creation patterns.
+
+- **File:** `backend/CLAUDE.md`
+  - **Change:** Updated `TenantContext` dataclass with `is_reel48_admin` property and `Optional[UUID]` company_id. Updated auth middleware to set empty string RLS variables for reel48_admin. Added `platform/` route directory for admin-only endpoints. Added `catalog_id`, `billing_flow`, `buying_window_closes_at`, `created_by` fields to invoice model.
+  - **Reason:** Backend needs to handle the reel48_admin's null company_id without breaking RLS.
+  - **Impact:** Claude Code generates correct middleware and route patterns for the platform admin.
+
+- **File:** `frontend/CLAUDE.md`
+  - **Change:** Added `reel48_admin` to `UserRole` type. Added entire `(platform)/` route group with dashboard, companies, catalogs (including approval page), and invoices management.
+  - **Reason:** Platform admin needs a separate UI section for cross-company operations.
+  - **Impact:** Claude Code generates the correct route structure for the platform admin portal.
+
+- **File:** `.claude/rules/authentication.md`
+  - **Change:** Added `reel48_admin` to Cognito custom attributes, role hierarchy, and access matrix. Expanded matrix to 17 action rows covering invoice, catalog, and analytics permissions at every scope level.
+  - **Reason:** The access matrix must reflect the new top-level role and invoice-specific permissions.
+  - **Impact:** Claude Code applies correct role checks for every endpoint.
+
+- **File:** `.claude/rules/stripe-invoicing.md`
+  - **Change:** Added "Who Creates Invoices" section (reel48_admin only). Added "Three Billing Flows" section. Rewrote invoice creation pattern to show reel48_admin creating invoices for target companies. Updated Critical Rules, Required Columns (added `billing_flow`, `buying_window_closes_at`, `catalog_id`, `created_by`), Test Cases (expanded to 15), and Common Mistakes (added 5 new anti-patterns).
+  - **Reason:** Every section needed revision to reflect reel48_admin as invoice creator and three distinct billing flows.
+  - **Impact:** Claude Code has complete, correct guidance for all three billing flows.
+
+- **File:** `Reel48+ Harness Companion Guide.docx`
+  - **Change:** Updated to v2.3. Updated role hierarchy references to five-role model. Updated rule file descriptions to reference reel48_admin and three billing flows.
+  - **Reason:** Guide must reflect the revised role model and billing architecture.
+  - **Impact:** Team members have accurate documentation.
+
+### Gaps Identified
+- None. All harness files have been updated to reflect the revised billing model.
+
+### Notes
+- This was the most significant structural change since initial harness creation. The original model assumed client admins created invoices; the corrected model has Reel48 as the sole invoice creator (except auto-generated self-service invoices).
+- The `reel48_admin` role introduces the only RLS bypass in the system — uses empty string company_id to pass through all company isolation policies.
+
+---
+
 ## 2026-04-06 — Stripe Invoicing & Client Billing (Pre-Stage 1)
 
 **Type:** Reactive update (gap identified — missing core business functionality)
