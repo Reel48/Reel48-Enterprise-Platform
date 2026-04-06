@@ -30,6 +30,33 @@
 
 ---
 
+## 2026-04-06 — Repo Structure Fix (Pre-Stage 1)
+
+**Type:** Reactive update
+**Author:** Claude Code
+
+### Changes Made
+- **File:** All harness files (CLAUDE.md, .claude/rules/*, backend/CLAUDE.md, frontend/CLAUDE.md, docs/*, prompts/*)
+  - **Change:** Moved from `outputs/` subdirectory to the repository root
+  - **Reason:** Claude Code auto-discovers CLAUDE.md and .claude/rules/ relative to the repo root. Files nested under `outputs/` would not be loaded automatically at session start.
+  - **Impact:** Harness now activates correctly — CLAUDE.md loads every session, rule files trigger on matching file paths, and directory-level CLAUDE.md files load when working in backend/ or frontend/.
+
+- **File:** `.gitignore`
+  - **Change:** Updated `.claude/` ignore rule to use `.claude/*` with `!.claude/rules/` exception
+  - **Reason:** The original `.claude/` rule ignored the entire directory including rule files. The new pattern ignores session data while tracking rule files in git.
+  - **Impact:** Rule files are now version-controlled while session data remains excluded.
+
+- **File:** `Reel48+ Harness Companion Guide.docx`
+  - **Change:** Updated version to v2.1. Revised Section 9 (Getting Started Checklist) steps 1–2 to reflect that harness files are already at the repo root, not requiring a manual copy step.
+  - **Reason:** The guide's setup instructions referenced the old workflow of copying files into a repo. Files now ship in the correct location.
+  - **Impact:** New team members following the guide will not encounter misleading setup instructions.
+
+### Notes
+- No harness guidance content was changed — only file locations and documentation references.
+- The `outputs/` directory has been removed entirely.
+
+---
+
 ## 2026-04-06 — Initial Harness Creation (Pre-Stage 1)
 
 **Type:** Initial setup
