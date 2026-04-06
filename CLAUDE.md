@@ -570,7 +570,8 @@ reel48-plus/
 │   ├── new-table-migration.md
 │   ├── react-component.md
 │   ├── test-suite.md
-│   └── self-registration.md
+│   ├── self-registration.md
+│   └── harness-review.md
 ├── frontend/
 │   ├── CLAUDE.md                      # Frontend-specific conventions
 │   ├── src/
