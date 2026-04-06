@@ -1,0 +1,13 @@
+# macOS
+.DS_Store
+
+# Claude Code session data
+.claude/
+audit.jsonl
+.audit-key
+
+# Shim permission request/response transient files
+shim-perm/requests/*
+shim-perm/responses/*
+!shim-perm/requests/.gitkeep
+!shim-perm/responses/.gitkeep
