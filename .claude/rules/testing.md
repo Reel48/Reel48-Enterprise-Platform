@@ -122,8 +122,11 @@ Every test file that tests tenant-scoped data should use this setup:
 When building or modifying the self-registration feature, include these additional tests:
 
 ### Functional Tests
-- Registering with a valid, active org code creates a user with `role = employee`
-  and the company's default `sub_brand_id`
+- Validating a valid org code returns company name and sub-brand list
+- Registering with a valid org code and a selected sub-brand creates a user with
+  `role = employee` and the chosen `sub_brand_id`
+- Registering with a `sub_brand_id` that does not belong to the org code's company
+  returns a generic 400 error
 - Registering with an invalid code returns a generic 400 error
 - Registering with a deactivated code returns a generic 400 error
 - Registering with a duplicate email returns the same generic 400 error (no enumeration)
@@ -131,13 +134,15 @@ When building or modifying the self-registration feature, include these addition
 - Only `corporate_admin` (or `reel48_admin`) can generate/view/deactivate org codes
 
 ### Security Tests
-- Rate limiting: 6th registration attempt from the same IP within 15 minutes returns 429
+- Rate limiting: 6th attempt from the same IP within 15 minutes returns 429
+  (applies to both validate-org-code and register endpoints)
 - Error messages do NOT reveal whether the code exists, is inactive, or the email is taken
-- The registration endpoint does NOT require a JWT token
+- Sub-brand list is only returned for valid org codes (not publicly enumerable)
+- Both registration endpoints do NOT require a JWT token
 
 ### Isolation Tests
 - A user self-registered via Company A's org code CANNOT see Company B's data
-- A self-registered user lands on the correct default sub-brand (not another sub-brand)
+- A self-registered user lands on the sub-brand they selected during registration
 - Company B's admin CANNOT see or manage Company A's org codes
 
 ## Common Mistakes to Avoid

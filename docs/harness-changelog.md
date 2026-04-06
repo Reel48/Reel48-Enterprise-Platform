@@ -30,6 +30,63 @@
 
 ---
 
+## 2026-04-06 — Self-Registration: Sub-Brand Selection by Employee
+
+**Type:** Reactive update (user requirement — employees should choose their sub-brand)
+**Author:** Claude Code
+
+### Changes Made
+- **File:** `docs/adr/007-controlled-self-registration.md`
+  - **Change:** Rewrote Decision section to describe a two-step registration flow where the employee selects their sub-brand after entering a valid org code. Replaced "Per-Sub-Brand Org Codes" alternative with "Default Sub-Brand Only (No User Choice)" alternative. Updated Consequences and Risks to reflect sub-brand visibility trade-off and removal of admin reassignment bottleneck. Removed the constraint about not exposing sub-brand names.
+  - **Reason:** User requested employees choose their own sub-brand instead of being auto-assigned to the default sub-brand and waiting for admin reassignment.
+  - **Impact:** Claude Code builds a two-step registration flow with sub-brand selection instead of default-sub-brand-only assignment.
+
+- **File:** `.claude/rules/authentication.md`
+  - **Change:** Rewrote "How Self-Registration Works" to describe the two-step flow (validate org code, then register with sub-brand selection). Updated Critical Rules to require server-side validation of submitted `sub_brand_id`. Updated rate limiting to cover both endpoints.
+  - **Reason:** Registration flow fundamentally changed from single-step to two-step.
+  - **Impact:** Claude Code generates both endpoints and validates sub-brand ownership server-side.
+
+- **File:** `CLAUDE.md` (root)
+  - **Change:** Updated Employee Onboarding Paths description to say employees "select their sub-brand" instead of being "auto-assigned to the default sub-brand."
+  - **Reason:** Root CLAUDE.md must reflect the current onboarding behavior.
+  - **Impact:** Every session knows self-registration includes sub-brand selection.
+
+- **File:** `backend/CLAUDE.md`
+  - **Change:** Updated Unauthenticated Endpoint Exceptions to list three endpoints (validate-org-code, register, stripe webhook) instead of two. Described the validate endpoint's role.
+  - **Reason:** New endpoint added to the unauthenticated exception list.
+  - **Impact:** Claude Code knows there are now three unauthenticated endpoints.
+
+- **File:** `frontend/CLAUDE.md`
+  - **Change:** Rewrote Self-Registration Note to describe the two-step UI flow: org code entry, then sub-brand dropdown + user details. Specified dropdown behavior for single-sub-brand companies.
+  - **Reason:** Frontend registration page is fundamentally different with sub-brand selection.
+  - **Impact:** Claude Code builds a two-step form with conditional sub-brand dropdown.
+
+- **File:** `.claude/rules/api-endpoints.md`
+  - **Change:** Added `POST /api/v1/auth/validate-org-code` as a third unauthenticated endpoint exception. Updated register endpoint description.
+  - **Reason:** New unauthenticated endpoint for the two-step flow.
+  - **Impact:** Claude Code won't add JWT requirements to the validate-org-code endpoint.
+
+- **File:** `prompts/self-registration.md`
+  - **Change:** Added ValidateOrgCodeRequest/Response schemas and the validate-org-code endpoint section (Step 1). Rewrote the register endpoint flow (Step 2) to accept and validate `sub_brand_id`. Rewrote frontend section to describe two-step form with conditional dropdown. Updated all test names and acceptance criteria.
+  - **Reason:** Prompt template must match the revised two-step flow.
+  - **Impact:** Claude Code building from this template produces the correct two-step implementation.
+
+- **File:** `.claude/rules/testing.md`
+  - **Change:** Updated functional tests to cover org code validation returning sub-brand list, registration with selected sub-brand, and cross-company sub-brand rejection. Updated security tests to cover both endpoints. Updated isolation test to verify user lands on selected sub-brand.
+  - **Reason:** Test requirements must match the revised flow.
+  - **Impact:** Claude Code includes sub-brand validation tests.
+
+### Gaps Identified
+- None. All files referencing default-sub-brand auto-assignment have been updated.
+
+### Notes
+- This changes the registration from a 1-endpoint flow to a 2-endpoint flow.
+- The `POST /api/v1/auth/validate-org-code` endpoint is the third unauthenticated exception (after Stripe webhooks and the register endpoint itself).
+- Sub-brand names are now visible to anyone with a valid org code. This is an intentional trade-off: sub-brand names are not sensitive, and the org code gates access.
+- For companies with a single sub-brand, the sub-brand dropdown is hidden and that sub-brand is auto-selected — the UX is identical to the previous default-sub-brand behavior.
+
+---
+
 ## 2026-04-06 — Controlled Self-Registration via Org Code (ADR-007)
 
 **Type:** Feature addition (new onboarding path)

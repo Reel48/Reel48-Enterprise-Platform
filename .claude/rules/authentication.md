@@ -112,32 +112,46 @@ An org code is a reusable, company-level registration code that maps to a single
 - **Reusable:** Not consumed on use (unlike invite tokens). Designed for many employees.
 - **Revocable:** Admin can deactivate instantly. Does not affect existing users.
 
-#### How Self-Registration Works
+#### How Self-Registration Works (Two-Step Flow)
 1. A `corporate_admin` generates an org code for their company
 2. The code is shared with employees (email, intranet, printed materials, etc.)
-3. Employee navigates to `/register` and enters: **org code**, **email**, **full name**,
-   **password**
-4. On registration, the system:
-   a. Validates the org code against the `org_codes` table (`is_active = true`)
+3. **Step 1 — Validate org code:** Employee navigates to `/register` and enters
+   their **org code**. The frontend calls `POST /api/v1/auth/validate-org-code`.
+   On success, the system returns the **company name** and **list of sub-brands**
+   for that company. On failure, a generic error is shown.
+4. **Step 2 — Complete registration:** The form expands to show a sub-brand
+   dropdown (pre-selected to the default sub-brand), plus **email**, **full name**,
+   and **password** fields. The employee selects their sub-brand and submits.
+   If the company has only one sub-brand, the dropdown is hidden and that sub-brand
+   is auto-selected.
+5. On registration (`POST /api/v1/auth/register`), the system:
+   a. Validates the org code again (re-checks `is_active = true`)
    b. Resolves the `company_id` from the org code
-   c. Looks up the company's **default sub-brand** (`is_default = true`)
-   d. Creates the Cognito user with `custom:company_id`, `custom:sub_brand_id` (default),
-      and `custom:role = employee`
+   c. Validates the submitted `sub_brand_id` belongs to the resolved company
+   d. Creates the Cognito user with `custom:company_id`, `custom:sub_brand_id`
+      (employee's choice), and `custom:role = employee`
    e. Creates the user record in the database with `registration_method = 'self_registration'`
    f. Cognito sends an email verification message
-5. User verifies email, then logs in normally — JWT contains the same custom claims
+6. User verifies email, then logs in normally — JWT contains the same custom claims
    as an invite-registered user
 
 #### Critical Rules for Self-Registration
 - Self-registered users are ALWAYS assigned `role = employee` (the lowest privilege)
-- Self-registered users are ALWAYS assigned the company's **default sub-brand**
-- The registration endpoint (`POST /api/v1/auth/register`) is **unauthenticated** —
-  this is the second endpoint exception alongside the Stripe webhook. It does NOT
-  use `get_tenant_context`. Security comes from org code validation + rate limiting.
+- Self-registered users **choose their own sub-brand** from the company's sub-brand
+  list during registration. The sub-brand list is only shown after a valid org code
+  is entered (not publicly enumerable). The default sub-brand is pre-selected.
+- The submitted `sub_brand_id` MUST be validated server-side: confirm it belongs to
+  the company resolved from the org code. Never trust the frontend's sub-brand selection
+  without verification.
+- Both registration endpoints (`POST /api/v1/auth/validate-org-code` and
+  `POST /api/v1/auth/register`) are **unauthenticated** — these are endpoint exceptions
+  alongside the Stripe webhook. They do NOT use `get_tenant_context`. Security comes
+  from org code validation + rate limiting.
 - **Rate limiting:** 5 attempts per IP per 15-minute window (via Redis/ElastiCache).
-  Return HTTP 429 when exceeded.
-- **No enumeration:** Failed attempts return a generic error regardless of cause (invalid
-  code, inactive code, duplicate email). Never reveal whether a specific code exists.
+  Applied to BOTH endpoints. Return HTTP 429 when exceeded.
+- **No enumeration on failure:** Failed org code validation returns a generic error
+  regardless of cause (invalid code, inactive code). Failed registration returns
+  a generic error regardless of cause (bad code, duplicate email, invalid sub-brand).
 - **Email verification:** Required via Cognito before the account is fully functional
 - Admins can later **promote** the user's role or **reassign** them to a different
   sub-brand (requires updating both the `users` table and Cognito custom attributes)

@@ -87,11 +87,21 @@ interface TenantContext {
 # Reason: Self-registration via org code added as second onboarding path.
 # Impact: Claude Code knows the register page exists and that post-login behavior is identical.
 
-The `/register` page allows employees to self-register using a company org code. After
-registration and email verification, self-registered users log in and receive the same
-JWT with the same custom claims (`custom:company_id`, `custom:sub_brand_id`, `custom:role`)
-as invite-registered users. **The frontend does not need to distinguish between the two
-registration methods after login** — the TenantContext shape is identical.
+The `/register` page uses a **two-step flow** for self-registration:
+
+1. **Step 1:** Employee enters their org code. Frontend calls
+   `POST /api/v1/auth/validate-org-code`. On success, the company name and sub-brand
+   list are returned.
+2. **Step 2:** The form expands to show a **sub-brand dropdown** (pre-selected to the
+   default sub-brand), plus email, full name, and password fields. If the company has
+   only one sub-brand, the dropdown is hidden and that sub-brand is auto-selected.
+   On submit, frontend calls `POST /api/v1/auth/register` with the org code,
+   selected `sub_brand_id`, and user details.
+
+After registration and email verification, self-registered users log in and receive the
+same JWT with the same custom claims (`custom:company_id`, `custom:sub_brand_id`,
+`custom:role`) as invite-registered users. **The frontend does not need to distinguish
+between the two registration methods after login** — the TenantContext shape is identical.
 
 ### Protected Routes
 Use a `<ProtectedRoute>` wrapper component that:

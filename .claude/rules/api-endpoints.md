@@ -37,8 +37,10 @@ globs: "**/api/**,**/routes/**,**/endpoints/**"
   invoice for a specific client company.
 - **Exception 2: Unauthenticated endpoints** that do NOT use `get_tenant_context`:
   1. `POST /api/v1/webhooks/stripe` — Secured by Stripe webhook signature verification.
-  2. `POST /api/v1/auth/register` — Self-registration via org code. Secured by org code
-     validation + rate limiting (5 attempts/IP/15 min). See ADR-007.
+  2. `POST /api/v1/auth/validate-org-code` — Validates org code, returns company name
+     + sub-brand list. Rate-limited (5 attempts/IP/15 min). See ADR-007.
+  3. `POST /api/v1/auth/register` — Self-registration with org code + selected sub-brand.
+     Rate-limited (shared window with validate-org-code). See ADR-007.
 
 ### 2. Use the standard response format
 ```python

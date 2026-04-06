@@ -179,9 +179,12 @@ async def get_tenant_context(
 ### Unauthenticated Endpoint Exceptions
 Two endpoints do NOT use `get_tenant_context` because they receive requests without JWTs:
 1. **`POST /api/v1/webhooks/stripe`** — Stripe webhook. Secured by signature verification.
-2. **`POST /api/v1/auth/register`** — Self-registration via org code. Secured by org code
-   validation + rate limiting (5 attempts per IP per 15 minutes via Redis). Resolves
-   `company_id` and `sub_brand_id` (default sub-brand) from the validated org code.
+2. **`POST /api/v1/auth/validate-org-code`** — Validates an org code and returns the
+   company name + list of sub-brands. Rate-limited (5 attempts per IP per 15 minutes).
+3. **`POST /api/v1/auth/register`** — Self-registration via org code. Accepts the org
+   code, employee-selected `sub_brand_id`, and user details. The `sub_brand_id` is
+   validated server-side to confirm it belongs to the org code's company.
+   Rate-limited (shares the same 5 attempts/IP/15 min window as validate-org-code).
    See ADR-007 for full details.
 
 ### TenantContext Model

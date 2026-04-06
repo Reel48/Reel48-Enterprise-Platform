@@ -4,8 +4,8 @@
 # ║  This ADR documents the decision to add a controlled self-registration     ║
 # ║  path alongside the existing invite flow. Self-registration uses a         ║
 # ║  company-level org code to authenticate the registrant's affiliation,      ║
-# ║  assigns them to the default sub-brand as an employee, and relies on       ║
-# ║  admin action for promotion or sub-brand reassignment.                     ║
+# ║  and lets them choose their sub-brand during a two-step registration       ║
+# ║  flow. They are assigned the employee role by default.                     ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 
 ## Status
@@ -31,31 +31,37 @@ that still maintains tenant isolation and security guarantees.
 **Constraints:**
 - Every new user MUST have a valid `company_id` and `sub_brand_id` from the
   moment of creation (RLS depends on this)
-- Self-registration must not expose internal company structure (sub-brand names)
-  to unauthenticated users
 - The existing invite flow must continue to work unchanged
 - The solution must fit within Cognito's custom attribute model
 
 ## Decision
 Add **org-code-based self-registration** as a second onboarding path alongside
 invites. A `corporate_admin` generates a reusable, company-level org code (an
-8-character alphanumeric string). Employees enter this code during registration
-and are automatically assigned:
+8-character alphanumeric string). Registration is a **two-step flow**:
+
+1. **Step 1:** Employee enters the org code. The system validates the code and
+   returns the company name and list of sub-brands for that company.
+2. **Step 2:** Employee selects their sub-brand from the list, enters their
+   name/email/password, and submits. The system creates the user with:
 
 - **`company_id`** — resolved from the org code
-- **`sub_brand_id`** — the company's default sub-brand (guaranteed to exist per ADR-003)
+- **`sub_brand_id`** — chosen by the employee from the company's sub-brands
+  (defaults to the default sub-brand if only one exists)
 - **`role`** — `employee` (the lowest-privilege role)
 
 Self-registered users are immediately active. Admins can later promote their
-role or reassign them to a different sub-brand.
+role. Sub-brand names are intentionally visible to registrants — employees need
+to know which sub-brand they belong to in order to self-select correctly.
 
 **Key design choices:**
-- Org codes are **per-company** (not per-sub-brand) to avoid exposing internal structure
+- Org codes are **per-company** (not per-sub-brand) — one code, employee picks their sub-brand
+- **Two-step registration** — org code validated first, then sub-brands shown
+- Sub-brand list is ONLY revealed after a valid org code is entered (not publicly enumerable)
 - Only **one active code per company** at a time (generating a new one deactivates the old)
 - Codes are **reusable** (not single-use) — designed for bulk onboarding
 - **No expiry** for MVP — admin can deactivate at any time
 - **No approval queue** — employee role is already minimal-privilege
-- The registration endpoint is **unauthenticated** (second exception alongside Stripe webhooks), secured by org code validation + rate limiting
+- The registration endpoints are **unauthenticated** (second exception alongside Stripe webhooks), secured by org code validation + rate limiting
 
 ## Alternatives Considered
 
@@ -79,29 +85,39 @@ role or reassign them to a different sub-brand.
   effort to the employee, which scales better.
 
 ### Per-Sub-Brand Org Codes
-- **Pros:** Users land directly in the correct sub-brand; no admin reassignment needed
-- **Cons:** Exposes internal sub-brand structure to unauthenticated users (the code
-  implicitly reveals "this company has sub-brands X, Y, Z"); more codes for admins
-  to manage; employees may join the wrong sub-brand if given the wrong code
-- **Why rejected:** For MVP, the default-sub-brand approach is simpler and avoids
-  information leakage. Admins can sort users into sub-brands post-registration.
-  Per-sub-brand codes can be added later if needed.
+- **Pros:** Users land directly in the correct sub-brand automatically; no selection step
+- **Cons:** More codes for admins to manage and distribute; employees may receive the
+  wrong code; admins must generate/revoke codes per sub-brand instead of per company
+- **Why rejected:** A single company-level code with a sub-brand selection step during
+  registration achieves the same outcome (employee lands in the correct sub-brand)
+  with simpler admin management (one code instead of many).
+
+### Default Sub-Brand Only (No User Choice)
+- **Pros:** Simplest implementation; no sub-brand names exposed during registration
+- **Cons:** Admins must manually reassign every self-registered user from the default
+  sub-brand to their correct sub-brand; creates admin bottleneck for companies with
+  multiple sub-brands; defeats the self-service benefit of self-registration
+- **Why rejected:** The admin reassignment burden scales poorly. Letting employees
+  choose their sub-brand during registration eliminates this bottleneck while keeping
+  the flow simple (the sub-brand list is only shown after a valid org code is entered).
 
 ## Consequences
 
 ### Positive
 - Large companies can onboard hundreds of employees without admin-per-employee effort
-- Employees self-serve, reducing admin workload and onboarding time
+- Employees self-serve and self-select their sub-brand, reducing admin workload
+- No admin bottleneck for sub-brand assignment — employees choose during registration
 - The invite flow remains available for targeted onboarding (specific sub-brand, specific role)
 - Org codes are revocable — admin can cut off self-registration instantly
 - Self-registered users have minimal privileges by default, limiting blast radius
 
 ### Negative
-- Admins must manually reassign self-registered users from the default sub-brand
-  to their correct sub-brand (if the company has multiple sub-brands)
-- The `POST /api/v1/auth/register` endpoint is the second unauthenticated exception
-  (after Stripe webhooks), increasing the unauthenticated attack surface
+- Sub-brand names are visible to anyone with a valid org code (mitigated: code is
+  required first, and sub-brand names are not sensitive internal data)
+- Two unauthenticated endpoints are needed (org code validation + registration),
+  increasing the unauthenticated attack surface
 - Org codes can be shared beyond the intended audience (e.g., posted on social media)
+- Employees may select the wrong sub-brand (can be corrected by admin reassignment)
 - A `registration_method` column must be added to the users table to distinguish
   invite-registered from self-registered users
 
@@ -112,12 +128,13 @@ role or reassign them to a different sub-brand.
 - **Brute-force code guessing:** Mitigated by rate limiting (5 attempts per IP per
   15-minute window via Redis) and a large keyspace (30^8 ≈ 656 billion combinations
   using a 30-character alphabet that excludes ambiguous characters 0/O, 1/I/L).
-- **Information disclosure:** Mitigated by returning generic error messages on failed
-  registration (no distinction between invalid code, inactive code, or duplicate email).
-- **Default sub-brand accumulation:** Companies with many sub-brands may accumulate
-  large numbers of users in the default sub-brand awaiting reassignment. Mitigated by
-  admin visibility: the user management page shows `registration_method` as a filter,
-  making it easy to identify and reassign self-registered users.
+- **Information disclosure:** The org code validation endpoint returns sub-brand names
+  after a valid code is entered. This is acceptable because: (a) the org code itself
+  is the gatekeeper, (b) sub-brand names are not sensitive secrets, and (c) the
+  endpoint is rate-limited. Failed code validation still returns a generic error.
+- **Employee selects wrong sub-brand:** Mitigated by admin ability to reassign users
+  between sub-brands. For companies with a single sub-brand, the selection step is
+  skipped (auto-assigned to the only available sub-brand).
 
 ## References
 - ADR-003: Default Sub-Brand Pattern (guarantees every company has a default sub-brand)

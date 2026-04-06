@@ -178,8 +178,9 @@ There are **two** ways employees join a company:
 1. **Admin Invite (targeted):** Admin creates an invite for a specific sub-brand and role.
    Single-use token sent via email. Best for targeted onboarding.
 2. **Self-Registration via Org Code (bulk):** Employee enters a company-level org code
-   during registration. Auto-assigned to the default sub-brand as `employee`. Best for
-   large-scale onboarding. See ADR-007 and `.claude/rules/authentication.md` for full details.
+   during registration, then selects their sub-brand from the company's sub-brand list.
+   Assigned `employee` role. Best for large-scale onboarding. See ADR-007 and
+   `.claude/rules/authentication.md` for full details.
 
 Both paths guarantee a valid `company_id` and `sub_brand_id` from the moment of user
 creation, preserving RLS integrity.
