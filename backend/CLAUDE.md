@@ -622,7 +622,11 @@ def upgrade():
     op.execute("ALTER TABLE products FORCE ROW LEVEL SECURITY")
     op.execute("""
         CREATE POLICY products_company_isolation ON products
-        USING (company_id = current_setting('app.current_company_id')::uuid)
+        USING (
+            current_setting('app.current_company_id', true) IS NULL
+            OR current_setting('app.current_company_id', true) = ''
+            OR company_id = current_setting('app.current_company_id')::uuid
+        )
     """)
     op.execute("""
         CREATE POLICY products_sub_brand_scoping ON products

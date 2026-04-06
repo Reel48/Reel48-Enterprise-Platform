@@ -402,7 +402,7 @@ frontend displays invoice data fetched through our API (never directly from Stri
   enables fast queries, tenant-scoped access, and analytics integration.
 - Every invoice row MUST include `company_id` and `sub_brand_id` (standard tenant isolation)
 - Invoice line items reference `order_id` or `bulk_order_id` to trace back to the originating order
-- Store `stripe_invoice_id`, `stripe_invoice_url`, and `stripe_payment_status` on the local record
+- Store `stripe_invoice_id`, `stripe_invoice_url`, and `status` on the local record
 - Store `billing_flow` on each invoice: `assigned`, `self_service`, or `post_window`
 - Payment status is updated via **Stripe webhooks**, not polling
 

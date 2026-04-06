@@ -40,7 +40,7 @@ Create a comprehensive test suite for the {MODULE_NAME} module.
 Use these fixtures from conftest.py:
 - company_a (with sub_brands a1, a2)
 - company_b (with sub_brand b1)
-- Tokens: corporate_admin_token, brand_admin_token, employee_token, company_b_token
+- Tokens: reel48_admin_token, corporate_admin_token, brand_admin_token, employee_token, company_b_token
 
 ### Acceptance Criteria
 - [ ] At least one cross-company isolation test per data entity

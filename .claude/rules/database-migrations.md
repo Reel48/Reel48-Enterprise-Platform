@@ -73,8 +73,14 @@ globs: "**/migrations/**,**/models/**,**/*alembic*"
 -- Always include BOTH policies for every tenant-scoped table:
 
 -- Policy 1: Company isolation (required)
+-- NOTE: The IS NULL / empty-string checks allow reel48_admin (platform operator)
+-- to bypass company isolation. The auth middleware sets company_id to '' for this role.
 CREATE POLICY {table}_company_isolation ON {table}
-    USING (company_id = current_setting('app.current_company_id')::uuid);
+    USING (
+        current_setting('app.current_company_id', true) IS NULL
+        OR current_setting('app.current_company_id', true) = ''
+        OR company_id = current_setting('app.current_company_id')::uuid
+    );
 
 -- Policy 2: Sub-brand scoping (required for tables with sub_brand_id)
 CREATE POLICY {table}_sub_brand_scoping ON {table}

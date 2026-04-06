@@ -197,8 +197,7 @@ src/app/
 │   │   ├── new/page.tsx       # Create bulk order session
 │   │   └── [id]/page.tsx      # Bulk order session detail + dashboard
 │   ├── invoices/
-│   │   ├── page.tsx           # Invoice list (admin: all, manager: view-only)
-│   │   ├── new/page.tsx       # Create invoice from approved order (admin only)
+│   │   ├── page.tsx           # Invoice list (corporate_admin: company-wide, sub_brand_admin/regional_manager: brand-scoped)
 │   │   └── [id]/page.tsx      # Invoice detail with PDF download
 │   ├── admin/
 │   │   ├── users/page.tsx     # User management (admin only)

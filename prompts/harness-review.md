@@ -59,7 +59,7 @@ For each rule file (.claude/rules/*.md), report:
 - Should any rules be added, modified, or removed?
 
 #### 4. ADR Check
-Review all existing ADRs (docs/adr/001-005) and report:
+Review all existing ADRs (docs/adr/001-006) and report:
 - Were any decisions effectively reversed during implementation?
 - Did implementation reveal new consequences to document?
 - Should a new ADR be written for any decision made in this module?

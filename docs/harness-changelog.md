@@ -30,6 +30,25 @@
 
 ---
 
+## 2026-04-06 — Pre-Production Consistency Audit (Pre-Stage 1)
+
+**Type:** End-of-session self-audit (cross-file consistency check)
+**Author:** Claude Code
+
+### Issues Found and Fixed
+- **File:** `.claude/rules/database-migrations.md` — **CRITICAL.** RLS company isolation template was missing the `IS NULL` / `= ''` bypass for `reel48_admin`. Would have caused all platform admin queries to fail. Updated to match the 3-condition pattern in root CLAUDE.md.
+- **File:** `backend/CLAUDE.md` — **CRITICAL.** Same RLS template issue in the migration example code. Updated to match.
+- **File:** `.claude/rules/api-endpoints.md` — **MODERATE.** Used vague "super-admin" terminology and didn't document that `/api/v1/platform/` endpoints may accept target `company_id` in request body. Replaced with explicit `reel48_admin` guidance and platform endpoint pattern.
+- **File:** `frontend/CLAUDE.md` — **MINOR.** Had duplicate "new invoice" route under both `(authenticated)` and `(platform)` groups. Removed the `(authenticated)` version since only `reel48_admin` creates invoices.
+- **File:** `CLAUDE.md` (root) — **MINOR.** Referenced `stripe_payment_status` column but the actual schema in `stripe-invoicing.md` uses `status`. Changed to `status` for consistency.
+- **File:** `prompts/test-suite.md` — **MINOR.** Test fixture list was missing `reel48_admin_token`. Added it.
+- **File:** `prompts/harness-review.md` — **MINOR.** ADR range referenced `001-005` but should be `001-006` after Stripe ADR was added. Updated.
+
+### Gaps Identified
+- None remaining. All cross-file inconsistencies resolved.
+
+---
+
 ## 2026-04-06 — Reel48 Admin Role & Billing Model Revision (Pre-Stage 1)
 
 **Type:** Reactive update (user correction — invoicing model was wrong)

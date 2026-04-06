@@ -27,9 +27,14 @@ globs: "**/api/**,**/routes/**,**/endpoints/**"
 ### 1. Tenant context MUST come from the JWT token
 - Use `context: TenantContext = Depends(get_tenant_context)` on every protected endpoint
 - NEVER accept `company_id` or `sub_brand_id` as query parameters, path parameters,
-  or request body fields
-- The ONLY exception: super-admin endpoints (if implemented) that explicitly operate
-  across tenants with additional authorization
+  or request body fields for **tenant-scoped** endpoints
+- **Exception: `reel48_admin` platform endpoints** (under `/api/v1/platform/`).
+  The `reel48_admin` role operates cross-company (has no `company_id` of its own),
+  so platform admin endpoints MAY accept a target `company_id` in the request body
+  to specify which client company to operate on. These endpoints MUST verify the
+  caller has the `reel48_admin` role before accepting the target company_id.
+  Example: `POST /api/v1/platform/invoices` accepts `company_id` to create an
+  invoice for a specific client company.
 
 ### 2. Use the standard response format
 ```python
