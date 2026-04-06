@@ -77,7 +77,7 @@ Create a complete CRUD API for the Product resource.
    - GET /api/v1/products/{id} — get single
    - POST /api/v1/products — create (requires sub_brand_admin or corporate_admin)
    - PATCH /api/v1/products/{id} — partial update
-   - DELETE /api/v1/products/{id} — soft delete (set is_active=false)
+   - DELETE /api/v1/products/{id} — soft delete (set deleted_at=now())
 5. Service layer with SKU uniqueness validation per company
 6. Tests including cross-tenant isolation and role authorization
 

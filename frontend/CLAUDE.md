@@ -75,8 +75,8 @@ and `custom:role`. Extract these in the auth context provider:
 type UserRole = 'reel48_admin' | 'corporate_admin' | 'sub_brand_admin' | 'regional_manager' | 'employee';
 
 interface TenantContext {
-  companyId: string;
-  subBrandId: string | null;  // null for corporate_admin
+  companyId: string | null;   // null for reel48_admin (cross-company platform operator)
+  subBrandId: string | null;  // null for corporate_admin and reel48_admin
   role: UserRole;
   userId: string;
 }

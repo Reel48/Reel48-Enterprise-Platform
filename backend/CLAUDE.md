@@ -49,10 +49,11 @@ backend/
 │   │   ├── tenant.py              # Sets PostgreSQL session variables for RLS
 │   │   └── logging.py             # Request/response logging
 │   ├── models/                    # SQLAlchemy ORM models (one file per entity)
-│   │   ├── base.py                # TenantBase with company_id, sub_brand_id
+│   │   ├── base.py                # GlobalBase, CompanyBase, TenantBase (see Model Base Classes)
 │   │   ├── company.py
 │   │   ├── sub_brand.py
 │   │   ├── user.py
+│   │   ├── invite.py              # Admin invite tokens (Module 1)
 │   │   ├── org_code.py
 │   │   ├── product.py
 │   │   ├── order.py
@@ -61,6 +62,7 @@ backend/
 │   ├── schemas/                   # Pydantic models for API request/response
 │   │   ├── common.py              # Shared schemas (pagination, error response)
 │   │   ├── company.py
+│   │   ├── invite.py              # Invite create/response schemas
 │   │   ├── product.py
 │   │   ├── order.py
 │   │   ├── invoice.py
@@ -69,7 +71,7 @@ backend/
 │   ├── api/
 │   │   └── v1/
 │   │       ├── router.py          # Aggregates all v1 route modules
-│   │       ├── auth.py            # Login, register, token refresh
+│   │       ├── auth.py            # Register, validate-org-code (login & token refresh are Amplify client-side)
 │   │       ├── companies.py
 │   │       ├── sub_brands.py
 │   │       ├── users.py
@@ -77,6 +79,7 @@ backend/
 │   │       ├── orders.py
 │   │       ├── bulk_orders.py
 │   │       ├── approvals.py
+│   │       ├── invites.py              # Invite creation and management (admin)
 │   │       ├── org_codes.py            # Org code management (corporate_admin)
 │   │       ├── invoices.py
 │   │       ├── webhooks.py            # Stripe webhook receiver
@@ -93,6 +96,7 @@ backend/
 │       ├── order_service.py
 │       ├── bulk_order_service.py
 │       ├── approval_service.py
+│       ├── invite_service.py      # Invite creation, token generation, consumption
 │       ├── org_code_service.py    # Org code generation, validation, registration
 │       ├── analytics_service.py
 │       ├── email_service.py       # SES integration
@@ -153,11 +157,17 @@ async def get_tenant_context(
     token = credentials.credentials
     claims = await validate_cognito_token(token)
 
+    # Extract role FIRST — reel48_admin has no company_id or sub_brand_id in JWT.
+    # Using .get() with None avoids KeyError for missing claims.
+    role = claims["custom:role"]
+    raw_company_id = claims.get("custom:company_id")  # None for reel48_admin
+    raw_sub_brand_id = claims.get("custom:sub_brand_id")  # None for corporate_admin & reel48_admin
+
     context = TenantContext(
         user_id=claims["sub"],
-        company_id=claims["custom:company_id"],
-        sub_brand_id=claims.get("custom:sub_brand_id"),  # None for corporate_admin
-        role=claims["custom:role"],
+        company_id=UUID(raw_company_id) if raw_company_id else None,
+        sub_brand_id=UUID(raw_sub_brand_id) if raw_sub_brand_id else None,
+        role=role,
     )
 
     # CRITICAL: Set PostgreSQL session variables so RLS policies can reference them.
@@ -177,6 +187,16 @@ async def get_tenant_context(
 
     return context
 ```
+
+### Login & Token Refresh
+# --- ADDED 2026-04-06 during pre-build harness review ---
+# Reason: Ambiguity about whether login/refresh were backend endpoints or client-side.
+# Impact: Claude Code knows NOT to build backend login/refresh endpoints.
+
+Login and token refresh are handled **entirely client-side** by AWS Amplify
+(`@aws-amplify/auth`). There are NO backend endpoints for login or token refresh.
+Amplify communicates directly with Cognito. The backend only validates JWTs — it
+never issues them.
 
 ### Unauthenticated Endpoint Exceptions
 Three endpoints do NOT use `get_tenant_context` because they receive requests without JWTs:
@@ -208,15 +228,26 @@ class TenantContext:
 
     @property
     def is_reel48_admin(self) -> bool:
+        """Platform operator. Cross-company access."""
         return self.role == "reel48_admin"
 
     @property
-    def is_corporate_admin(self) -> bool:
-        return self.role == "corporate_admin"
+    def is_corporate_admin_or_above(self) -> bool:
+        """Corporate admin or platform admin. Use for: manage sub-brands,
+        manage all users, generate org codes, view company-wide analytics."""
+        return self.role in ("reel48_admin", "corporate_admin")
 
     @property
     def is_admin(self) -> bool:
+        """Any admin role (including sub_brand_admin). Use for: create products,
+        manage catalog, approve orders. WARNING: Do NOT use for operations
+        restricted to corporate_admin+ (use is_corporate_admin_or_above instead)."""
         return self.role in ("reel48_admin", "corporate_admin", "sub_brand_admin")
+
+    @property
+    def is_manager_or_above(self) -> bool:
+        """Regional manager or any admin. Use for: create bulk orders, approve orders."""
+        return self.role in ("reel48_admin", "corporate_admin", "sub_brand_admin", "regional_manager")
 ```
 
 ### `reel48_admin` and `company_id`: NULL vs Empty String
@@ -343,6 +374,19 @@ class ProductService:
         return result.scalars().all(), total
 ```
 
+### Company Creation & Default Sub-Brand Atomicity
+
+# --- ADDED 2026-04-06 during pre-build harness review ---
+# Reason: ADR-003 requires atomic company + default sub-brand creation, but no
+# guidance on which service owns the transaction.
+# Impact: Prevents companies from existing without a default sub-brand.
+
+`company_service.create_company()` is responsible for atomically creating both the
+company AND its default sub-brand in a single database transaction. This ensures the
+ADR-003 guarantee that every company always has at least one sub-brand. The service
+either creates both records or neither (rollback on failure). Do NOT split this across
+two separate service calls or two separate transactions.
+
 
 ## Pydantic Schema Conventions
 
@@ -403,6 +447,78 @@ class ApiResponse[T](BaseModel):
 ```
 
 
+## Model Base Classes
+
+# --- ADDED 2026-04-06 during pre-build harness review ---
+# Reason: The root CLAUDE.md defines TenantBase (company_id + sub_brand_id), but several
+# Module 1 tables don't fit that shape. Without alternatives, Claude Code must invent
+# ad-hoc base classes inconsistently.
+# Impact: Every model has a clear, correct base class to inherit from.
+
+Not every table has both `company_id` AND `sub_brand_id`. Use the right base for
+each table:
+
+```python
+from sqlalchemy import Column, DateTime, func
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import DeclarativeBase
+from uuid import uuid4
+
+class Base(DeclarativeBase):
+    """SQLAlchemy declarative base. All models inherit from this (directly or via mixins)."""
+    pass
+
+class GlobalBase(Base):
+    """
+    For tables with NO tenant isolation columns.
+    Used by: companies (the tenant identity table itself)
+    """
+    __abstract__ = True
+
+    id = Column(UUID, primary_key=True, default=uuid4)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+
+class CompanyBase(Base):
+    """
+    For tables scoped to a company but NOT to a sub-brand.
+    Used by: sub_brands, org_codes, invites (company-level entities)
+    """
+    __abstract__ = True
+
+    id = Column(UUID, primary_key=True, default=uuid4)
+    company_id = Column(UUID, ForeignKey("companies.id"), nullable=False, index=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+
+class TenantBase(Base):
+    """
+    For tables scoped to BOTH company AND sub-brand (the common case).
+    Used by: users, products, orders, bulk_orders, invoices, etc.
+    """
+    __abstract__ = True
+
+    id = Column(UUID, primary_key=True, default=uuid4)
+    company_id = Column(UUID, ForeignKey("companies.id"), nullable=False, index=True)
+    sub_brand_id = Column(UUID, ForeignKey("sub_brands.id"), nullable=True, index=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+```
+
+### Which Base to Use
+
+| Table | Base Class | Why |
+|-------|-----------|-----|
+| `companies` | `GlobalBase` | IS the tenant — has no company_id FK |
+| `sub_brands` | `CompanyBase` | Belongs to a company, but IS the sub-brand — no sub_brand_id FK |
+| `org_codes` | `CompanyBase` | Company-level codes, no sub-brand scoping |
+| `invites` | `CompanyBase` | Invite targets a sub-brand, but the FK is explicit (`target_sub_brand_id`), not the TenantBase `sub_brand_id` |
+| `users` | `TenantBase` | Scoped to company + sub-brand |
+| `products` | `TenantBase` | Scoped to company + sub-brand |
+| `orders` | `TenantBase` | Scoped to company + sub-brand |
+| `invoices` | `TenantBase` | Scoped to company + sub-brand |
+
+
 ## Database Session & RLS Setup
 
 # --- WHY THIS SECTION EXISTS ---
@@ -434,6 +550,31 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 ```
 
+### CRITICAL: Session Sharing Between Dependencies
+
+# --- ADDED 2026-04-06 during pre-build harness review ---
+# Reason: The harness showed get_tenant_context and route handlers both using
+# Depends(get_db_session) without explaining they receive the SAME session.
+# Impact: Prevents silent RLS bypass from accidental session duplication.
+
+FastAPI **de-duplicates** generator dependencies within a single request. When both
+`get_tenant_context` and a route handler declare `db: AsyncSession = Depends(get_db_session)`,
+they receive the **same session instance**. This is essential — `get_tenant_context` sets
+the PostgreSQL session variables (`app.current_company_id`, `app.current_sub_brand_id`)
+on that session, and the route's queries execute against the same session with those
+variables in effect.
+
+**Rules:**
+1. **Never create alternative session factories** or wrapper dependencies (e.g.,
+   `get_readonly_session()`). A second factory produces a separate session without
+   RLS variables set — silently exposing all tenant data.
+2. **Never import `get_db_session` from a different module path.** FastAPI de-duplicates
+   by object identity. If two imports resolve to different function objects, you get
+   two sessions.
+3. **Always import from `app.core.dependencies`** — the single canonical source.
+4. If you need a session outside of a request context (e.g., in a background task or
+   CLI script), you must manually set the RLS session variables before executing queries.
+
 
 ## Deletion Strategy
 
@@ -449,6 +590,82 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
   Use **hard delete**. No audit trail needed for ephemeral records.
 - **Org codes:** Use **deactivation** (`is_active = false`), not deletion. Org codes
   are never deleted because they may be referenced by user `org_code_id` foreign keys.
+
+
+## Module 1 Table Schemas
+
+# --- ADDED 2026-04-06 during pre-build harness review ---
+# Reason: companies, sub_brands, users, and invites are built in Module 1 but had no
+# defined schemas. Without these, Claude Code must guess at column lists.
+# Impact: Module 1 tables are fully specified before implementation begins.
+
+### `companies` Table (GlobalBase)
+```
+id                      UUID        PRIMARY KEY
+name                    VARCHAR(255) NOT NULL
+slug                    VARCHAR(100) NOT NULL UNIQUE  -- URL-safe identifier
+stripe_customer_id      TEXT        NULL              -- Set during Stripe onboarding
+is_active               BOOLEAN     NOT NULL DEFAULT true
+created_at              TIMESTAMP   NOT NULL
+updated_at              TIMESTAMP   NOT NULL
+```
+RLS: `companies_isolation` policy matching `id` against `app.current_company_id`.
+
+### `sub_brands` Table (CompanyBase)
+```
+id                      UUID        PRIMARY KEY
+company_id              UUID        NOT NULL (FK → companies, indexed)
+name                    VARCHAR(255) NOT NULL
+slug                    VARCHAR(100) NOT NULL          -- Unique within company
+is_default              BOOLEAN     NOT NULL DEFAULT false
+is_active               BOOLEAN     NOT NULL DEFAULT true
+created_at              TIMESTAMP   NOT NULL
+updated_at              TIMESTAMP   NOT NULL
+
+UNIQUE(company_id, slug)
+```
+RLS: Company isolation only (no sub-brand scoping — this IS the sub-brand).
+`is_default = true` for the auto-created default sub-brand (see ADR-003).
+
+### `users` Table (TenantBase)
+```
+id                      UUID        PRIMARY KEY
+company_id              UUID        NOT NULL (FK → companies, indexed)
+sub_brand_id            UUID        NULL (FK → sub_brands, indexed)
+cognito_sub             VARCHAR(255) NOT NULL UNIQUE   -- Cognito user ID (maps to JWT "sub")
+email                   VARCHAR(255) NOT NULL
+full_name               VARCHAR(255) NOT NULL
+role                    VARCHAR(50)  NOT NULL           -- Duplicated from Cognito for local queries
+registration_method     VARCHAR(20)  NOT NULL DEFAULT 'invite'  -- 'invite' or 'self_registration'
+org_code_id             UUID        NULL (FK → org_codes)       -- Set for self-registered users
+is_active               BOOLEAN     NOT NULL DEFAULT true
+deleted_at              TIMESTAMP   NULL               -- Soft delete
+created_at              TIMESTAMP   NOT NULL
+updated_at              TIMESTAMP   NOT NULL
+```
+RLS: Standard company isolation + sub-brand scoping.
+`sub_brand_id` is NULL for `corporate_admin` users (they span all sub-brands).
+`role` is stored locally to enable role-based queries without parsing JWTs (e.g.,
+"list all admins in this company"). Cognito remains the authoritative source for
+auth decisions; the local copy is for query convenience.
+
+### `invites` Table (CompanyBase)
+```
+id                      UUID        PRIMARY KEY
+company_id              UUID        NOT NULL (FK → companies, indexed)
+target_sub_brand_id     UUID        NOT NULL (FK → sub_brands)  -- The sub-brand the invitee joins
+email                   VARCHAR(255) NOT NULL
+role                    VARCHAR(50)  NOT NULL DEFAULT 'employee'
+token                   VARCHAR(64)  NOT NULL UNIQUE   -- Secure random token
+expires_at              TIMESTAMP   NOT NULL           -- 72 hours from creation
+consumed_at             TIMESTAMP   NULL               -- Set when invite is used
+created_by              UUID        NOT NULL (FK → users)
+created_at              TIMESTAMP   NOT NULL
+updated_at              TIMESTAMP   NOT NULL
+```
+RLS: Company isolation only (no `sub_brand_id` column — uses `target_sub_brand_id` FK instead).
+Note: Uses `CompanyBase`, not `TenantBase`, because the FK to sub_brands is explicitly
+named `target_sub_brand_id` (the invite targets a sub-brand, but isn't "owned by" one).
 
 
 ## Error Handling
@@ -501,6 +718,63 @@ async def app_exception_handler(request: Request, exc: AppException):
         content={"data": None, "errors": [{"code": exc.code, "message": exc.message}]},
     )
 ```
+
+
+## Rate Limiting Pattern
+
+# --- ADDED 2026-04-06 during pre-build harness review ---
+# Reason: Both unauthenticated auth endpoints need rate limiting but no
+# implementation pattern was defined (middleware vs dependency, Redis keys, etc.).
+# Impact: Claude Code generates consistent rate limiting for all unauthenticated endpoints.
+
+Rate limiting is implemented as a **FastAPI dependency** using Redis (ElastiCache).
+It is applied to unauthenticated endpoints that cannot rely on JWT-based identity.
+
+```python
+from fastapi import Depends, HTTPException, Request
+import redis.asyncio as redis
+
+redis_client = redis.from_url(settings.REDIS_URL)
+
+async def check_rate_limit(
+    request: Request,
+    group: str = "auth",       # Shared window for related endpoints
+    max_attempts: int = 5,
+    window_seconds: int = 900,  # 15 minutes
+):
+    """
+    Rate limit by client IP. Raises 429 when limit is exceeded.
+    Endpoints sharing the same `group` share the same counter.
+    """
+    client_ip = request.client.host
+    key = f"rate_limit:{group}:{client_ip}"
+
+    current = await redis_client.incr(key)
+    if current == 1:
+        await redis_client.expire(key, window_seconds)
+
+    if current > max_attempts:
+        raise HTTPException(
+            status_code=429,
+            detail={"data": None, "errors": [{"code": "RATE_LIMITED", "message": "Too many attempts. Please try again later."}]},
+        )
+
+# Usage in routes:
+@router.post("/api/v1/auth/validate-org-code")
+async def validate_org_code(
+    body: ValidateOrgCodeRequest,
+    _rate_limit: None = Depends(check_rate_limit),  # Shared "auth" group
+):
+    ...
+```
+
+**Key design decisions:**
+- **Group-based:** `validate-org-code` and `register` share the same rate limit window
+  (`group="auth"`) so an attacker can't use 5 attempts on validate then 5 more on register.
+- **IP-based:** Uses `request.client.host`. Behind a load balancer, configure
+  `X-Forwarded-For` trust via FastAPI's `--proxy-headers` flag.
+- **Standard error format:** 429 responses use the same `{data, errors}` envelope.
+- **Redis key pattern:** `rate_limit:{group}:{ip}` with TTL = window duration.
 
 
 ## Testing Patterns

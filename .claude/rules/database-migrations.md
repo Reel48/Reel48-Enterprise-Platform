@@ -60,7 +60,53 @@ globs: "**/migrations/**,**/models/**,**/*alembic*"
 - Index foreign keys used in JOIN operations
 - Add composite indexes for common query patterns (e.g., `company_id + status`)
 
-## Special Case: `org_codes` Table
+## Special Cases: Identity & Company-Level Tables
+
+# --- ADDED 2026-04-06 during pre-build harness review ---
+# Reason: Only the org_codes exception was documented. companies and sub_brands
+# tables have different RLS shapes than standard tenant-scoped tables.
+# Impact: Claude Code applies the correct RLS pattern for every Module 1 table.
+
+### `companies` Table (GlobalBase — no tenant FK columns)
+The `companies` table IS the tenant identity — it has no `company_id` FK or `sub_brand_id`.
+RLS isolates rows by matching the row's own `id` against the session variable:
+
+```sql
+ALTER TABLE companies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE companies FORCE ROW LEVEL SECURITY;
+
+-- reel48_admin sees all companies (empty string bypass).
+-- Tenant users see only their own company (id matches their company_id).
+CREATE POLICY companies_isolation ON companies
+    USING (
+        current_setting('app.current_company_id', true) IS NULL
+        OR current_setting('app.current_company_id', true) = ''
+        OR id = current_setting('app.current_company_id')::uuid
+    );
+```
+No sub-brand scoping policy (companies have no sub_brand_id column).
+
+### `sub_brands` Table (CompanyBase — company_id only)
+The `sub_brands` table has `company_id` but no `sub_brand_id` (it IS the sub-brand).
+RLS uses company isolation only — sub-brand-level filtering is handled by the application
+layer when needed (e.g., listing sub-brands visible to a sub_brand_admin).
+
+```sql
+ALTER TABLE sub_brands ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sub_brands FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY sub_brands_company_isolation ON sub_brands
+    USING (
+        current_setting('app.current_company_id', true) IS NULL
+        OR current_setting('app.current_company_id', true) = ''
+        OR company_id = current_setting('app.current_company_id')::uuid
+    );
+```
+No sub-brand scoping policy. A `corporate_admin` (sub_brand_id=NULL) sees all sub-brands
+in their company. A `sub_brand_admin` also sees all sub-brands in their company via RLS,
+but the application layer filters to show only their assigned sub-brand where appropriate.
+
+### `org_codes` Table
 # --- ADDED 2026-04-06 after ADR-007 ---
 # Reason: org_codes has company_id but no sub_brand_id (codes are company-level).
 # Impact: Claude Code knows this table follows a slightly different RLS pattern.

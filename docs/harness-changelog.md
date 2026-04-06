@@ -30,6 +30,87 @@
 
 ---
 
+## 2026-04-06 — Pre-Build Harness Review #2: Inconsistency & Gap Fix (Pre-Module 1)
+
+**Type:** Pre-build review (comprehensive cross-file consistency audit)
+**Author:** Claude Code
+**Findings:** 3 critical, 9 moderate, 4 minor across 6 files
+
+### Changes Made
+
+- **File:** `backend/CLAUDE.md` — `get_tenant_context` code
+  - **Change:** Fixed `reel48_admin` crash — bracket access on `claims["custom:company_id"]` replaced with `.get()` + None-safe UUID parsing. Role extracted first.
+  - **Reason:** CRITICAL — `reel48_admin` has no `custom:company_id` claim; bracket access raises `KeyError` or UUID cast fails
+  - **Impact:** Platform admin authentication no longer crashes on first request
+
+- **File:** `backend/CLAUDE.md` — new "Session Sharing Between Dependencies" section
+  - **Change:** Documented FastAPI dependency de-duplication; added 4 rules about session identity
+  - **Reason:** CRITICAL — no documentation that route's `db` and `get_tenant_context`'s `db` are the same session. Misunderstanding silently disables RLS.
+  - **Impact:** Prevents accidental session duplication that would bypass all tenant isolation
+
+- **File:** `prompts/crud-endpoint.md` — Product example
+  - **Change:** Changed `soft delete (set is_active=false)` to `soft delete (set deleted_at=now())`
+  - **Reason:** CRITICAL — contradicted the canonical `deleted_at` pattern in backend/CLAUDE.md Deletion Strategy
+  - **Impact:** CRUD template now matches the authoritative soft-delete pattern
+
+- **File:** `backend/CLAUDE.md` — new "Model Base Classes" section
+  - **Change:** Defined `GlobalBase`, `CompanyBase`, `TenantBase` hierarchy with usage table
+  - **Reason:** `org_codes`, `sub_brands`, `companies` don't fit `TenantBase`. Self-registration prompt said "use a custom base" but none existed.
+  - **Impact:** Every Module 1 model has a clear, correct base class
+
+- **File:** `.claude/rules/database-migrations.md` — new "Special Cases: Identity & Company-Level Tables" section
+  - **Change:** Added RLS patterns for `companies` (id-based isolation) and `sub_brands` (company isolation only)
+  - **Reason:** Only `org_codes` exception was documented. `companies` and `sub_brands` have different RLS shapes.
+  - **Impact:** Claude Code applies correct RLS for all Module 1 tables
+
+- **File:** `backend/CLAUDE.md` — project structure
+  - **Change:** Added `invite.py` to models, schemas, routes; added `invite_service.py` to services; updated `base.py` description
+  - **Reason:** Invite flow is Module 1 scope but had no model/schema/route listed
+  - **Impact:** Invite feature has defined file locations before implementation
+
+- **File:** `backend/CLAUDE.md` — new "Module 1 Table Schemas" section
+  - **Change:** Defined full column schemas for `companies`, `sub_brands`, `users`, `invites` tables
+  - **Reason:** These are the first tables built in Module 1 but had no defined column lists
+  - **Impact:** Module 1 tables are fully specified before implementation begins
+
+- **File:** `backend/CLAUDE.md` — auth.py description + new "Login & Token Refresh" section
+  - **Change:** Clarified that login/token refresh are Amplify client-side (no backend endpoints). Updated `auth.py` description.
+  - **Reason:** `auth.py` said "Login, register, token refresh" but login/refresh weren't in the unauthenticated endpoint list
+  - **Impact:** Claude Code won't build unnecessary backend login endpoints
+
+- **File:** `backend/CLAUDE.md` — TenantContext model
+  - **Change:** Added `is_corporate_admin_or_above` and `is_manager_or_above` helpers. Added docstrings with usage guidance and WARNING on `is_admin`.
+  - **Reason:** `is_admin` includes `sub_brand_admin` but 6+ operations are restricted to `corporate_admin+`
+  - **Impact:** Prevents authorization bugs from using `is_admin` for corporate-only operations
+
+- **File:** `frontend/CLAUDE.md` — TenantContext interface
+  - **Change:** Changed `companyId: string` to `companyId: string | null` with comment
+  - **Reason:** `reel48_admin` has no company; type didn't reflect this
+  - **Impact:** TypeScript correctly models the null case for platform admins
+
+- **File:** `backend/CLAUDE.md` — new "Rate Limiting Pattern" section
+  - **Change:** Defined FastAPI dependency pattern with Redis, key structure, shared group, 429 response format
+  - **Reason:** Both unauthenticated auth endpoints need rate limiting but no implementation pattern existed
+  - **Impact:** Consistent rate limiting across all unauthenticated endpoints
+
+- **File:** `backend/CLAUDE.md` — new "Company Creation & Default Sub-Brand Atomicity" section
+  - **Change:** Documented that `company_service.create_company()` owns atomic company + default sub-brand creation
+  - **Reason:** ADR-003 requires atomicity but no service was assigned ownership
+  - **Impact:** Prevents companies from existing without a default sub-brand
+
+### Gaps Remaining (Minor — addressable during implementation)
+- `shared/types/` directory undocumented
+- `harness-maintenance.md` glob pattern `**/CLAUDE.md` fires every session
+- `sub_brands.is_default` column now defined in table schema (resolved)
+- `catalogs` model deferred to Module 3
+
+### Notes
+This was the second pre-build review. The first (below) caught 7 issues; this one caught 16.
+The increase reflects a deeper cross-file consistency analysis. All 3 critical issues and
+9 moderate issues are now resolved. The harness is ready for Module 1 implementation.
+
+---
+
 ## 2026-04-06 — Pre-Build Harness Review (Pre-Module 1)
 
 **Type:** End-of-session self-audit (full harness consistency review)
