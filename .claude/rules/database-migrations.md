@@ -60,6 +60,20 @@ globs: "**/migrations/**,**/models/**,**/*alembic*"
 - Index foreign keys used in JOIN operations
 - Add composite indexes for common query patterns (e.g., `company_id + status`)
 
+## Special Case: `org_codes` Table
+# --- ADDED 2026-04-06 after ADR-007 ---
+# Reason: org_codes has company_id but no sub_brand_id (codes are company-level).
+# Impact: Claude Code knows this table follows a slightly different RLS pattern.
+
+The `org_codes` table stores company-level registration codes. It has `company_id` but
+**no `sub_brand_id`** (org codes are per-company, not per-sub-brand). RLS handling:
+- **Company isolation policy: YES** — needed for admin management endpoints where a
+  `corporate_admin` should only see their own company's codes.
+- **Sub-brand scoping policy: NO** — there is no `sub_brand_id` column to scope on.
+- **Public lookup:** The `POST /api/v1/auth/register` endpoint queries this table without
+  tenant context (unauthenticated). This lookup uses a direct `WHERE code = :code` query
+  and does not go through the RLS-scoped session.
+
 ## Common Mistakes to Avoid
 - ❌ Creating a table without RLS policies
 - ❌ Using raw SQL DDL instead of Alembic operations

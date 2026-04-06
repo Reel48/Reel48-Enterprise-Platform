@@ -30,6 +30,68 @@
 
 ---
 
+## 2026-04-06 — Controlled Self-Registration via Org Code (ADR-007)
+
+**Type:** Feature addition (new onboarding path)
+**Author:** Claude Code
+
+### Changes Made
+
+- **File:** `docs/adr/007-controlled-self-registration.md` (NEW)
+  - **Change:** Created ADR documenting the decision to add org-code self-registration alongside the existing invite flow. Covers alternatives considered (email domain verification, batch CSV, per-sub-brand codes) and risks.
+  - **Reason:** Invite-only onboarding creates friction for large companies with 500+ employees.
+  - **Impact:** Claude Code understands WHY self-registration was added and won't suggest incompatible alternatives.
+
+- **File:** `.claude/rules/authentication.md`
+  - **Change:** Added "Self-Registration via Org Code" section with full flow documentation. Added `Generate/manage org codes` row to access matrix. Updated common mistakes to prohibit registration without org code OR invite (not just invite). Added `**/register*,**/org_code*` to globs.
+  - **Reason:** Auth rule file is the primary reference for all onboarding flows.
+  - **Impact:** Claude Code generates correct self-registration endpoints with rate limiting and no enumeration leakage.
+
+- **File:** `CLAUDE.md` (root)
+  - **Change:** Added "Employee Onboarding Paths" subsection under Multi-Tenancy (documents both invite and org-code paths). Updated Module 1 description to include self-registration. Added `007-controlled-self-registration.md` to ADR listing and `self-registration.md` to prompts listing in directory structure.
+  - **Reason:** Root CLAUDE.md must reflect that two onboarding paths exist and both maintain RLS integrity.
+  - **Impact:** Every session knows self-registration is part of Module 1.
+
+- **File:** `backend/CLAUDE.md`
+  - **Change:** Added `org_code.py` to models, schemas, routes, and services directories. Added `org_code_service.py` to services. Added `test_self_registration.py` to tests. Added "Unauthenticated Endpoint Exceptions" subsection documenting both Stripe webhook and registration as JWT-free endpoints.
+  - **Reason:** Backend structure must include all new files for the feature.
+  - **Impact:** Claude Code creates org code files in the correct locations.
+
+- **File:** `frontend/CLAUDE.md`
+  - **Change:** Added descriptive comment to `/register` route. Added "Self-Registration Note" section clarifying that post-login behavior is identical for invite and self-registered users.
+  - **Reason:** Frontend must know the register page exists and that TenantContext is the same regardless of registration method.
+  - **Impact:** Claude Code doesn't add unnecessary frontend logic to distinguish registration methods.
+
+- **File:** `.claude/rules/api-endpoints.md`
+  - **Change:** Expanded Exception 1 numbering, added Exception 2 documenting the self-registration endpoint as the second unauthenticated endpoint alongside Stripe webhooks.
+  - **Reason:** The "tenant context from JWT" rule now has two exceptions, not one.
+  - **Impact:** Claude Code won't incorrectly add JWT requirements to the registration endpoint.
+
+- **File:** `.claude/rules/database-migrations.md`
+  - **Change:** Added "Special Case: org_codes Table" section explaining that this table has company_id but no sub_brand_id, needs company isolation RLS but not sub-brand scoping, and has a public lookup path that bypasses RLS.
+  - **Reason:** org_codes is the first table that breaks the "every tenant table has both isolation columns" pattern.
+  - **Impact:** Claude Code generates correct RLS policies for this table without adding unnecessary sub-brand scoping.
+
+- **File:** `.claude/rules/testing.md`
+  - **Change:** Added "Self-Registration Test Requirements" section with functional tests (valid/invalid/inactive code, deactivation, role checks), security tests (rate limiting, no enumeration), and isolation tests (cross-company, default sub-brand).
+  - **Reason:** Self-registration has unique security concerns (unauthenticated endpoint, rate limiting) that standard testing guidance doesn't cover.
+  - **Impact:** Claude Code includes security and rate-limiting tests for registration.
+
+- **File:** `prompts/self-registration.md` (NEW)
+  - **Change:** Created prompt template covering: org_codes migration, OrgCode model, Pydantic schemas, registration endpoint, org code management endpoints, frontend register page, and full test suite with acceptance criteria.
+  - **Reason:** Self-registration is a distinct feature pattern that benefits from a dedicated prompt template.
+  - **Impact:** Future sessions building this feature get a complete, detailed starting prompt.
+
+### Gaps Identified
+- None. All harness files that reference authentication, onboarding, or unauthenticated endpoints have been updated.
+
+### Notes
+- This is the second feature to introduce an unauthenticated endpoint exception (after Stripe webhooks in ADR-006). Both are documented consistently across api-endpoints.md and backend/CLAUDE.md.
+- The org_codes table is the first to use company_id without sub_brand_id, establishing a precedent for company-level-only tables.
+- Total harness files: 26 (was 24; added ADR-007 and self-registration prompt template).
+
+---
+
 ## 2026-04-06 — Pre-Production Consistency Audit (Pre-Stage 1)
 
 **Type:** End-of-session self-audit (cross-file consistency check)

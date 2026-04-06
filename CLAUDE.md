@@ -168,6 +168,22 @@ When a new company is created, a default sub-brand is AUTOMATICALLY created for 
 This ensures every company always has at least one sub-brand, simplifying the data
 model (no special cases for "companies without sub-brands").
 
+### Employee Onboarding Paths
+# --- ADDED 2026-04-06 after ADR-007 ---
+# Reason: Invite-only onboarding was the sole path; self-registration via org code added.
+# Impact: Claude Code knows both paths exist and both guarantee valid tenant context.
+
+There are **two** ways employees join a company:
+
+1. **Admin Invite (targeted):** Admin creates an invite for a specific sub-brand and role.
+   Single-use token sent via email. Best for targeted onboarding.
+2. **Self-Registration via Org Code (bulk):** Employee enters a company-level org code
+   during registration. Auto-assigned to the default sub-brand as `employee`. Best for
+   large-scale onboarding. See ADR-007 and `.claude/rules/authentication.md` for full details.
+
+Both paths guarantee a valid `company_id` and `sub_brand_id` from the moment of user
+creation, preserving RLS integrity.
+
 
 ## API Design Conventions
 
@@ -485,7 +501,8 @@ frontend displays invoice data fetched through our API (never directly from Stri
 # If you're building Module 4 (Ordering), Claude needs to know that Auth,
 # Profiles, and Catalog are already complete and can be depended upon.
 
-1. **Auth & Multi-Tenancy** (foundation — everything depends on this)
+1. **Auth & Multi-Tenancy** (foundation — everything depends on this; includes both
+   invite flow AND org-code self-registration — see ADR-007)
 2. **Employee Profiles** (depends on Auth)
 3. **Product Catalog & Brand Management** (depends on Auth)
 4. **Ordering Flow** (depends on Profiles + Catalog)
@@ -545,12 +562,14 @@ reel48-plus/
 │       ├── 004-rest-before-graphql.md
 │       ├── 005-cognito-over-third-party-auth.md
 │       ├── 006-stripe-for-invoicing.md
+│       ├── 007-controlled-self-registration.md
 │       └── TEMPLATE.md
 ├── prompts/                           # Reusable prompt templates
 │   ├── crud-endpoint.md
 │   ├── new-table-migration.md
 │   ├── react-component.md
-│   └── test-suite.md
+│   ├── test-suite.md
+│   └── self-registration.md
 ├── frontend/
 │   ├── CLAUDE.md                      # Frontend-specific conventions
 │   ├── src/

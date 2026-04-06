@@ -82,6 +82,17 @@ interface TenantContext {
 }
 ```
 
+### Self-Registration Note
+# --- ADDED 2026-04-06 after ADR-007 ---
+# Reason: Self-registration via org code added as second onboarding path.
+# Impact: Claude Code knows the register page exists and that post-login behavior is identical.
+
+The `/register` page allows employees to self-register using a company org code. After
+registration and email verification, self-registered users log in and receive the same
+JWT with the same custom claims (`custom:company_id`, `custom:sub_brand_id`, `custom:role`)
+as invite-registered users. **The frontend does not need to distinguish between the two
+registration methods after login** — the TenantContext shape is identical.
+
 ### Protected Routes
 Use a `<ProtectedRoute>` wrapper component that:
 1. Checks authentication state
@@ -179,7 +190,7 @@ src/
 src/app/
 ├── (public)/                  # Unauthenticated routes (no layout wrapper)
 │   ├── login/page.tsx
-│   ├── register/page.tsx
+│   ├── register/page.tsx          # Self-registration via org code (ADR-007)
 │   └── invite/[token]/page.tsx    # Employee invite acceptance
 ├── (authenticated)/           # Protected routes (auth layout wrapper)
 │   ├── layout.tsx             # Wraps all auth routes with ProtectedRoute + Sidebar

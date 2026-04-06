@@ -114,6 +114,32 @@ Every test file that tests tenant-scoped data should use this setup:
 - Isolation tests: At least one cross-company and one cross-sub-brand test
   per data entity per module
 
+## Self-Registration Test Requirements
+# --- ADDED 2026-04-06 after ADR-007 ---
+# Reason: Self-registration introduces an unauthenticated endpoint with unique security needs.
+# Impact: Claude Code includes security and isolation tests for the registration flow.
+
+When building or modifying the self-registration feature, include these additional tests:
+
+### Functional Tests
+- Registering with a valid, active org code creates a user with `role = employee`
+  and the company's default `sub_brand_id`
+- Registering with an invalid code returns a generic 400 error
+- Registering with a deactivated code returns a generic 400 error
+- Registering with a duplicate email returns the same generic 400 error (no enumeration)
+- Generating a new org code deactivates the previous one
+- Only `corporate_admin` (or `reel48_admin`) can generate/view/deactivate org codes
+
+### Security Tests
+- Rate limiting: 6th registration attempt from the same IP within 15 minutes returns 429
+- Error messages do NOT reveal whether the code exists, is inactive, or the email is taken
+- The registration endpoint does NOT require a JWT token
+
+### Isolation Tests
+- A user self-registered via Company A's org code CANNOT see Company B's data
+- A self-registered user lands on the correct default sub-brand (not another sub-brand)
+- Company B's admin CANNOT see or manage Company A's org codes
+
 ## Common Mistakes to Avoid
 - ❌ Testing only the happy path
 - ❌ Skipping isolation tests ("RLS will handle it")

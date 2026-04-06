@@ -53,6 +53,7 @@ backend/
 │   │   ├── company.py
 │   │   ├── sub_brand.py
 │   │   ├── user.py
+│   │   ├── org_code.py
 │   │   ├── product.py
 │   │   ├── order.py
 │   │   ├── bulk_order.py
@@ -63,6 +64,7 @@ backend/
 │   │   ├── product.py
 │   │   ├── order.py
 │   │   ├── invoice.py
+│   │   ├── org_code.py
 │   │   └── user.py
 │   ├── api/
 │   │   └── v1/
@@ -75,6 +77,7 @@ backend/
 │   │       ├── orders.py
 │   │       ├── bulk_orders.py
 │   │       ├── approvals.py
+│   │       ├── org_codes.py            # Org code management (corporate_admin)
 │   │       ├── invoices.py
 │   │       ├── webhooks.py            # Stripe webhook receiver
 │   │       ├── analytics.py
@@ -90,6 +93,7 @@ backend/
 │       ├── order_service.py
 │       ├── bulk_order_service.py
 │       ├── approval_service.py
+│       ├── org_code_service.py    # Org code generation, validation, registration
 │       ├── analytics_service.py
 │       ├── email_service.py       # SES integration
 │       ├── invoice_service.py     # Stripe invoice lifecycle
@@ -103,6 +107,7 @@ backend/
 │   ├── test_products.py
 │   ├── test_orders.py
 │   ├── test_invoices.py
+│   ├── test_self_registration.py  # Org code registration, rate limiting, isolation
 │   ├── test_isolation.py          # Cross-tenant and cross-sub-brand access tests
 │   └── factories/                 # Test data factories
 │       ├── company_factory.py
@@ -170,6 +175,14 @@ async def get_tenant_context(
 
     return context
 ```
+
+### Unauthenticated Endpoint Exceptions
+Two endpoints do NOT use `get_tenant_context` because they receive requests without JWTs:
+1. **`POST /api/v1/webhooks/stripe`** — Stripe webhook. Secured by signature verification.
+2. **`POST /api/v1/auth/register`** — Self-registration via org code. Secured by org code
+   validation + rate limiting (5 attempts per IP per 15 minutes via Redis). Resolves
+   `company_id` and `sub_brand_id` (default sub-brand) from the validated org code.
+   See ADR-007 for full details.
 
 ### TenantContext Model
 ```python
