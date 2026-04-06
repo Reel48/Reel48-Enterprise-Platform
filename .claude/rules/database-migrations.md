@@ -120,6 +120,19 @@ The `org_codes` table stores company-level registration codes. It has `company_i
   tenant context (unauthenticated). This lookup uses a direct `WHERE code = :code` query
   and does not go through the RLS-scoped session.
 
+### `invites` Table (CompanyBase — company_id only)
+# --- ADDED 2026-04-06 during pre-production harness review ---
+# Reason: invites uses CompanyBase (company_id only) with an explicit target_sub_brand_id FK.
+# Impact: Claude Code applies company-only isolation, not the standard two-policy pattern.
+
+The `invites` table has `company_id` but **no `sub_brand_id`** column. The sub-brand the
+invitee will join is stored as `target_sub_brand_id` (an explicit FK, not the standard
+TenantBase `sub_brand_id`). RLS handling:
+- **Company isolation policy: YES** — admins should only see invites for their own company.
+- **Sub-brand scoping policy: NO** — there is no `sub_brand_id` column to scope on.
+  Sub-brand-level filtering (e.g., a `sub_brand_admin` seeing only their own brand's
+  invites) is handled in the application layer by filtering on `target_sub_brand_id`.
+
 ## Common Mistakes to Avoid
 - ❌ Creating a table without RLS policies
 - ❌ Using raw SQL DDL instead of Alembic operations

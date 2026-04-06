@@ -30,6 +30,36 @@
 
 ---
 
+## 2026-04-06 — Pre-Production Harness Review #3: Final Fixes Before Module 1
+
+**Type:** Pre-build review (final pre-production audit)
+**Author:** Claude Code
+**Findings:** 3 actionable issues fixed, 5 minor/deferred items noted
+
+### Changes Made
+
+1. **File changed:** `.claude/rules/database-migrations.md`
+   **Change:** Added `invites` table as a special case in the "Identity & Company-Level Tables" section
+   **Reason:** `invites` uses `CompanyBase` (no `sub_brand_id` column) but was not listed alongside `companies`, `sub_brands`, and `org_codes`. Without this, the standard two-policy RLS template would be applied, referencing a non-existent column.
+   **Impact:** Prevents migration failure from applying sub-brand scoping policy to `invites` table.
+
+2. **File changed:** `backend/CLAUDE.md`
+   **Change:** Added `org_codes` table schema to Module 1 Table Schemas section
+   **Reason:** `org_codes` is a Module 1 table but its schema was only in `prompts/self-registration.md`, not in the canonical schema section alongside `companies`, `sub_brands`, `users`, and `invites`.
+   **Impact:** All five Module 1 tables are now defined in one place for implementation consistency.
+
+3. **File changed:** `backend/CLAUDE.md`
+   **Change:** Added `UNIQUE` constraint and note to `users.email` column definition
+   **Reason:** Cognito enforces global email uniqueness per user pool, but the database schema didn't specify a matching constraint. Ambiguity could lead to a missing or incorrectly scoped constraint.
+   **Impact:** Database constraint matches Cognito behavior; prevents duplicate email entries.
+
+### Deferred Items (address during build)
+- Rate limit dependency should be first `Depends()` parameter (ordering note)
+- `.env.example` manifest to be created during Module 1 scaffolding
+- Frontend `api.delete<T>` return type cleanup during frontend implementation
+
+---
+
 ## 2026-04-06 — Pre-Build Harness Review #2: Inconsistency & Gap Fix (Pre-Module 1)
 
 **Type:** Pre-build review (comprehensive cross-file consistency audit)

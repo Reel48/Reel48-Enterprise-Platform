@@ -633,7 +633,7 @@ id                      UUID        PRIMARY KEY
 company_id              UUID        NOT NULL (FK → companies, indexed)
 sub_brand_id            UUID        NULL (FK → sub_brands, indexed)
 cognito_sub             VARCHAR(255) NOT NULL UNIQUE   -- Cognito user ID (maps to JWT "sub")
-email                   VARCHAR(255) NOT NULL
+email                   VARCHAR(255) NOT NULL UNIQUE   -- Globally unique (matches Cognito user pool constraint)
 full_name               VARCHAR(255) NOT NULL
 role                    VARCHAR(50)  NOT NULL           -- Duplicated from Cognito for local queries
 registration_method     VARCHAR(20)  NOT NULL DEFAULT 'invite'  -- 'invite' or 'self_registration'
@@ -666,6 +666,24 @@ updated_at              TIMESTAMP   NOT NULL
 RLS: Company isolation only (no `sub_brand_id` column — uses `target_sub_brand_id` FK instead).
 Note: Uses `CompanyBase`, not `TenantBase`, because the FK to sub_brands is explicitly
 named `target_sub_brand_id` (the invite targets a sub-brand, but isn't "owned by" one).
+
+### `org_codes` Table (CompanyBase)
+# --- ADDED 2026-04-06 during pre-production harness review ---
+# Reason: org_codes schema was in self-registration.md but missing from canonical Module 1 section.
+# Impact: All Module 1 tables are defined in one place for implementation consistency.
+```
+id                      UUID        PRIMARY KEY
+company_id              UUID        NOT NULL (FK → companies, indexed)
+code                    VARCHAR(8)  NOT NULL UNIQUE   -- 8-char uppercase alphanumeric (30-char alphabet)
+is_active               BOOLEAN     NOT NULL DEFAULT true
+created_by              UUID        NOT NULL (FK → users)
+created_at              TIMESTAMP   NOT NULL
+updated_at              TIMESTAMP   NOT NULL
+```
+RLS: Company isolation only (no `sub_brand_id` — org codes are per-company).
+Only one active code per company at a time. Generating a new code deactivates the previous.
+Public lookup (unauthenticated `POST /api/v1/auth/register`) queries this table via direct
+`WHERE code = :code` outside the RLS-scoped session. See ADR-007.
 
 
 ## Error Handling
