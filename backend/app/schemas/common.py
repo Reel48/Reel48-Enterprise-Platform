@@ -21,7 +21,7 @@ class ApiResponse(BaseModel, Generic[T]):
     """Standard API response wrapper matching the format defined in root CLAUDE.md."""
 
     data: T
-    meta: dict = {}
+    meta: dict[str, int] = {}
     errors: list[ErrorDetail] = []
 
 

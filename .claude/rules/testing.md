@@ -139,15 +139,42 @@ token_use) — only the JWKS HTTP fetch is mocked.
 module-level JWKS cache. Otherwise the cache retains stale keys from a previous run.
 
 ### Isolation Test Pattern (Direct Session Variables)
-Isolation tests use `db_session` (non-superuser) and set session variables manually
-via `SET LOCAL`, then query to verify RLS filtering:
+
+# --- UPDATED 2026-04-07 after Module 1 Phase 4 ---
+# Reason: (1) SET LOCAL does not support bind parameters — must use f-strings.
+# (2) Cross-session RLS testing requires COMMITTED data, not just flushed.
+# Impact: Isolation tests use correct SQL syntax and commit/cleanup pattern.
+
+Isolation tests use a non-superuser session and set session variables manually
+via `SET LOCAL`, then query to verify RLS filtering. **Two critical rules:**
+
+1. **SET LOCAL requires f-strings** (not bind parameters — PostgreSQL limitation).
+2. **Data must be COMMITTED**, not just flushed. The RLS-enforced session is a
+   separate connection and cannot see uncommitted data from another transaction.
+   Each test must commit its seed data, then clean up in a `finally` block.
 
 ```python
 async def _set_tenant_context(session, company_id, sub_brand_id=""):
-    await session.execute(text("SET LOCAL app.current_company_id = :cid"), {"cid": str(company_id)})
-    await session.execute(text("SET LOCAL app.current_sub_brand_id = :sbid"), {"sbid": str(sub_brand_id)})
+    cid = company_id or ""
+    sbid = sub_brand_id or ""
+    await session.execute(text(f"SET LOCAL app.current_company_id = '{cid}'"))
+    await session.execute(text(f"SET LOCAL app.current_sub_brand_id = '{sbid}'"))
 
-# Seed data as superuser (admin_db_session), query as app role (db_session)
+# Pattern: seed as superuser (committed), query as app role (RLS enforced),
+# clean up in finally block
+async with admin_factory() as seed:
+    # ... create data ...
+    await seed.commit()  # MUST commit — separate session can't see flushed-only data
+try:
+    async with app_factory() as app_sess:
+        async with app_sess.begin():
+            await _set_tenant_context(app_sess, str(company_id), str(sub_brand_id))
+            rows = (await app_sess.execute(select(Model))).scalars().all()
+            # ... assertions ...
+finally:
+    async with admin_factory() as cleanup:
+        # ... delete test data in reverse FK order ...
+        await cleanup.commit()
 ```
 
 ### Adding New Tables to the Test Infrastructure

@@ -46,17 +46,9 @@ TEST_DATABASE_URL_APP = os.getenv(
     "postgresql+asyncpg://reel48_app:reel48_app@localhost:5432/reel48_test",
 )
 
-# Superuser engine (for migrations, role creation, seed data)
-test_engine_admin = create_async_engine(TEST_DATABASE_URL, echo=False)
-test_admin_session_factory = async_sessionmaker(
-    test_engine_admin, class_=AsyncSession, expire_on_commit=False
-)
-
-# App-role engine (for RLS-enforced queries)
-test_engine_app = create_async_engine(TEST_DATABASE_URL_APP, echo=False)
-test_app_session_factory = async_sessionmaker(
-    test_engine_app, class_=AsyncSession, expire_on_commit=False
-)
+# Engine and session factories are created lazily inside fixtures so they bind
+# to pytest-asyncio's event loop, avoiding "Future attached to a different loop"
+# errors that occur when engines are created at module import time.
 
 
 # ---------------------------------------------------------------------------
@@ -154,14 +146,22 @@ def create_test_token(
 # Database setup — Alembic migrations + reel48_app role
 # ---------------------------------------------------------------------------
 @pytest.fixture(scope="session")
-async def setup_database() -> AsyncGenerator[None, None]:
+async def setup_database() -> AsyncGenerator[dict, None]:
     """
-    Run Alembic migrations (creates tables + RLS policies) and set up
-    the non-superuser reel48_app role for RLS-enforced test sessions.
+    Run Alembic migrations (creates tables + RLS policies), set up the
+    non-superuser reel48_app role, and yield engine/session factories
+    created inside pytest-asyncio's event loop.
     """
+    # Clean up any leftover state from previous test runs (e.g., alembic_version
+    # table persisting after Base.metadata.drop_all in teardown).
+    cleanup_engine = create_async_engine(TEST_DATABASE_URL, echo=False)
+    async with cleanup_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+        await conn.execute(text("DROP TABLE IF EXISTS alembic_version"))
+    await cleanup_engine.dispose()
+
     # Run Alembic migrations via subprocess (avoids asyncio.run() conflict
     # with pytest-asyncio's event loop — env.py uses asyncio.run() internally).
-    # env.py reads DATABASE_URL from Settings, which reads from the environment.
     backend_dir = os.path.dirname(os.path.dirname(__file__))
     subprocess.run(
         ["alembic", "upgrade", "head"],
@@ -170,9 +170,14 @@ async def setup_database() -> AsyncGenerator[None, None]:
         env={**os.environ, "DATABASE_URL": TEST_DATABASE_URL},
     )
 
+    # Create engines inside the fixture so they bind to pytest-asyncio's event loop
+    engine_admin = create_async_engine(TEST_DATABASE_URL, echo=False)
+    engine_app = create_async_engine(TEST_DATABASE_URL_APP, echo=False)
+    admin_factory = async_sessionmaker(engine_admin, class_=AsyncSession, expire_on_commit=False)
+    app_factory = async_sessionmaker(engine_app, class_=AsyncSession, expire_on_commit=False)
+
     # Create the non-superuser role for RLS testing
-    async with test_engine_admin.begin() as conn:
-        # Create role if it doesn't exist
+    async with engine_admin.begin() as conn:
         result = await conn.execute(
             text("SELECT 1 FROM pg_roles WHERE rolname = 'reel48_app'")
         )
@@ -185,31 +190,37 @@ async def setup_database() -> AsyncGenerator[None, None]:
                 text(f"GRANT SELECT, INSERT, UPDATE, DELETE ON {table} TO reel48_app")  # noqa: S608
             )
 
-    yield
+    yield {
+        "engine_admin": engine_admin,
+        "engine_app": engine_app,
+        "admin_factory": admin_factory,
+        "app_factory": app_factory,
+    }
 
-    # Teardown: drop all tables
-    async with test_engine_admin.begin() as conn:
+    # Teardown: drop all tables including alembic_version
+    async with engine_admin.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
-    await test_engine_admin.dispose()
-    await test_engine_app.dispose()
+        await conn.execute(text("DROP TABLE IF EXISTS alembic_version"))
+    await engine_admin.dispose()
+    await engine_app.dispose()
 
 
 # ---------------------------------------------------------------------------
 # Database sessions
 # ---------------------------------------------------------------------------
 @pytest.fixture
-async def admin_db_session(setup_database: None) -> AsyncGenerator[AsyncSession, None]:
+async def admin_db_session(setup_database: dict) -> AsyncGenerator[AsyncSession, None]:
     """Superuser session for seeding data (bypasses RLS)."""
-    async with test_admin_session_factory() as session:
+    async with setup_database["admin_factory"]() as session:
         async with session.begin():
             yield session
             await session.rollback()
 
 
 @pytest.fixture
-async def db_session(setup_database: None) -> AsyncGenerator[AsyncSession, None]:
+async def db_session(setup_database: dict) -> AsyncGenerator[AsyncSession, None]:
     """Non-superuser session (RLS enforced). Use for verifying isolation."""
-    async with test_app_session_factory() as session:
+    async with setup_database["app_factory"]() as session:
         async with session.begin():
             yield session
             await session.rollback()
@@ -362,4 +373,98 @@ def company_b_employee_token(company_b) -> str:
     company, brand_b1 = company_b
     return create_test_token(
         company_id=str(company.id), sub_brand_id=str(brand_b1.id), role="employee"
+    )
+
+
+@pytest.fixture
+def company_a_brand_a2_admin_token(company_a) -> str:
+    """JWT for Company A, Brand A2 sub-brand admin."""
+    company, _a1, brand_a2 = company_a
+    return create_test_token(
+        company_id=str(company.id), sub_brand_id=str(brand_a2.id), role="sub_brand_admin"
+    )
+
+
+@pytest.fixture
+def company_b_corporate_admin_token(company_b) -> str:
+    """JWT for Company B's corporate admin (sub_brand_id=None)."""
+    company, _b1 = company_b
+    return create_test_token(company_id=str(company.id), role="corporate_admin")
+
+
+@pytest.fixture
+def company_a_brand_a1_manager_token(company_a) -> str:
+    """JWT for Company A, Brand A1 regional manager."""
+    company, brand_a1, _a2 = company_a
+    return create_test_token(
+        company_id=str(company.id), sub_brand_id=str(brand_a1.id), role="regional_manager"
+    )
+
+
+@pytest.fixture
+async def user_a1_admin(admin_db_session: AsyncSession, company_a):
+    """A sub_brand_admin user in Company A, Brand A1."""
+    company, brand_a1, _brand_a2 = company_a
+    user = User(
+        company_id=company.id,
+        sub_brand_id=brand_a1.id,
+        cognito_sub=str(uuid4()),
+        email=f"admin-a1-{uuid4().hex[:6]}@companya.com",
+        full_name="Admin A1",
+        role="sub_brand_admin",
+    )
+    admin_db_session.add(user)
+    await admin_db_session.flush()
+    return user
+
+
+@pytest.fixture
+async def user_a_corporate_admin(admin_db_session: AsyncSession, company_a):
+    """A corporate_admin user in Company A (sub_brand_id=None)."""
+    company, _a1, _a2 = company_a
+    user = User(
+        company_id=company.id,
+        sub_brand_id=None,
+        cognito_sub=str(uuid4()),
+        email=f"corp-admin-{uuid4().hex[:6]}@companya.com",
+        full_name="Corporate Admin A",
+        role="corporate_admin",
+    )
+    admin_db_session.add(user)
+    await admin_db_session.flush()
+    return user
+
+
+@pytest.fixture
+def user_a1_admin_token(user_a1_admin, company_a) -> str:
+    """JWT for the user_a1_admin fixture (cognito_sub matches the User record)."""
+    company, brand_a1, _a2 = company_a
+    return create_test_token(
+        user_id=user_a1_admin.cognito_sub,
+        company_id=str(company.id),
+        sub_brand_id=str(brand_a1.id),
+        role="sub_brand_admin",
+    )
+
+
+@pytest.fixture
+def user_a_corporate_admin_token(user_a_corporate_admin, company_a) -> str:
+    """JWT for the user_a_corporate_admin fixture (cognito_sub matches)."""
+    company, _a1, _a2 = company_a
+    return create_test_token(
+        user_id=user_a_corporate_admin.cognito_sub,
+        company_id=str(company.id),
+        role="corporate_admin",
+    )
+
+
+@pytest.fixture
+def user_a1_employee_token(user_a1_employee, company_a) -> str:
+    """JWT for the user_a1_employee fixture (cognito_sub matches the User record)."""
+    company, brand_a1, _a2 = company_a
+    return create_test_token(
+        user_id=user_a1_employee.cognito_sub,
+        company_id=str(company.id),
+        sub_brand_id=str(brand_a1.id),
+        role="employee",
     )

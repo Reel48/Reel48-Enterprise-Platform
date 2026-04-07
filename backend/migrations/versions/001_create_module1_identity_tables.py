@@ -213,7 +213,7 @@ def upgrade() -> None:
             )
     """)
     op.execute("""
-        CREATE POLICY users_sub_brand_scoping ON users
+        CREATE POLICY users_sub_brand_scoping ON users AS RESTRICTIVE
             USING (
                 current_setting('app.current_sub_brand_id', true) IS NULL
                 OR current_setting('app.current_sub_brand_id', true) = ''

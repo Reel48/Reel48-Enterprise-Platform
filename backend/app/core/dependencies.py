@@ -60,18 +60,18 @@ async def get_tenant_context(
     # SET LOCAL scopes values to the current transaction only, preventing leakage
     # across pooled connections. For reel48_admin: empty string triggers RLS bypass.
     # Parameterized queries for defense-in-depth (values come from validated JWTs).
+    # NOTE: SET LOCAL does not support bind parameters ($1) in PostgreSQL.
+    # Values are safe — company_id and sub_brand_id are parsed as UUID from validated JWTs.
     if context.is_reel48_admin:
         await db.execute(text("SET LOCAL app.current_company_id = ''"))
         await db.execute(text("SET LOCAL app.current_sub_brand_id = ''"))
     else:
         await db.execute(
-            text("SET LOCAL app.current_company_id = :cid"),
-            {"cid": str(context.company_id)},
+            text(f"SET LOCAL app.current_company_id = '{context.company_id}'")
         )
         if context.sub_brand_id:
             await db.execute(
-                text("SET LOCAL app.current_sub_brand_id = :sbid"),
-                {"sbid": str(context.sub_brand_id)},
+                text(f"SET LOCAL app.current_sub_brand_id = '{context.sub_brand_id}'")
             )
         else:
             # corporate_admin: no sub_brand_id → empty string (sees all sub-brands via RLS)
