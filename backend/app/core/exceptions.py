@@ -34,3 +34,12 @@ class ValidationError(AppException):
     def __init__(self, message: str, field: str | None = None):
         super().__init__(code="VALIDATION_ERROR", message=message, status_code=422)
         self.field = field
+
+
+class RateLimitError(AppException):
+    def __init__(self) -> None:
+        super().__init__(
+            code="RATE_LIMITED",
+            message="Too many attempts. Please try again later.",
+            status_code=429,
+        )

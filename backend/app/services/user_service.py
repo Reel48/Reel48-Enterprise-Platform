@@ -1,4 +1,8 @@
+from __future__ import annotations
+
+import secrets
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
@@ -9,13 +13,17 @@ from app.models.sub_brand import SubBrand
 from app.models.user import User
 from app.schemas.user import UserCreate, UserUpdate
 
+if TYPE_CHECKING:
+    from app.services.cognito_service import CognitoService
+
 VALID_ROLES = {"employee", "regional_manager", "sub_brand_admin", "corporate_admin"}
 ADMIN_ASSIGNABLE_ROLES = {"sub_brand_admin", "corporate_admin"}
 
 
 class UserService:
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, cognito_service: CognitoService | None = None):
         self.db = db
+        self.cognito_service = cognito_service
 
     async def list_users(
         self,
@@ -90,10 +98,23 @@ class UserService:
                 "sub_brand_id does not belong to this company", field="sub_brand_id"
             )
 
+        # Create Cognito user if service is available (Phase 5+)
+        if self.cognito_service is not None:
+            temp_password = secrets.token_urlsafe(16) + "A1!"
+            cognito_sub = await self.cognito_service.create_cognito_user(
+                email=data.email,
+                temporary_password=temp_password,
+                company_id=company_id,
+                sub_brand_id=data.sub_brand_id,
+                role=data.role,
+            )
+        else:
+            cognito_sub = str(uuid4())  # Placeholder for tests without Cognito mock
+
         user = User(
             company_id=company_id,
             sub_brand_id=data.sub_brand_id,
-            cognito_sub=str(uuid4()),  # Placeholder — Cognito integration is Phase 5
+            cognito_sub=cognito_sub,
             email=data.email,
             full_name=data.full_name,
             role=data.role,
@@ -152,3 +173,7 @@ class UserService:
         user = await self.get_user(user_id, company_id)
         user.deleted_at = datetime.now(UTC)  # type: ignore[assignment]
         await self.db.flush()
+
+        # Disable Cognito user if service is available
+        if self.cognito_service is not None:
+            await self.cognito_service.disable_cognito_user(user.cognito_sub)  # type: ignore[arg-type]

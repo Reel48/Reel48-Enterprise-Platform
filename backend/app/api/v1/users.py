@@ -8,6 +8,7 @@ from app.core.exceptions import ForbiddenError, NotFoundError
 from app.core.tenant import TenantContext
 from app.schemas.common import ApiListResponse, ApiResponse, PaginationMeta
 from app.schemas.user import UserCreate, UserResponse, UserUpdate
+from app.services.cognito_service import CognitoService, get_cognito_service
 from app.services.user_service import UserService
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -83,6 +84,7 @@ async def create_user(
     data: UserCreate,
     context: TenantContext = Depends(require_admin),
     db: AsyncSession = Depends(get_db_session),
+    cognito_service: CognitoService = Depends(get_cognito_service),
 ) -> ApiResponse[UserResponse]:
     if context.company_id is None:
         raise ForbiddenError("Use platform endpoints for cross-company user creation")
@@ -95,7 +97,7 @@ async def create_user(
     ):
         raise ForbiddenError("You can only create users in your own sub-brand")
 
-    service = UserService(db)
+    service = UserService(db, cognito_service)
     user = await service.create_user(context.company_id, data, context.role)
     return ApiResponse(data=UserResponse.model_validate(user))
 
@@ -138,8 +140,9 @@ async def delete_user(
     user_id: UUID,
     context: TenantContext = Depends(require_admin),
     db: AsyncSession = Depends(get_db_session),
+    cognito_service: CognitoService = Depends(get_cognito_service),
 ) -> None:
     if context.company_id is None:
         raise ForbiddenError("Use platform endpoints for cross-company user deletion")
-    service = UserService(db)
+    service = UserService(db, cognito_service)
     await service.soft_delete_user(user_id, context.company_id)

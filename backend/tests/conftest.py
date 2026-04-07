@@ -14,6 +14,7 @@ import os
 import subprocess
 import time
 from collections.abc import AsyncGenerator
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
@@ -26,11 +27,15 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.core.config import settings
 from app.core.dependencies import get_db_session
+from app.core.rate_limit import rate_limit_auth
 from app.main import app
 from app.models.base import Base
 from app.models.company import Company
+from app.models.invite import Invite
+from app.models.org_code import OrgCode
 from app.models.sub_brand import SubBrand
 from app.models.user import User
+from app.services.cognito_service import CognitoService, get_cognito_service
 
 # ---------------------------------------------------------------------------
 # Test database URLs
@@ -468,3 +473,109 @@ def user_a1_employee_token(user_a1_employee, company_a) -> str:
         sub_brand_id=str(brand_a1.id),
         role="employee",
     )
+
+
+# ---------------------------------------------------------------------------
+# Mock Cognito service
+# ---------------------------------------------------------------------------
+class MockCognitoService(CognitoService):
+    """Mock Cognito service that returns predictable values without hitting AWS."""
+
+    def __init__(self) -> None:
+        # Don't call super().__init__ — no real client needed
+        self.created_users: list[dict] = []
+        self.disabled_users: list[str] = []
+
+    async def create_cognito_user(
+        self, email, temporary_password, company_id, sub_brand_id, role
+    ) -> str:
+        cognito_sub = str(uuid4())
+        self.created_users.append({
+            "cognito_sub": cognito_sub,
+            "email": email,
+            "role": role,
+            "method": "admin_create",
+        })
+        return cognito_sub
+
+    async def create_cognito_user_with_password(
+        self, email, password, company_id, sub_brand_id, role
+    ) -> str:
+        cognito_sub = str(uuid4())
+        self.created_users.append({
+            "cognito_sub": cognito_sub,
+            "email": email,
+            "role": role,
+            "method": "with_password",
+        })
+        return cognito_sub
+
+    async def get_cognito_user(self, cognito_sub) -> dict | None:
+        return None
+
+    async def update_cognito_attributes(self, cognito_sub, attributes) -> None:
+        pass
+
+    async def disable_cognito_user(self, cognito_sub) -> None:
+        self.disabled_users.append(cognito_sub)
+
+
+@pytest.fixture(autouse=True)
+def mock_cognito() -> MockCognitoService:
+    """Auto-mock CognitoService for all tests. Override get_cognito_service."""
+    mock = MockCognitoService()
+    app.dependency_overrides[get_cognito_service] = lambda: mock
+    yield mock
+    app.dependency_overrides.pop(get_cognito_service, None)
+
+
+@pytest.fixture(autouse=True)
+def no_rate_limit():
+    """Disable rate limiting for all tests by default."""
+
+    async def _noop() -> None:
+        return None
+
+    app.dependency_overrides[rate_limit_auth] = _noop
+    yield
+    app.dependency_overrides.pop(rate_limit_auth, None)
+
+
+# ---------------------------------------------------------------------------
+# Registration fixtures
+# ---------------------------------------------------------------------------
+@pytest.fixture
+async def org_code_a(admin_db_session: AsyncSession, company_a, user_a_corporate_admin):
+    """An active org code for Company A."""
+    company, _a1, _a2 = company_a
+    code = OrgCode(
+        company_id=company.id,
+        code="TESTA001",
+        is_active=True,
+        created_by=user_a_corporate_admin.id,
+    )
+    admin_db_session.add(code)
+    await admin_db_session.flush()
+    return code
+
+
+@pytest.fixture
+async def invite_a1(admin_db_session: AsyncSession, company_a, user_a_corporate_admin):
+    """A valid (unconsumed, not expired) invite for Company A, Brand A1."""
+    import secrets
+    from datetime import timedelta
+
+    company, brand_a1, _a2 = company_a
+    now = datetime.now(UTC)
+    invite = Invite(
+        company_id=company.id,
+        target_sub_brand_id=brand_a1.id,
+        email="invited@companya.com",
+        role="employee",
+        token=secrets.token_hex(32),
+        expires_at=now + timedelta(hours=72),
+        created_by=user_a_corporate_admin.id,
+    )
+    admin_db_session.add(invite)
+    await admin_db_session.flush()
+    return invite
