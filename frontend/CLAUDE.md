@@ -96,7 +96,7 @@ export default nextConfig;
 # login states, token refresh failures, and broken protected routes.
 
 ### Setup
-Use **AWS Amplify** (`@aws-amplify/auth`) for Cognito integration. Configure in
+Use **AWS Amplify v6** for Cognito integration. Configure in
 `src/lib/auth/config.ts`:
 
 ```typescript
@@ -105,15 +105,40 @@ Use **AWS Amplify** (`@aws-amplify/auth`) for Cognito integration. Configure in
 // would require hunting down every reference.
 import { Amplify } from 'aws-amplify';
 
-Amplify.configure({
-  Auth: {
-    Cognito: {
-      userPoolId: process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID!,
-      userPoolClientId: process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID!,
-    }
-  }
-});
+export function configureAmplify() {
+  Amplify.configure({
+    Auth: {
+      Cognito: {
+        userPoolId: process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID || '',
+        userPoolClientId: process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID || '',
+      },
+    },
+  });
+}
 ```
+
+# --- UPDATED 2026-04-07 after Module 1 Phase 6 ---
+# Reason: Amplify v6 uses modular imports from 'aws-amplify/auth'. The config
+#   is wrapped in a function and called at module-level in providers.tsx (not
+#   inside a React component) to avoid re-running on every render.
+# Impact: Future sessions use the correct v6 API surface.
+
+### Amplify v6 Auth API Surface
+Auth operations use **modular imports** from `aws-amplify/auth`:
+```typescript
+import {
+  getCurrentUser,      // Throws if no session (v5 returned null)
+  fetchAuthSession,    // Returns { tokens?: { idToken?, accessToken? } }
+  signIn,              // signIn({ username: email, password })
+  signOut,             // signOut()
+} from 'aws-amplify/auth';
+```
+**Critical v6 differences from v5:**
+- `getCurrentUser()` **throws** when no user is signed in (wrap in try/catch)
+- `fetchAuthSession({ forceRefresh: true })` forces token refresh
+- Custom claims are on `idToken.payload` (use bracket notation: `payload['custom:company_id']`)
+- The Bearer token for API calls uses `idToken` (not `accessToken`) because the
+  backend validates custom claims from the ID token
 
 ### Extracting Tenant Context from Tokens
 The JWT token contains custom claims: `custom:company_id`, `custom:sub_brand_id`,
@@ -251,7 +276,8 @@ src/
   handlers internally, making them client components. The root layout that imports
   global SCSS does NOT need this (SCSS is processed at build time).
 - **One component per file.** The filename matches the component name (PascalCase).
-- **Functional components only.** No class components.
+- **Functional components only.** No class components (exception: `ErrorBoundary`
+  — React error boundaries require class components).
 - **Props type defined inline or as a named interface** above the component:
   ```typescript
   // WHY: Named interfaces make props self-documenting and reusable.
@@ -315,21 +341,37 @@ src/app/
 │   └── settings/page.tsx      # Account settings
 ├── (platform)/                # Reel48 admin routes (reel48_admin only)
 │   ├── layout.tsx             # Platform admin layout with reel48_admin guard
-│   ├── dashboard/page.tsx     # Platform overview (all companies, revenue)
-│   ├── companies/
-│   │   ├── page.tsx           # All client companies list
-│   │   └── [id]/page.tsx      # Company detail and management
-│   ├── catalogs/
-│   │   ├── page.tsx           # All catalogs across companies
-│   │   ├── new/page.tsx       # Create catalog for a client company
-│   │   └── [id]/
-│   │       ├── page.tsx       # Catalog detail (products, pricing, approval)
-│   │       └── approve/page.tsx  # Review and approve catalog
-│   └── invoices/
-│       ├── page.tsx           # All invoices across companies
-│       ├── new/page.tsx       # Create invoice for a client company
-│       └── [id]/page.tsx      # Invoice detail and management
+│   └── platform/              # IMPORTANT: route segment needed to avoid collision
+│       │                      # with (authenticated)/dashboard. URL = /platform/...
+│       ├── dashboard/page.tsx # Platform overview (all companies, revenue)
+│       ├── companies/
+│       │   ├── page.tsx       # All client companies list
+│       │   └── [id]/page.tsx  # Company detail and management
+│       ├── catalogs/
+│       │   ├── page.tsx       # All catalogs across companies
+│       │   ├── new/page.tsx   # Create catalog for a client company
+│       │   └── [id]/
+│       │       ├── page.tsx   # Catalog detail (products, pricing, approval)
+│       │       └── approve/page.tsx  # Review and approve catalog
+│       └── invoices/
+│           ├── page.tsx       # All invoices across companies
+│           ├── new/page.tsx   # Create invoice for a client company
+│           └── [id]/page.tsx  # Invoice detail and management
 ```
+
+### Route Group Collision Rule
+
+# --- ADDED 2026-04-07 after Module 1 Phase 6 ---
+# Reason: `(authenticated)/dashboard/page.tsx` and `(platform)/dashboard/page.tsx`
+#   both resolved to `/dashboard`, causing a Next.js build error. Route groups strip
+#   their parenthesized name from the URL, so pages at the same relative path collide.
+# Impact: Platform routes use a `platform/` segment in the filesystem path.
+
+Next.js route groups (parenthesized directory names) do NOT affect the URL. This means
+two route groups with pages at the same relative path will collide at build time. For
+example, `(authenticated)/dashboard/page.tsx` and `(platform)/dashboard/page.tsx` both
+resolve to `/dashboard`. To avoid this, the `(platform)` group nests all pages under
+a `platform/` directory, producing URLs like `/platform/dashboard`, `/platform/companies`.
 
 
 ## State Management
@@ -619,6 +661,63 @@ const server = setupServer(
     });
   })
 );
+```
+
+### Test Infrastructure Patterns
+
+# --- ADDED 2026-04-07 after Module 1 Phase 6 ---
+# Reason: Phase 6 established the test setup patterns. Without documenting these,
+#   future sessions would have to reverse-engineer vitest.config.ts and setup.ts.
+# Impact: Future modules follow the established test infrastructure correctly.
+
+**Vitest config** (`vitest.config.ts`): Uses `jsdom` environment, `@vitejs/plugin-react`,
+path alias `@/` → `./src/`, `globals: true` (implicit `describe`/`it`/`expect`), and
+setup file at `./src/__tests__/setup.ts`.
+
+**Test setup** (`src/__tests__/setup.ts`): Imports `@testing-library/jest-dom/vitest`
+for DOM matchers and polyfills `window.matchMedia` (required by Carbon's `useMatchMedia`
+hook — jsdom does not implement it).
+
+```typescript
+// Required polyfill for Carbon components that use useMatchMedia
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: (query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  }),
+});
+```
+
+**Mocking Amplify auth:** Mock `aws-amplify/auth` at the module level with `vi.mock()`.
+Use forwarding functions so mock behavior can be changed per-test:
+```typescript
+const mockGetCurrentUser = vi.fn();
+const mockFetchAuthSession = vi.fn();
+const mockSignIn = vi.fn();
+const mockSignOut = vi.fn();
+
+vi.mock('aws-amplify/auth', () => ({
+  getCurrentUser: (...args: unknown[]) => mockGetCurrentUser(...args),
+  fetchAuthSession: (...args: unknown[]) => mockFetchAuthSession(...args),
+  signIn: (...args: unknown[]) => mockSignIn(...args),
+  signOut: (...args: unknown[]) => mockSignOut(...args),
+}));
+```
+
+**Mocking Next.js navigation:** Mock `next/navigation` at the module level:
+```typescript
+const mockReplace = vi.fn();
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ replace: mockReplace, push: vi.fn() }),
+  usePathname: () => '/dashboard',
+}));
 ```
 
 

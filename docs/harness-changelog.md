@@ -30,6 +30,65 @@
 
 ---
 
+## 2026-04-07 — Module 1 Phase 6: Frontend Application Shell
+
+**Type:** End-of-session self-audit
+**Author:** Claude Code
+**Session scope:** Phase 6 — Next.js 14 project setup, Amplify v6 auth integration, Carbon layout (Header + Sidebar + MainLayout), login page, API client with snake/camel transform, and 26 frontend tests. 35 new files created.
+
+### Self-Audit Findings
+
+1. **New patterns introduced? YES**
+   - **`window.matchMedia` polyfill for jsdom:** Carbon's `useMatchMedia` hook calls `window.matchMedia()` which doesn't exist in jsdom. All test suites using Carbon layout components (SideNav, Header) will fail without this polyfill in the test setup file.
+   - **Amplify v6 modular imports:** `getCurrentUser()` throws when no session (v5 returned null). Custom claims accessed via bracket notation: `payload['custom:company_id']`.
+   - **Carbon `CarbonIconType`:** When a component prop accepts a Carbon icon, use `CarbonIconType` from `@carbon/icons-react/lib/CarbonIcon` — not `React.ComponentType<{ size?: number }>` (TS error due to `size` accepting `string | number`).
+   - **Carbon `<Header>` does not accept `style` prop:** Use Tailwind `className` instead.
+   - **`QueryClient` via `useState`:** Must be created inside `useState(() => new QueryClient(...))` in providers to avoid re-creation on re-render.
+   - **Action:** Added all patterns to `frontend/CLAUDE.md` (Amplify v6 API, test infrastructure, route collision rule) and `.claude/rules/carbon-design-system.md` (icon typing, Header style prop).
+
+2. **Existing pattern violated? YES — route group collision**
+   - The harness routing structure showed `(authenticated)/dashboard/page.tsx` and `(platform)/dashboard/page.tsx` as sibling pages. Next.js route groups strip parenthesized names from URLs, so both resolved to `/dashboard` and caused a build error.
+   - **Fix:** Platform pages nested under `(platform)/platform/` directory, producing `/platform/dashboard`, `/platform/companies`, etc.
+   - **Action:** Updated routing structure in `frontend/CLAUDE.md` with the correct layout and added "Route Group Collision Rule" section.
+
+3. **Existing pattern violated? YES — Error boundary exception**
+   - The harness said "functional components only" but React error boundaries require class components.
+   - **Action:** Updated `frontend/CLAUDE.md` component conventions to note the ErrorBoundary exception.
+
+4. **New decision made? NO** — All tech choices followed existing harness guidance.
+
+5. **Missing guidance discovered? YES**
+   - No documentation of Vitest config patterns (jsdom env, path alias, globals, setup file).
+   - No documentation of how to mock Amplify auth and Next.js navigation in tests.
+   - No mention that `window.matchMedia` needs polyfilling for Carbon in jsdom.
+   - No mention of route group URL collision behavior.
+   - **Action:** Added "Test Infrastructure Patterns" section to `frontend/CLAUDE.md` covering vitest config, matchMedia polyfill, Amplify mock pattern, and Next.js navigation mock pattern. Added "Route Group Collision Rule" section.
+
+6. **Prompt template needed? NO** — Frontend scaffolding is a one-time setup.
+
+### Files Updated
+- **`frontend/CLAUDE.md`** — Updated Amplify config to v6 function pattern; added Amplify v6 Auth API Surface section; added Test Infrastructure Patterns section (matchMedia polyfill, Amplify mock, Next.js navigation mock); updated routing structure for platform group collision fix; added Route Group Collision Rule; updated component conventions for ErrorBoundary class component exception
+- **`.claude/rules/carbon-design-system.md`** — Added Carbon Icon Typing section (`CarbonIconType`); added Carbon Header `style` Prop section; added 2 new entries to Common Mistakes to Avoid
+
+### Harness Health Metrics (Phase 6)
+| Metric | Value | Notes |
+|--------|-------|-------|
+| Patterns violated | 2 | Route group collision, Error boundary class component |
+| Harness gaps found | 4 | Vitest setup, matchMedia polyfill, Amplify v6 mocks, route collisions |
+| Rules added | 4 sections | Test Infrastructure, Route Group Collision, Icon Typing, Header Style |
+| Rules updated | 3 sections | Amplify config, Routing Structure, Component Conventions |
+| First-attempt accuracy | High | 26/26 tests pass after 2 targeted fixes (matchMedia polyfill, mock override for null values) |
+
+### What Phase 7 Needs
+Phase 7 (Registration pages) will need:
+- `/register` page with two-step org code flow (validate → form expand)
+- `/invite/[token]` page for invite-based registration
+- Integration with `POST /api/v1/auth/validate-org-code` and `POST /api/v1/auth/register`
+- Carbon `Dropdown` for sub-brand selection
+- Error handling matching the generic-error pattern (no enumeration)
+
+---
+
 ## 2026-04-07 — Module 1 Phase 4: CRUD Endpoints, Schemas & Services
 
 **Type:** End-of-session self-audit

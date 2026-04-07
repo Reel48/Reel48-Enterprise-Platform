@@ -320,6 +320,34 @@ Carbon v11 uses the `cds--` class prefix (e.g., `cds--btn`, `cds--g10`).
 The older `bx--` prefix was Carbon v10. Do not reference `bx--` classes in
 custom styles or selectors.
 
+## Carbon Icon Typing
+
+# --- ADDED 2026-04-07 after Module 1 Phase 6 ---
+# Reason: Using `React.ComponentType<{ size?: number }>` for icon props causes TS
+#   errors because Carbon icons accept `size` as `string | number`. The correct type
+#   is `CarbonIconType` from the icons package.
+# Impact: Icon-accepting component props compile without workarounds.
+
+When a component prop accepts a Carbon icon, use the `CarbonIconType` type:
+```typescript
+import type { CarbonIconType } from '@carbon/icons-react/lib/CarbonIcon';
+
+interface NavItem {
+  label: string;
+  icon: CarbonIconType;
+}
+```
+
+## Carbon Header `style` Prop
+
+# --- ADDED 2026-04-07 after Module 1 Phase 6 ---
+# Reason: Carbon's `<Header>` component does not accept a `style` prop (TypeScript
+#   error). Use `className` with Tailwind utilities instead.
+# Impact: Prevents TS errors when customizing the header background.
+
+The Carbon `<Header>` component does **not** accept a `style` prop. To set the
+brand background color, use a Tailwind class: `className="bg-charcoal-900"`.
+
 ## Common Mistakes to Avoid
 - ❌ Creating `Button.tsx`, `Input.tsx`, `Modal.tsx`, `DataTable.tsx` wrappers in `src/components/ui/`
 - ❌ Using `cva` or `clsx` for component variants (use Carbon props: `kind`, `size`, `type`)
@@ -333,3 +361,5 @@ custom styles or selectors.
 - ❌ Using `dark:` Tailwind variants (dark mode is out of scope for initial launch)
 - ❌ Using Tailwind grid for page-level column layout (use Carbon `<Grid>` + `<Column>`)
 - ❌ Using `node-sass` instead of `sass` (Dart Sass required for `@use` module syntax)
+- ❌ Using `style` prop on Carbon `<Header>` (not supported — use `className`)
+- ❌ Using `React.ComponentType<{ size?: number }>` for icon props (use `CarbonIconType`)
