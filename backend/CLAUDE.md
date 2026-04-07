@@ -27,6 +27,28 @@
 - **pytest** for testing
 
 
+## Local Development Setup
+
+# --- ADDED 2026-04-07 after Phase 1 scaffolding ---
+# Reason: No guidance existed for build backend, venv management, or first-run setup.
+# Impact: Future sessions can activate the venv and run the app without guessing.
+
+### Build Backend & Virtual Environment
+- **Build backend:** Hatchling (`[build-system] requires = ["hatchling"]` in `pyproject.toml`)
+- **Package config:** `[tool.hatch.build.targets.wheel] packages = ["app"]` — required because
+  the package directory is named `app/`, not `reel48_backend/`
+- **Virtual environment:** `backend/.venv/` — created with `python3.11 -m venv .venv`
+- **Install:** `cd backend && source .venv/bin/activate && pip install -e ".[dev]"`
+- **Run:** `uvicorn app.main:app --reload`
+- **Environment variables:** Copy `.env.example` to `.env` and fill in values
+
+### structlog Configuration
+structlog is configured in `app/main.py` at module level. In DEBUG mode it uses
+`ConsoleRenderer` (human-readable); in production it uses `JSONRenderer`. The
+`merge_contextvars` processor is included so that tenant context can be bound to
+log entries via `structlog.contextvars.bind_contextvars()` in the auth middleware.
+
+
 ## Project Structure
 
 # --- WHY THIS SECTION EXISTS ---

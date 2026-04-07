@@ -30,6 +30,71 @@
 
 ---
 
+## 2026-04-07 — Module 1 Phase 1: Backend Project Scaffolding
+
+**Type:** End-of-session self-audit
+**Author:** Claude Code
+**Session scope:** Phase 1 — Backend scaffolding (FastAPI app, config, base models, Alembic, test skeleton)
+
+### Self-Audit Findings
+
+1. **New pattern introduced? YES**
+   - Build backend: Hatchling with `packages = ["app"]` (required because the package
+     dir is `app/`, not `reel48_backend/`)
+   - Virtual environment: `backend/.venv/` created with `python3.11 -m venv .venv`
+   - structlog configuration pattern: `ConsoleRenderer` in DEBUG, `JSONRenderer` in prod,
+     with `merge_contextvars` for tenant context binding
+   - **Action:** Added "Local Development Setup" section to `backend/CLAUDE.md`
+
+2. **Existing pattern violated? YES — fixed**
+   - The harness mandates `get_db_session` be imported from `app.core.dependencies`
+     (the single canonical source for session de-duplication). Phase 1 initially placed
+     it only in `app.core.database` without a re-export from `dependencies.py`.
+   - **Action:** Created `app/core/dependencies.py` that re-exports `get_db_session` from
+     `app.core.database`. Updated `tests/conftest.py` to import from the canonical path.
+     All future code must import from `app.core.dependencies`, never `app.core.database`.
+
+3. **New decision made? YES — minor**
+   - Chose Hatchling as build backend (lightweight, Pydantic-friendly). Not significant
+     enough for a standalone ADR — documented in `backend/CLAUDE.md` setup section.
+
+4. **Missing guidance discovered? YES**
+   - No guidance on Python virtual environment management or build backend
+   - No `.env.example` template for backend environment variables
+   - No structlog configuration pattern documented
+   - **Action:** Added all three to `backend/CLAUDE.md`. Created `backend/.env.example`.
+
+5. **Prompt template needed? NO**
+   - Phase 1 scaffolding is a one-time task, not a recurring pattern.
+
+### Files Updated
+- **File:** `backend/CLAUDE.md`
+  - **Change:** Added "Local Development Setup" section covering build backend (Hatchling),
+    venv location, install command, run command, env var setup, and structlog config pattern.
+  - **Reason:** No harness guidance existed for how to set up or run the backend locally.
+  - **Impact:** Future sessions can activate the environment without guessing.
+
+### Files Created
+- **File:** `backend/.env.example`
+  - **Change:** Template listing all required environment variables with placeholder values.
+  - **Reason:** Settings loaded from env vars but no reference existed for which vars to set.
+  - **Impact:** New developers (and new Claude Code sessions) can set up the backend quickly.
+
+- **File:** `backend/app/core/dependencies.py`
+  - **Change:** Created as the canonical re-export point for `get_db_session`.
+  - **Reason:** Harness session-sharing rule requires single import path for de-duplication.
+  - **Impact:** Prevents silent RLS bypass from importing `get_db_session` from the wrong path.
+
+### Harness Health Metrics (Phase 1)
+| Metric | Value | Notes |
+|--------|-------|-------|
+| Patterns violated | 1 | `get_db_session` import path — caught and fixed during audit |
+| Harness gaps found | 3 | Build backend, .env template, structlog config |
+| Rules added | 1 section | "Local Development Setup" in backend/CLAUDE.md |
+| First-attempt accuracy | High | All patterns from harness followed correctly otherwise |
+
+---
+
 ## 2026-04-06 — Pre-Production Harness Review #3: Final Fixes Before Module 1
 
 **Type:** Pre-build review (final pre-production audit)
