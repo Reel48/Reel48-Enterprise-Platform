@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class ValidateOrgCodeRequest(BaseModel):
@@ -28,12 +28,22 @@ class SelfRegisterRequest(BaseModel):
     full_name: str
     password: str
 
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        return v.strip().lower()
+
 
 class InviteRegisterRequest(BaseModel):
     token: str
     email: str
     full_name: str
     password: str
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        return v.strip().lower()
 
 
 class RegisterResponse(BaseModel):

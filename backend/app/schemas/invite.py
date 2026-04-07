@@ -9,6 +9,11 @@ class InviteCreate(BaseModel):
     target_sub_brand_id: UUID
     role: str = "employee"
 
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        return v.strip().lower()
+
 
 class InviteResponse(BaseModel):
     """Full invite details including unmasked token. Used on POST create."""

@@ -178,7 +178,7 @@ class RegistrationService:
                 status_code=400,
             )
 
-        # 2. Verify email matches (case-insensitive)
+        # 2. Verify email matches (case-insensitive for safety with legacy data)
         if invite.email.lower() != email.lower():
             raise AppException(
                 code="REGISTRATION_FAILED",
