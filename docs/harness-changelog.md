@@ -641,3 +641,34 @@ would have caused incorrect or inconsistent code generation.
 ### Deferred Items
 - Full Tailwind-to-Carbon token mapping in `tailwind.config.ts` — deferred to Module 1 scaffolding when exact brand colors are known
 - `prompts/frontend-scaffold.md` template — deferred to just before Module 1 begins
+
+---
+
+## 2026-04-07 — Supporting Document Sync (Post-Carbon Integration)
+
+### Summary
+Verified all supporting documents in the harness against the current state after
+IBM Carbon design system integration. Found and fixed outdated references in the
+companion guide and harness-review prompt template.
+
+### Files Changed
+
+- **File:** `Reel48+ Harness Companion Guide.docx`
+  - **Change:** Updated version v2.4 → v2.5. Added ADR-008 (IBM Carbon) to Section 4.1 ADR Inventory table, Section 7.2 Supporting Files table, and Section 8 Complete File Inventory. Added `carbon-design-system.md` to Section 3.2 Rule File Inventory and Section 8. Updated frontend/CLAUDE.md description (Section 2.2) to mention Carbon. Updated ADR count (Seven → Eight), file count (27 → 30), ADR range (001-007 → 001-008). Updated Section 3.2 note about new rule files.
+  - **Reason:** Companion guide was last updated at v2.4 (self-registration). Carbon additions from ADR-008 and the new rule file were not reflected.
+  - **Impact:** Companion guide now accurately describes the full harness including Carbon design system coverage.
+
+- **File:** `prompts/harness-review.md`
+  - **Change:** Updated ADR range reference from "001-007" to "001-008" in the ADR Check step.
+  - **Reason:** ADR-008 was added but the review template still referenced the old range.
+  - **Impact:** Post-module harness reviews will now include ADR-008 in their currency check.
+
+### Documents Verified (No Changes Needed)
+- `backend/CLAUDE.md` — Current and consistent
+- `prompts/crud-endpoint.md` — Current and consistent
+- `prompts/new-table-migration.md` — Current and consistent
+- `prompts/react-component.md` — Already updated for Carbon in prior session
+- `prompts/self-registration.md` — Current and consistent
+- `prompts/test-suite.md` — Current and consistent
+- `docs/adr/001-008` — All ADRs current
+- All `.claude/rules/*.md` — All current
