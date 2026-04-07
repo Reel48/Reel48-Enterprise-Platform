@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class UserCreate(BaseModel):
@@ -9,6 +9,11 @@ class UserCreate(BaseModel):
     full_name: str
     role: str
     sub_brand_id: UUID
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        return v.strip().lower()
 
 
 class UserUpdate(BaseModel):

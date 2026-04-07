@@ -291,7 +291,10 @@ Amplify communicates directly with Cognito. The backend only validates JWTs — 
 never issues them.
 
 ### Unauthenticated Endpoint Exceptions
-Three endpoints do NOT use `get_tenant_context` because they receive requests without JWTs:
+# --- UPDATED 2026-04-07 after Module 1 Phase 5 ---
+# Reason: Added invite registration endpoint and generic error response pattern.
+# Impact: All unauthenticated endpoints are documented.
+Four endpoints do NOT use `get_tenant_context` because they receive requests without JWTs:
 1. **`POST /api/v1/webhooks/stripe`** — Stripe webhook. Secured by signature verification.
 2. **`POST /api/v1/auth/validate-org-code`** — Validates an org code and returns the
    company name + list of sub-brands. Rate-limited (5 attempts per IP per 15 minutes).
@@ -300,6 +303,15 @@ Three endpoints do NOT use `get_tenant_context` because they receive requests wi
    validated server-side to confirm it belongs to the org code's company.
    Rate-limited (shares the same 5 attempts/IP/15 min window as validate-org-code).
    See ADR-007 for full details.
+4. **`POST /api/v1/auth/register-from-invite`** — Invite-based registration. Validates
+   the invite token (not expired, not consumed, email match), creates the Cognito user,
+   and inserts the local User record. NOT rate-limited (token is single-use).
+
+**Generic error responses:** All auth endpoints return identical error messages regardless
+of the specific failure cause (invalid code vs inactive code vs duplicate email). This
+prevents enumeration attacks. Use `AppException(code="REGISTRATION_FAILED", message="Registration failed")`
+for all registration failures and `AppException(code="INVALID_REQUEST", message="Invalid registration code")`
+for all org code validation failures.
 
 ### TenantContext Model
 # --- UPDATED 2026-04-07 during Phase 3 implementation ---
@@ -482,6 +494,56 @@ company AND its default sub-brand in a single database transaction. This ensures
 ADR-003 guarantee that every company always has at least one sub-brand. The service
 either creates both records or neither (rollback on failure). Do NOT split this across
 two separate service calls or two separate transactions.
+
+
+### External Service Integration Pattern (Dependency Injection)
+
+# --- ADDED 2026-04-07 after Module 1 Phase 5 ---
+# Reason: CognitoService established a reusable pattern for wrapping external APIs
+# (boto3, Stripe, SES) as injectable FastAPI dependencies. Future services (Stripe,
+# SES, S3) should follow the same pattern.
+# Impact: Consistent external service integration across all modules.
+
+External AWS services (Cognito, Stripe, SES, S3) are wrapped in service classes and
+injected as FastAPI dependencies. This centralizes credential management and enables
+easy test mocking via `app.dependency_overrides`.
+
+```python
+# Pattern: Service class + FastAPI dependency factory
+
+class CognitoService:
+    def __init__(self, client: Any, user_pool_id: str) -> None:
+        self._client = client  # boto3 client (injected)
+        self._user_pool_id = user_pool_id
+
+    async def create_cognito_user(self, ...) -> str:
+        try:
+            response = self._client.admin_create_user(...)
+            return self._extract_sub(response)
+        except self._client.exceptions.UsernameExistsException:
+            raise ConflictError(...)  # Map AWS exceptions to AppExceptions
+
+def get_cognito_service() -> CognitoService:
+    """FastAPI dependency — creates boto3 client + returns service."""
+    import boto3  # type: ignore[import-untyped]
+    client = boto3.client("cognito-idp", region_name=settings.COGNITO_REGION)
+    return CognitoService(client, settings.COGNITO_USER_POOL_ID)
+
+# In routes: inject via Depends()
+@router.post("/")
+async def create_user(
+    cognito_service: CognitoService = Depends(get_cognito_service),
+): ...
+
+# In tests: override via dependency_overrides
+app.dependency_overrides[get_cognito_service] = lambda: mock_cognito_service
+```
+
+**Key rules:**
+- boto3 imports live ONLY in the dependency factory (lazy import), not at module top level
+- Map AWS SDK exceptions to `AppException` subclasses inside the service class
+- Services that need an external service accept it as an **optional constructor parameter**
+  for backward compatibility (e.g., `UserService(db, cognito_service=None)`)
 
 
 ## Pydantic Schema Conventions
@@ -837,58 +899,74 @@ async def app_exception_handler(request: Request, exc: AppException):
 ## Rate Limiting Pattern
 
 # --- ADDED 2026-04-06 during pre-build harness review ---
-# Reason: Both unauthenticated auth endpoints need rate limiting but no
-# implementation pattern was defined (middleware vs dependency, Redis keys, etc.).
-# Impact: Claude Code generates consistent rate limiting for all unauthenticated endpoints.
+# --- UPDATED 2026-04-07 after Module 1 Phase 5 ---
+# Reason: Actual implementation uses a dependency factory pattern with graceful
+# degradation and lazy Redis singleton, not a simple inline function.
+# Impact: Harness code example matches the real implementation.
 
-Rate limiting is implemented as a **FastAPI dependency** using Redis (ElastiCache).
+Rate limiting is implemented as a **FastAPI dependency factory** using Redis (ElastiCache).
 It is applied to unauthenticated endpoints that cannot rely on JWT-based identity.
 
 ```python
-from fastapi import Depends, HTTPException, Request
-import redis.asyncio as redis
+# app/core/rate_limit.py
+from app.core.exceptions import RateLimitError
 
-redis_client = redis.from_url(settings.REDIS_URL)
-
-async def check_rate_limit(
-    request: Request,
-    group: str = "auth",       # Shared window for related endpoints
+def check_rate_limit(
+    group: str = "auth",
     max_attempts: int = 5,
-    window_seconds: int = 900,  # 15 minutes
-):
+    window_seconds: int = 900,
+) -> Callable[..., Coroutine[Any, Any, None]]:
     """
-    Rate limit by client IP. Raises 429 when limit is exceeded.
-    Endpoints sharing the same `group` share the same counter.
+    Returns a FastAPI dependency that enforces rate limiting.
+    Graceful degradation: if Redis unavailable, request passes through.
     """
-    client_ip = request.client.host
-    key = f"rate_limit:{group}:{client_ip}"
+    async def _dependency(request: Request) -> None:
+        client = await _get_redis_client()
+        if client is None:
+            return  # Graceful degradation
 
-    current = await redis_client.incr(key)
-    if current == 1:
-        await redis_client.expire(key, window_seconds)
+        client_ip = request.client.host if request.client else "unknown"
+        key = f"rate_limit:{group}:{client_ip}"
 
-    if current > max_attempts:
-        raise HTTPException(
-            status_code=429,
-            detail={"data": None, "errors": [{"code": "RATE_LIMITED", "message": "Too many attempts. Please try again later."}]},
-        )
+        try:
+            current: int = await client.incr(key)
+            if current == 1:
+                await client.expire(key, window_seconds)
+            if current > max_attempts:
+                raise RateLimitError()
+        except RateLimitError:
+            raise
+        except Exception:
+            return  # Graceful degradation
+
+    return _dependency
+
+# Pre-configured dependency for auth endpoints (5 attempts per 15 minutes)
+rate_limit_auth = check_rate_limit(group="auth", max_attempts=5, window_seconds=900)
 
 # Usage in routes:
-@router.post("/api/v1/auth/validate-org-code")
+@router.post("/validate-org-code")
 async def validate_org_code(
     body: ValidateOrgCodeRequest,
-    _rate_limit: None = Depends(check_rate_limit),  # Shared "auth" group
+    _rate_limit: None = Depends(rate_limit_auth),  # Shared "auth" group
 ):
     ...
 ```
 
 **Key design decisions:**
+- **Factory pattern:** `check_rate_limit()` returns a dependency closure. Pre-configured
+  `rate_limit_auth` is shared across auth endpoints.
+- **Graceful degradation:** If Redis is unavailable, requests pass through. Registration
+  should not be blocked by infrastructure issues. Log warnings for debugging.
 - **Group-based:** `validate-org-code` and `register` share the same rate limit window
   (`group="auth"`) so an attacker can't use 5 attempts on validate then 5 more on register.
 - **IP-based:** Uses `request.client.host`. Behind a load balancer, configure
   `X-Forwarded-For` trust via FastAPI's `--proxy-headers` flag.
-- **Standard error format:** 429 responses use the same `{data, errors}` envelope.
+- **RateLimitError:** Uses the custom `RateLimitError(AppException)` (HTTP 429) to go
+  through the standard `app_exception_handler`, not a raw HTTPException.
 - **Redis key pattern:** `rate_limit:{group}:{ip}` with TTL = window duration.
+- **Lazy Redis singleton:** `_get_redis_client()` creates the Redis connection on first
+  use and caches it. Returns `None` if connection fails.
 
 
 ## Testing Patterns

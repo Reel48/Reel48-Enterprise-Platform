@@ -985,3 +985,68 @@ are centralized in `carbon-theme.scss` with CSS custom properties bridged into T
 - ✅ "Full Tailwind-to-Carbon token mapping in `tailwind.config.ts`" — now created with
   full mapping including accent palette
 - ✅ Color scheme / brand identity — fully defined
+
+---
+
+## 2026-04-07 — Module 1 Phase 5: Self-Registration, Invite Consumption & Cognito Integration
+
+### Session Summary
+Phase 5 completes Module 1 (Auth & Multi-Tenancy) by building the two employee
+onboarding flows (self-registration via org code, invite-based registration) and
+connecting them to AWS Cognito for real user provisioning.
+
+### New Files Created
+- `app/services/cognito_service.py` — CognitoService wrapping boto3 admin APIs
+- `app/core/rate_limit.py` — Redis-based rate limiting dependency
+- `app/schemas/auth.py` — Auth request/response schemas
+- `app/services/registration_service.py` — Registration business logic
+- `app/api/v1/auth.py` — Three unauthenticated auth endpoints
+- `tests/test_registration.py` — 23 tests across 6 test classes
+
+### Files Modified
+- `app/core/exceptions.py` — Added `RateLimitError`
+- `app/services/user_service.py` — Cognito integration (create + soft-delete)
+- `app/api/v1/users.py` — Inject `CognitoService` dependency
+- `app/api/v1/router.py` — Wire auth router
+- `tests/conftest.py` — Mock Cognito, no-op rate limit, org_code + invite fixtures
+
+### End-of-Session Self-Audit
+
+**1. New pattern introduced? YES**
+- **External Service Integration Pattern:** CognitoService established the pattern for
+  wrapping AWS services as injectable FastAPI dependencies with lazy boto3 imports and
+  `app.dependency_overrides` for test mocking. Documented in backend CLAUDE.md.
+- **Rate Limit Dependency Factory:** `check_rate_limit()` returns a dependency closure
+  with graceful degradation. Updated the harness code example to match implementation.
+
+**2. Existing pattern violated? YES (minor)**
+- The harness rate limiting example used a simple inline function; the actual
+  implementation used a factory pattern returning a closure. Updated backend CLAUDE.md
+  to match the real implementation.
+- The unauthenticated endpoints list had 3 entries; a 4th was added
+  (`POST /api/v1/auth/register-from-invite`). Updated backend CLAUDE.md.
+
+**3. New decision made? NO**
+- All architectural decisions were already documented in ADR-007 and the plan.
+  No new non-obvious choices were needed.
+
+**4. Missing guidance discovered? YES**
+- **Generic error responses:** No harness guidance on returning identical error
+  messages for security-sensitive endpoints (preventing enumeration). Added as a
+  note under "Unauthenticated Endpoint Exceptions" in backend CLAUDE.md.
+
+**5. Prompt template needed? NO**
+- The external service integration pattern is documented in CLAUDE.md. A dedicated
+  prompt template is not needed until a second service (Stripe/SES) is built.
+
+### Harness Files Updated
+- **`backend/CLAUDE.md`:**
+  - Updated "Rate Limiting Pattern" section with factory pattern + graceful degradation
+  - Updated "Unauthenticated Endpoint Exceptions" to include 4th endpoint + generic errors
+  - Added "External Service Integration Pattern" subsection under Service Layer Pattern
+- **`docs/harness-changelog.md`:** This entry
+
+### Test Results
+- 116 tests pass (93 existing + 23 new)
+- ruff: All checks passed
+- mypy: No issues found in 46 source files
