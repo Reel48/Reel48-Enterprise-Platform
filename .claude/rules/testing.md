@@ -94,9 +94,69 @@ Every test file that tests tenant-scoped data should use this setup:
   - ✅ `test_create_product_with_valid_data_returns_201`
   - ✅ `test_list_products_as_company_b_returns_empty`
   - ❌ `test_products` (too vague)
-- **Async tests:** Use `pytest-asyncio` with `@pytest.mark.asyncio`
+- **Async tests:** `asyncio_mode = "auto"` in `pyproject.toml` — no `@pytest.mark.asyncio`
+  decorator needed. Async test functions are detected automatically.
 - **Database:** Use a separate test database, roll back after each test
 - **Auth:** Use `create_test_token()` helper to generate JWTs for different roles
+
+## RLS Testing Infrastructure
+
+# --- ADDED 2026-04-07 after Module 1 Phase 3 ---
+# Reason: Phase 3 established the patterns for testing RLS enforcement, dual-session
+# database setup, and JWT authentication in tests. Without documenting these, future
+# sessions would have to reverse-engineer conftest.py.
+# Impact: Future modules follow the established test infrastructure patterns correctly.
+
+### Dual Database Sessions (Superuser vs App Role)
+PostgreSQL superusers bypass RLS even with `FORCE ROW LEVEL SECURITY`. The test suite
+uses **two separate session factories** to handle this:
+
+- **`admin_db_session`** — Connects as `postgres` (superuser). Bypasses RLS. Used for:
+  - Seeding test data (creating companies, users, sub-brands across tenants)
+  - The `client` fixture's `get_db_session` override (functional HTTP tests)
+- **`db_session`** — Connects as `reel48_app` (non-superuser). RLS enforced. Used for:
+  - Isolation tests that verify tenant boundaries via session variable + RLS policy
+
+The `setup_database` fixture creates the `reel48_app` role if it doesn't exist and
+grants `SELECT, INSERT, UPDATE, DELETE` on all module tables. When adding new tables
+in future modules, **update the grant list** in `setup_database`.
+
+### Alembic Migrations via Subprocess
+The `setup_database` fixture runs `subprocess.run(["alembic", "upgrade", "head"])` instead
+of the Alembic Python API. This is necessary because `env.py` calls `asyncio.run()` internally,
+which conflicts with pytest-asyncio's event loop. The `DATABASE_URL` environment variable is
+overridden to point to the test database.
+
+### JWT Test Infrastructure
+`create_test_token()` generates real RSA-signed JWTs using a test keypair generated at
+module load. A session-scoped autouse fixture (`_patch_jwks`) monkeypatches
+`app.core.security._fetch_jwks` to return a JWKS containing the test public key. The
+full `validate_cognito_token` pipeline runs (signature, expiry, audience, issuer,
+token_use) — only the JWKS HTTP fetch is mocked.
+
+**CRITICAL:** After patching `_fetch_jwks`, the fixture must also reset
+`security._jwks_keys = None` and `security._jwks_fetched_at = 0.0` to clear the
+module-level JWKS cache. Otherwise the cache retains stale keys from a previous run.
+
+### Isolation Test Pattern (Direct Session Variables)
+Isolation tests use `db_session` (non-superuser) and set session variables manually
+via `SET LOCAL`, then query to verify RLS filtering:
+
+```python
+async def _set_tenant_context(session, company_id, sub_brand_id=""):
+    await session.execute(text("SET LOCAL app.current_company_id = :cid"), {"cid": str(company_id)})
+    await session.execute(text("SET LOCAL app.current_sub_brand_id = :sbid"), {"sbid": str(sub_brand_id)})
+
+# Seed data as superuser (admin_db_session), query as app role (db_session)
+```
+
+### Adding New Tables to the Test Infrastructure
+When a new module adds tables:
+1. Add `GRANT SELECT, INSERT, UPDATE, DELETE ON {table} TO reel48_app` in
+   `setup_database`'s grant loop (update the table list in `conftest.py`)
+2. Create corresponding multi-tenant fixtures if needed (following the
+   `company_a` / `company_b` pattern)
+3. Write isolation tests using the `db_session` fixture (not `admin_db_session`)
 
 ## Frontend Test Conventions (Vitest + RTL)
 

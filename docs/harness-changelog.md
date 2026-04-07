@@ -30,6 +30,87 @@
 
 ---
 
+## 2026-04-07 — Module 1 Phase 3: Auth Middleware & Tenant Context
+
+**Type:** End-of-session self-audit
+**Author:** Claude Code
+**Session scope:** Phase 3 — JWT validation (`security.py`), TenantContext dataclass (`tenant.py`), `get_tenant_context` dependency with SET LOCAL session variables, TenantContextMiddleware, conftest.py rewrite with dual-session RLS testing, 28 tests (auth + isolation)
+
+### Self-Audit Findings
+
+1. **New pattern introduced? YES**
+   - `SET LOCAL` instead of `SET` for PostgreSQL session variables — scopes values to the
+     current transaction, preventing leakage across pooled connections.
+   - Dual-session test infrastructure: `admin_db_session` (superuser, bypasses RLS) and
+     `db_session` (non-superuser `reel48_app`, RLS enforced).
+   - Alembic migrations via subprocess in tests to avoid `asyncio.run()` conflict with
+     pytest-asyncio.
+   - JWKS monkeypatch pattern: patch `_fetch_jwks` + reset module-level cache.
+   - **Action:** Updated `backend/CLAUDE.md` (SET LOCAL, testing patterns); added RLS
+     testing infrastructure section to `.claude/rules/testing.md`.
+
+2. **Existing pattern violated? YES — improved**
+   - The harness (root CLAUDE.md and backend CLAUDE.md) showed plain `SET` for session
+     variables. Implementation used `SET LOCAL` which is safer with connection pooling.
+   - **Action:** Updated `backend/CLAUDE.md` JWT Validation Flow to use `SET LOCAL` and
+     added "SET LOCAL vs SET" explanation section.
+   - The harness showed `@pytest.mark.asyncio` decorator, but the project uses
+     `asyncio_mode = "auto"` (no decorator needed).
+   - **Action:** Updated `.claude/rules/testing.md` async test convention.
+
+3. **New decision made? YES**
+   - `SET LOCAL` over `SET` for session variables (safety improvement).
+   - Non-superuser test role (`reel48_app`) required because PostgreSQL superusers
+     bypass RLS even with `FORCE ROW LEVEL SECURITY`.
+   - Both are implementation details, not significant enough for standalone ADRs.
+
+4. **Missing guidance discovered? YES**
+   - No documentation of dual-session test infrastructure or JWKS monkeypatch pattern.
+   - No mention that `asyncio_mode = "auto"` eliminates the need for `@pytest.mark.asyncio`.
+   - **Action:** Added comprehensive RLS Testing Infrastructure section to
+     `.claude/rules/testing.md` covering dual sessions, Alembic subprocess, JWT test
+     infrastructure, isolation test pattern, and guidance for adding new tables.
+
+5. **Prompt template needed? NO**
+   - Auth middleware is a one-time foundation, not a recurring pattern.
+
+### Files Updated
+- **File:** `backend/CLAUDE.md`
+  - **Change:** Updated TenantContext to `UUID | None` syntax; updated JWT Validation Flow
+    to use `SET LOCAL`; added "SET LOCAL vs SET" section; replaced placeholder test fixture
+    docs with actual Phase 3 infrastructure (Alembic subprocess, dual sessions, JWKS
+    monkeypatch, fixture signatures, client fixture explanation)
+  - **Reason:** Phase 3 implemented the actual auth and test infrastructure — harness must
+    match reality
+  - **Impact:** Future sessions understand the complete test infrastructure without
+    reverse-engineering conftest.py
+
+- **File:** `.claude/rules/testing.md`
+  - **Change:** Fixed async test convention (`asyncio_mode = "auto"`, no decorator needed);
+    added "RLS Testing Infrastructure" section covering dual sessions, Alembic subprocess,
+    JWT test infrastructure, isolation test pattern, and new-table checklist
+  - **Reason:** Phase 3 established test patterns that all future modules depend on
+  - **Impact:** Future modules follow the established dual-session and JWKS patterns
+    correctly; know to update grant list when adding tables
+
+### Harness Health Metrics (Phase 3)
+| Metric | Value | Notes |
+|--------|-------|-------|
+| Patterns violated | 1 (improved) | `SET` → `SET LOCAL` — safer pattern adopted |
+| Harness gaps found | 2 | Dual-session testing, asyncio_mode convention — now documented |
+| Rules added | 1 section | "RLS Testing Infrastructure" in testing.md |
+| Rules updated | 3 sections | TenantContext, JWT Validation Flow, Testing Patterns in backend/CLAUDE.md |
+| First-attempt accuracy | High | Implementation matched plan; ruff/mypy issues were mechanical |
+
+### What Phase 4 Needs
+Phase 4 (CRUD endpoints for Module 1 entities) will need:
+- Route handlers using `get_tenant_context` for tenant-scoped endpoints
+- Service layer with defense-in-depth filtering alongside RLS
+- Pydantic request/response schemas following the standard response format
+- Functional + isolation + authorization tests per entity
+
+---
+
 ## 2026-04-07 — Module 1 Phase 2: SQLAlchemy Models + Alembic Migration with RLS
 
 **Type:** End-of-session self-audit

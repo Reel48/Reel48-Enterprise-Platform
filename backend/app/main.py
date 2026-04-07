@@ -7,6 +7,7 @@ from app.api.v1.router import v1_router
 from app.core.config import settings
 from app.core.exceptions import AppException
 from app.middleware.logging import RequestLoggingMiddleware
+from app.middleware.tenant import TenantContextMiddleware
 
 structlog.configure(
     processors=[
@@ -28,8 +29,10 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# --- Middleware (order matters — outermost first) ---
+# --- Middleware (last-added = outermost in Starlette) ---
+# Request flow: CORS → TenantContext(clear contextvars) → RequestLogging(timer) → route
 app.add_middleware(RequestLoggingMiddleware)
+app.add_middleware(TenantContextMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
