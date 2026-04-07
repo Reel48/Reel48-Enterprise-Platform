@@ -195,20 +195,40 @@ async def get_tenant_context(
     # CRITICAL: Set PostgreSQL session variables so RLS policies can reference them.
     # Without this, RLS policies have no way to know which tenant is making the request.
     # For reel48_admin: company_id is empty string, which triggers the RLS bypass.
-    # NOTE: Use parameterized queries (not f-strings) for defense-in-depth, even though
-    # these values come from validated JWTs.
+    # SET LOCAL scopes values to the current transaction only, preventing leakage
+    # across pooled connections. Use parameterized queries for defense-in-depth.
     if context.is_reel48_admin:
-        await db.execute(text("SET app.current_company_id = ''"))
-        await db.execute(text("SET app.current_sub_brand_id = ''"))
+        await db.execute(text("SET LOCAL app.current_company_id = ''"))
+        await db.execute(text("SET LOCAL app.current_sub_brand_id = ''"))
     else:
-        await db.execute(text("SET app.current_company_id = :cid"), {"cid": str(context.company_id)})
+        await db.execute(text("SET LOCAL app.current_company_id = :cid"), {"cid": str(context.company_id)})
         if context.sub_brand_id:
-            await db.execute(text("SET app.current_sub_brand_id = :sbid"), {"sbid": str(context.sub_brand_id)})
+            await db.execute(text("SET LOCAL app.current_sub_brand_id = :sbid"), {"sbid": str(context.sub_brand_id)})
         else:
-            await db.execute(text("SET app.current_sub_brand_id = ''"))
+            await db.execute(text("SET LOCAL app.current_sub_brand_id = ''"))
+
+    # Bind tenant info to structlog so every downstream log line includes it
+    structlog.contextvars.bind_contextvars(
+        user_id=context.user_id,
+        company_id=str(context.company_id) if context.company_id else None,
+        sub_brand_id=str(context.sub_brand_id) if context.sub_brand_id else None,
+        role=context.role,
+    )
 
     return context
 ```
+
+### SET LOCAL vs SET
+# --- ADDED 2026-04-07 during Phase 3 implementation ---
+# Reason: Connection pooling can leak SET variables between requests. SET LOCAL
+# is scoped to the transaction and avoids this risk entirely.
+# Impact: Prevents subtle tenant isolation leaks in production under load.
+
+The auth middleware uses `SET LOCAL` (not `SET`) for PostgreSQL session variables. `SET LOCAL`
+scopes the value to the current **transaction** only — when the transaction commits or rolls
+back, the value is discarded. Since `get_db_session()` wraps each request in a transaction,
+this ensures session variables never leak between requests on the same pooled connection.
+Plain `SET` persists for the connection's lifetime, which is dangerous with connection pooling.
 
 ### Login & Token Refresh
 # --- ADDED 2026-04-06 during pre-build harness review ---
@@ -232,20 +252,24 @@ Three endpoints do NOT use `get_tenant_context` because they receive requests wi
    See ADR-007 for full details.
 
 ### TenantContext Model
+# --- UPDATED 2026-04-07 during Phase 3 implementation ---
+# Reason: Original example used `Optional[UUID]` syntax; implementation uses modern
+# `UUID | None` union syntax (Python 3.10+). Updated to match actual code.
+# Impact: Harness examples match the codebase.
 ```python
-# WHY: A dataclass (or Pydantic model) rather than a dict ensures type safety.
+# WHY: A dataclass rather than a dict ensures type safety.
 # Every endpoint that uses TenantContext gets autocomplete and type checking,
 # preventing bugs like misspelling "company_id" as "companyId".
+# Lives in: app/core/tenant.py
 
 from dataclasses import dataclass
-from typing import Optional
 from uuid import UUID
 
 @dataclass
 class TenantContext:
     user_id: str
-    company_id: Optional[UUID]  # None for reel48_admin (cross-company access)
-    sub_brand_id: Optional[UUID]
+    company_id: UUID | None   # None for reel48_admin (cross-company access)
+    sub_brand_id: UUID | None  # None for corporate_admin & reel48_admin
     role: str  # One of: reel48_admin, corporate_admin, sub_brand_admin, regional_manager, employee
 
     @property
@@ -825,63 +849,63 @@ async def validate_org_code(
 # follow, including the critical cross-tenant access tests.
 
 ### Test Fixtures (in conftest.py)
+
+# --- UPDATED 2026-04-07 during Phase 3 implementation ---
+# Reason: Phase 3 implemented the actual conftest.py. Harness now documents the real
+# patterns including dual-session RLS testing, JWKS monkeypatch, and Alembic subprocess.
+# Impact: Future sessions understand the test infrastructure without reverse-engineering conftest.py.
+
+#### Database Setup: Alembic Migrations via Subprocess
+The `setup_database` fixture runs Alembic migrations against the test database. It uses
+`subprocess.run(["alembic", "upgrade", "head"])` instead of the Alembic Python API because
+`env.py` calls `asyncio.run()` internally, which conflicts with pytest-asyncio's event loop.
+The `DATABASE_URL` environment variable is overridden to point to the test database.
+
+#### Two Database Sessions: Superuser vs App Role
+PostgreSQL superusers bypass RLS even with `FORCE ROW LEVEL SECURITY`. Tests use two sessions:
+- **`admin_db_session`** — Connects as `postgres` (superuser). Used to seed test data that
+  bypasses RLS (e.g., creating companies, users across tenants). Also used by the `client`
+  fixture for functional HTTP tests where RLS interference is unwanted.
+- **`db_session`** — Connects as `reel48_app` (non-superuser). RLS is enforced. Used by
+  isolation tests to verify that session variables + RLS policies correctly filter data.
+
+The `setup_database` fixture creates the `reel48_app` role and grants it permissions on
+all Module 1 tables. The role connects via `TEST_DATABASE_URL_APP` env var (defaults to
+`postgresql+asyncpg://reel48_app:reel48_app@localhost:5432/reel48_test`).
+
+#### JWT Authentication: Real Tokens with Monkeypatched JWKS
+`create_test_token()` signs real JWTs with a test RSA private key (generated at module load).
+A session-scoped autouse fixture monkeypatches `app.core.security._fetch_jwks` to return a
+JWKS containing the test public key. The full `validate_cognito_token` path runs (signature,
+expiry, audience, issuer, token_use) — only the HTTP fetch is mocked.
+
+**CRITICAL:** The fixture must also reset `security._jwks_keys = None` and
+`security._jwks_fetched_at = 0.0` after patching, otherwise the cache retains stale keys.
+
+#### Multi-Tenant Fixtures
 ```python
-# WHY: These fixtures create a complete test environment with two companies,
-# each having two sub-brands, and users at each role level. This lets every
-# test verify both functionality AND isolation without redundant setup.
-
-import pytest
-from httpx import AsyncClient
-from app.main import app
+@pytest.fixture
+async def company_a(admin_db_session):
+    """Returns: (company, brand_a1, brand_a2)"""
 
 @pytest.fixture
-async def test_db():
-    """Create a fresh test database with RLS policies."""
-    # Set up test database, run migrations, yield, tear down
-    ...
+async def company_b(admin_db_session):
+    """Returns: (company, brand_b1)"""
 
-@pytest.fixture
-async def company_a(test_db):
-    """Company A with two sub-brands."""
-    company = await create_test_company(name="Company A")
-    brand_1 = await create_test_sub_brand(company_id=company.id, name="Brand A1")
-    brand_2 = await create_test_sub_brand(company_id=company.id, name="Brand A2")
-    return company, brand_1, brand_2
-
-@pytest.fixture
-async def company_b(test_db):
-    """Company B (separate tenant for isolation testing)."""
-    company = await create_test_company(name="Company B")
-    brand_1 = await create_test_sub_brand(company_id=company.id, name="Brand B1")
-    return company, brand_1
-
-@pytest.fixture
-async def corporate_admin_token(company_a):
-    """JWT token for Company A's corporate admin (sub_brand_id=None)."""
-    return create_test_token(
-        company_id=company_a[0].id,
-        sub_brand_id=None,
-        role="corporate_admin",
-    )
-
-@pytest.fixture
-async def reel48_admin_token():
-    """JWT token for a Reel48 platform admin (no company, no sub-brand)."""
-    return create_test_token(
-        company_id=None,
-        sub_brand_id=None,
-        role="reel48_admin",
-    )
-
-@pytest.fixture
-async def brand_admin_token(company_a):
-    """JWT token for Company A, Brand A1's admin."""
-    return create_test_token(
-        company_id=company_a[0].id,
-        sub_brand_id=company_a[1].id,
-        role="sub_brand_admin",
-    )
+# Token fixtures (real signed JWTs):
+def reel48_admin_token() -> str                     # No company, no sub-brand
+def company_a_corporate_admin_token(company_a) -> str  # Company A, no sub-brand
+def company_a_brand_a1_admin_token(company_a) -> str   # Company A, Brand A1
+def company_a_brand_a1_employee_token(company_a) -> str
+def company_a_brand_a2_employee_token(company_a) -> str
+def company_b_employee_token(company_b) -> str         # Company B, Brand B1
 ```
+
+#### Client Fixture
+The `client` fixture overrides `get_db_session` with `admin_db_session` (superuser), so
+route handlers can insert/query data without RLS interference. This is correct for
+**functional tests** (testing endpoint behavior). **Isolation tests** must use `db_session`
+directly (non-superuser, RLS enforced) and set session variables manually.
 
 ### Cross-Tenant Isolation Test Pattern
 ```python
