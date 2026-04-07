@@ -73,8 +73,11 @@ brands or subsidiaries.
 ### Frontend
 - **Framework:** Next.js 14+ (App Router)
 - **Language:** TypeScript (strict mode)
-- **Design System:** IBM Carbon (`@carbon/react`) — primary component library and design tokens
-- **Utility CSS:** Tailwind CSS — layout utilities and custom spacing alongside Carbon
+- **Design System:** IBM Carbon (`@carbon/react`) — primary component library and design tokens.
+  Brand color `#292c2f` (charcoal), teal interactive `#0a6b6b`, plus a 10-color accent palette.
+  All color definitions live in `frontend/src/styles/carbon-theme.scss` (single source of truth).
+- **Utility CSS:** Tailwind CSS — layout utilities and custom spacing alongside Carbon.
+  Color tokens in `frontend/tailwind.config.ts` reference CSS variables from the theme file.
 - **SCSS:** Sass (required for Carbon theme customization)
 - **Auth Integration:** AWS Amplify (Cognito client)
 - **Hosting:** Vercel

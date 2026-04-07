@@ -672,3 +672,74 @@ companion guide and harness-review prompt template.
 - `prompts/test-suite.md` — Current and consistent
 - `docs/adr/001-008` — All ADRs current
 - All `.claude/rules/*.md` — All current
+
+---
+
+## 2026-04-07 — Color Scheme Defined (Brand Identity Finalized)
+
+### Summary
+Defined the complete Reel48+ color system. Brand anchor is `#292c2f` (dark charcoal).
+Primary interactive is teal (`#0a6b6b`), replacing Carbon's default IBM blue. A 10-color
+fashion-inspired accent palette was created for charts, badges, and categories. All colors
+are centralized in `carbon-theme.scss` with CSS custom properties bridged into Tailwind.
+
+### Files Created
+- **File:** `frontend/src/styles/carbon-theme.scss`
+  - **Change:** Created as the single source of truth for all Reel48+ colors. Contains
+    Carbon v11 token overrides (brand charcoal, teal interactive, teal info) and `:root`
+    CSS custom properties for the accent palette (amethyst, azure, evergreen, garnet,
+    coral, oxblood, navy, rose, saffron, midnight-teal) plus charcoal/teal scales.
+  - **Impact:** Every future component session has definitive color values from day one.
+
+- **File:** `frontend/tailwind.config.ts`
+  - **Change:** Created with three color groups: Carbon token bridges (`var(--cds-...)`),
+    charcoal/teal scales (`var(--r48-...)`), and accent palette. Zero raw hex — all
+    values reference CSS custom properties from `carbon-theme.scss`.
+  - **Impact:** Tailwind utilities (`bg-accent-amethyst`, `text-charcoal-900`, etc.)
+    stay in sync with Carbon theme automatically.
+
+### Files Updated
+- **File:** `frontend/CLAUDE.md` (Theming section)
+  - **Change:** Replaced placeholder theme scaffold with finalized color values. Added
+    Brand Color System Overview table, Accent Palette table with Tailwind class names,
+    and Color Usage Patterns section (header/sidebar, buttons, badges, charts, tables).
+    Updated Tailwind-Carbon Token Alignment section to reference actual config.
+  - **Reason:** Placeholder values (`#0f62fe`, "replace with actual brand values") were
+    still present from pre-color-scheme era.
+  - **Impact:** Claude Code has complete color guidance in the frontend CLAUDE.md.
+
+- **File:** `.claude/rules/carbon-design-system.md` (Sass Module System section)
+  - **Change:** Replaced `#0f62fe` placeholder in SCSS example with actual Reel48+ values
+    (`#292c2f` brand, `#0a6b6b` teal interactive, `#0d8a8a` info). Added "Reel48+ Color
+    System Quick Reference" subsection with key hex values, CSS variable names, accent
+    palette list, and dark brand zone layout pattern.
+  - **Reason:** Rule file is the primary reference when building components — having color
+    values here prevents round-trips to the theme file.
+  - **Impact:** Component authors get correct colors on first attempt.
+
+- **File:** `prompts/react-component.md` (Styling section)
+  - **Change:** Expanded the theme tokens line into a full "Color System" subsection with
+    brand charcoal, primary interactive, status badge accent mappings, chart color order,
+    selected row color, and the no-arbitrary-hex rule.
+  - **Reason:** Template previously just said "reference brand colors from carbon-theme.scss"
+    with no specifics.
+  - **Impact:** Every component created from this template includes correct color usage.
+
+- **File:** `docs/adr/008-ibm-carbon-design-system.md`
+  - **Change:** Added "Addendum" section noting theming is finalized with specific values
+    and pointing to `carbon-theme.scss` as the source of truth.
+  - **Reason:** ADR discussed theming abstractly but didn't note when values were locked in.
+  - **Impact:** Future readers know the color scheme is defined, not pending.
+
+- **File:** `CLAUDE.md` (root — Technology Stack / Frontend section)
+  - **Change:** Added brand color reference and pointer to `carbon-theme.scss` in the
+    Design System line item.
+  - **Reason:** Root CLAUDE.md is read every session but had no mention of the brand color
+    or where to find the color definitions.
+  - **Impact:** Every session starts with awareness that the color system exists and where
+    to find it.
+
+### Previously Deferred Items Now Resolved
+- ✅ "Full Tailwind-to-Carbon token mapping in `tailwind.config.ts`" — now created with
+  full mapping including accent palette
+- ✅ Color scheme / brand identity — fully defined

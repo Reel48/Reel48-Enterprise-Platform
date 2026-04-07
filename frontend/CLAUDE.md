@@ -415,55 +415,80 @@ export const api = {
 
 ### Theming
 
-# --- UPDATED 2026-04-07 during Carbon harness gap review ---
-# Reason: Original references used Carbon v10 token names ($interactive-01, $ui-background).
-#   @carbon/react is v11. Added SCSS scaffold so Claude Code generates correct theme structure.
-# Impact: Prevents broken SCSS compilation and incorrect token overrides.
+# --- UPDATED 2026-04-07 — Color scheme finalized ---
+# Reason: Brand color (#292c2f) and full palette defined. Replaced placeholder
+#   token values with finalized Reel48+ colors. Teal interactive replaces IBM blue.
+# Impact: Claude Code generates all components with the correct brand colors from
+#   the first module forward. No placeholder values remain.
 
 - **Carbon version:** Reel48+ uses `@carbon/react` v1.x (**Carbon v11**). Use v11
   token names only. Do NOT use v10 token names like `$interactive-01` or `$ui-background`.
   See `.claude/rules/carbon-design-system.md` for the full v10 → v11 token mapping.
-- **Theme file:** `src/styles/carbon-theme.scss` — override Carbon's default
-  theme tokens (e.g., `$interactive`, `$background`, `$text-primary`, `$background-brand`)
-  with Reel48+ brand colors.
-- **Theme provider:** Wrap the app in Carbon's `<Theme theme="g10">` (or `"white"`,
-  `"g90"`, `"g100"` for different density). Set in the root layout.
-- **Dark mode:** Not in initial scope. Use `g10` (light gray) or `white` theme.
+- **Theme file:** `src/styles/carbon-theme.scss` — the **single source of truth** for
+  all Reel48+ colors. Contains Carbon token overrides AND CSS custom properties for
+  the accent palette. All color values originate here.
+- **Theme provider:** Use Carbon's `<Theme theme="g10">` for the content area. Wrap
+  the sidebar/header in `<Theme theme="g100">` for the dark brand zone.
+- **Dark mode:** Not in initial scope. The sidebar uses g100 for the dark brand
+  surface; the main content uses g10.
 
-**Theme SCSS scaffold** (`src/styles/carbon-theme.scss`):
-Carbon v11 uses the Dart Sass `@use` module system (NOT `@import`). Theme
-customization uses the `$fallback` and `$theme` parameters (NOT `map-merge`):
+#### Brand Color System Overview
+
+| Role | Color | Hex | Notes |
+|------|-------|-----|-------|
+| Brand anchor | Charcoal 900 | `#292c2f` | Header, sidebar, dark surfaces |
+| Primary interactive | Teal 700 | `#0a6b6b` | Buttons, links, focus (5.07:1 vs white) |
+| Interactive hover | Teal 600 | `#0d8a8a` | Hover state for interactive elements |
+| Interactive on dark | Teal 400 | `#3db8b8` | Active nav on charcoal (6.8:1 contrast) |
+| Info | Teal 600 | `#0d8a8a` | Info notifications (replaces Carbon default blue) |
+| Error | Red 60 | `#da1e28` | Carbon default |
+| Success | Green 60 | `#198038` | Carbon default |
+| Warning | Yellow 30 | `#f1c21b` | Carbon default |
+
+#### Accent Palette (Charts, Badges, Categories)
+Defined as CSS custom properties in `carbon-theme.scss` and bridged into Tailwind:
+
+| Tailwind Class | Name | Hex | Usage |
+|---------------|------|-----|-------|
+| `accent-amethyst` | Amethyst | `#6929c4` | Premium, featured |
+| `accent-azure` | Azure | `#1192e8` | Active status |
+| `accent-evergreen` | Evergreen | `#005d5d` | Approved variant |
+| `accent-garnet` | Garnet | `#9f1853` | Urgent, high-priority |
+| `accent-coral` | Coral | `#fa4d56` | Overdue |
+| `accent-oxblood` | Oxblood | `#570408` | Rejected, cancelled |
+| `accent-navy` | Navy | `#002d9c` | Processing |
+| `accent-rose` | Rose | `#ee538b` | Promotional, seasonal |
+| `accent-saffron` | Saffron | `#b28600` | Pending review |
+| `accent-midnight-teal` | Midnight Teal | `#022b30` | Deep brand accent |
+
+#### Theme SCSS Reference
+
+The theme file lives at `src/styles/carbon-theme.scss`. Key structure:
 
 ```scss
-// carbon-theme.scss — Reel48+ brand overrides
-//
-// This file customizes Carbon's default theme tokens for the Reel48+ brand.
 // IMPORTANT: @use ... with () must appear BEFORE @use '@carbon/react'.
-// Module ordering is critical — Sass modules can only be configured once.
-
 @use '@carbon/react/scss/themes';
 @use '@carbon/react/scss/theme' with (
   $fallback: themes.$g10,
   $theme: (
-    // Brand color overrides (replace with actual Reel48+ brand values)
-    interactive: #0f62fe,            // Primary interactive color (buttons, links)
-    background: #f4f4f4,             // Page background
-    text-primary: #161616,           // Primary text
-    text-secondary: #525252,         // Secondary text
-    // Add additional token overrides as brand identity is finalized
+    background-brand: #292c2f,    // Brand charcoal
+    background-inverse: #292c2f,
+    interactive: #0a6b6b,         // Teal primary
+    link-primary: #0a6b6b,
+    focus: #0a6b6b,
+    support-info: #0d8a8a,        // Brand-aligned teal
+    // ... full overrides in the actual file
   )
 );
 
-// Load Carbon component styles with granular imports for better tree-shaking.
-// Alternatively, use `@use '@carbon/react'` to load everything (larger bundle).
-@use '@carbon/react/scss/reset';
-@use '@carbon/react/scss/grid';
-@use '@carbon/react/scss/layer';
-// Add individual component styles as needed, e.g.:
-// @use '@carbon/react/scss/components/button';
-// @use '@carbon/react/scss/components/data-table';
-// Or load all at once:
 @use '@carbon/react';
+
+:root {
+  --r48-accent-amethyst: #6929c4;
+  --r48-charcoal-900: #292c2f;
+  --r48-teal-400: #3db8b8;
+  // ... full palette in the actual file
+}
 ```
 
 **Global stylesheet import order** (e.g., `src/app/globals.scss`):
@@ -481,6 +506,37 @@ customization uses the `$fallback` and `$theme` parameters (NOT `map-merge`):
 to merge theme overrides. Carbon v11's `@use ... with ($fallback, $theme)` pattern
 is the canonical approach. The `$fallback` sets the base theme; `$theme` contains
 only the tokens you want to override.
+
+#### Color Usage Patterns
+
+**Header & Sidebar** (wrapped in `<Theme theme="g100">`):
+- Background: `#292c2f` (Charcoal 900)
+- Active nav indicator: `#3db8b8` (Teal 400)
+- Hover state: `#353a3f` (Charcoal 800)
+- Dividers: `#4a5056` (Charcoal 700)
+- Text: `#ffffff` (white)
+
+**Buttons** (Carbon `<Button>` with theme-overridden interactive color):
+- Primary: teal `#0a6b6b` background, white text
+- Secondary: transparent with teal border/text
+- Danger: `#da1e28` (Carbon `kind="danger"`)
+- Ghost: transparent, teal text on hover
+
+**Status Badges** (Carbon `<Tag>` component):
+- Approved: green background tint + `#198038` text
+- Pending: saffron background tint + `#b28600` text
+- Urgent: garnet background tint + `#9f1853` text
+- Overdue: coral background tint + `#da1e28` text
+- Processing: azure background tint + `#1192e8` text
+- Draft: gray background + `#525252` text
+- Premium: amethyst background tint + `#6929c4` text
+
+**Data Tables**:
+- Selected row: `#e0f5f5` (Teal 50) — subtle brand-aligned highlight
+- Row hover: `#e8e8e8` (layer-hover-01)
+
+**Charts** (use accent palette in this order for max differentiation):
+Amethyst → Azure → Evergreen → Garnet → Coral → Navy → Rose → Saffron
 
 ### Responsive Design
 
@@ -502,37 +558,20 @@ only the tokens you want to override.
 
 ### Tailwind-Carbon Token Alignment
 
-# --- ADDED 2026-04-07 during Carbon harness gap review ---
-# Reason: ADR-008 and this file both say "align Tailwind tokens with Carbon" but
-#   neither showed how. This note provides the approach; full mapping deferred to
-#   Module 1 scaffolding when exact theme values are known.
-# Impact: Prevents color drift between Carbon components and Tailwind utility classes.
+# --- UPDATED 2026-04-07 — Finalized with actual color scheme ---
+# Reason: Color scheme defined. Replaced placeholder example with actual config reference.
+# Impact: Claude Code uses the real tailwind.config.ts, no guessing at color values.
 
-During frontend scaffolding, configure `tailwind.config.ts` to reference Carbon's
-CSS custom properties for shared color tokens. This ensures Tailwind utilities that
-reference colors stay in sync with the Carbon theme:
+The Tailwind config (`tailwind.config.ts`) bridges Carbon tokens and the Reel48+ accent
+palette via CSS custom properties. **All color values originate in `carbon-theme.scss`** —
+Tailwind references `var(--cds-...)` and `var(--r48-...)` variables, never raw hex.
 
-```typescript
-// tailwind.config.ts — example token alignment
-const config = {
-  theme: {
-    extend: {
-      colors: {
-        // Map Tailwind color names to Carbon CSS custom properties
-        interactive: 'var(--cds-interactive)',
-        'text-primary': 'var(--cds-text-primary)',
-        'text-secondary': 'var(--cds-text-secondary)',
-        'bg-page': 'var(--cds-background)',
-        'layer-01': 'var(--cds-layer-01)',
-        // Add additional mappings as needed during scaffolding
-      },
-    },
-  },
-};
-```
+Three color groups are available in Tailwind:
+1. **Carbon bridges** — `interactive`, `bg-page`, `text-primary`, `support-error`, etc.
+2. **Charcoal/teal scales** — `charcoal-900` through `charcoal-500`, `teal-900` through `teal-50`
+3. **Accent palette** — `accent-amethyst`, `accent-garnet`, `accent-saffron`, etc.
 
-The specific mapping will be finalized during Module 1 frontend scaffolding when
-the theme file is created and brand colors are known. The key principle: never
+See `tailwind.config.ts` for the full mapping. The key principle: never
 define raw hex colors in Tailwind config that duplicate or diverge from Carbon tokens.
 
 ### What NOT to Do

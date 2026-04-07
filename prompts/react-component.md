@@ -41,7 +41,19 @@ Create a React component for {COMPONENT_PURPOSE}.
 - Do NOT override Carbon component internals with Tailwind classes
 - Responsive: {mobile-first — Carbon Grid for page layout, Tailwind
   breakpoints for fine-grained adjustments}
-- Theme tokens: {reference brand colors from src/styles/carbon-theme.scss}
+
+#### Color System (from `src/styles/carbon-theme.scss` — single source of truth)
+- **Brand charcoal** `#292c2f` — header, sidebar, dark surfaces (via `<Theme theme="g100">`)
+- **Primary interactive** `#0a6b6b` (teal) — buttons, links, focus rings.
+  Carbon handles this automatically via the `interactive` token override.
+- **Status badges** — use Carbon `<Tag>` with accent colors from Tailwind:
+  `accent-amethyst` (premium), `accent-garnet` (urgent), `accent-saffron` (pending),
+  `accent-azure` (active), `accent-evergreen` (approved), `accent-coral` (overdue)
+- **Charts** — use accent palette in order: Amethyst → Azure → Evergreen →
+  Garnet → Coral → Navy → Rose → Saffron
+- **Selected rows** — `bg-teal-50` (`#e0f5f5`)
+- Do NOT use arbitrary hex values (`text-[#3B82F6]`) — use Carbon tokens
+  or Tailwind accent/charcoal/teal utilities defined in `tailwind.config.ts`
 
 ### Tests
 Write tests using Vitest + React Testing Library that verify:

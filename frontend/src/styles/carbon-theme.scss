@@ -1,0 +1,135 @@
+// carbon-theme.scss — Reel48+ Brand Color System
+//
+// This file is the SINGLE SOURCE OF TRUTH for the Reel48+ color scheme.
+// It customizes Carbon v11's design tokens and defines accent colors as
+// CSS custom properties for use by Tailwind and custom components.
+//
+// IMPORTANT: @use ... with () must appear BEFORE @use '@carbon/react'.
+// Sass modules can only be configured once — if Carbon loads the theme
+// module internally before this clause runs, customization is silently ignored.
+
+@use '@carbon/react/scss/themes';
+@use '@carbon/react/scss/theme' with (
+  $fallback: themes.$g10,
+  $theme: (
+    // =========================================================================
+    // BRAND IDENTITY
+    // Brand color: #292c2f (dark charcoal). Applied to inverse/brand surfaces
+    // so the header, sidebar, and dark UI zones carry the Reel48 identity.
+    // =========================================================================
+    background-brand: #292c2f,
+    background-inverse: #292c2f,
+
+    // =========================================================================
+    // PRIMARY INTERACTIVE — Teal
+    // Replaces Carbon's default IBM blue (#0f62fe) with a modern teal that
+    // pops against the charcoal brand color. #0a6b6b achieves 5.07:1 contrast
+    // against white (WCAG AA for all text sizes).
+    // =========================================================================
+    interactive: #0a6b6b,
+    link-primary: #0a6b6b,
+    link-secondary: #063c44,
+    focus: #0a6b6b,
+
+    // =========================================================================
+    // BACKGROUNDS & SURFACES
+    // g10 defaults retained for the light content area. The charcoal brand
+    // surfaces are handled by background-brand/background-inverse above and
+    // by wrapping the sidebar/header in <Theme theme="g100">.
+    // =========================================================================
+    background: #f4f4f4,
+    layer-01: #ffffff,
+    layer-02: #f4f4f4,
+    layer-hover-01: #e8e8e8,
+
+    // =========================================================================
+    // TEXT
+    // Standard g10 text colors. text-inverse is white for use on charcoal
+    // and teal surfaces.
+    // =========================================================================
+    text-primary: #161616,
+    text-secondary: #525252,
+    text-placeholder: #a8a8a8,
+    text-inverse: #ffffff,
+    text-on-color: #ffffff,
+
+    // =========================================================================
+    // BORDERS
+    // =========================================================================
+    border-subtle-01: #e0e0e0,
+    border-strong-01: #8d8d8d,
+
+    // =========================================================================
+    // ICONS
+    // =========================================================================
+    icon-primary: #161616,
+    icon-secondary: #525252,
+    icon-on-color: #ffffff,
+    icon-inverse: #ffffff,
+
+    // =========================================================================
+    // FORM FIELDS
+    // field-01: input bg on white card surfaces (uses page gray)
+    // field-02: input bg on gray page background (uses white)
+    // =========================================================================
+    field-01: #f4f4f4,
+    field-02: #ffffff,
+
+    // =========================================================================
+    // SEMANTIC / STATUS COLORS
+    // Error, success, and warning retain Carbon defaults for universal
+    // recognition. Info is remapped to brand teal for cohesion.
+    // =========================================================================
+    support-error: #da1e28,
+    support-success: #198038,
+    support-warning: #f1c21b,
+    support-info: #0d8a8a,
+  )
+);
+
+// Load Carbon component styles
+@use '@carbon/react/scss/reset';
+@use '@carbon/react/scss/grid';
+@use '@carbon/react/scss/layer';
+@use '@carbon/react';
+
+// =============================================================================
+// REEL48+ ACCENT PALETTE — CSS Custom Properties
+//
+// These colors are NOT Carbon tokens. They are used for charts, status badges,
+// category differentiation, and feature highlights. Defined as CSS custom
+// properties so Tailwind references variables (not raw hex), keeping all color
+// definitions centralized in this file.
+//
+// Names are fashion-inspired to align with the apparel platform domain.
+// Colors are drawn from Carbon's data visualization palette for perceptual
+// balance when used together in charts.
+// =============================================================================
+
+:root {
+  // Accent palette
+  --r48-accent-amethyst: #6929c4;     // Premium, featured
+  --r48-accent-azure: #1192e8;        // Active status
+  --r48-accent-evergreen: #005d5d;    // Approved variant
+  --r48-accent-garnet: #9f1853;       // Urgent, high-priority
+  --r48-accent-coral: #fa4d56;        // Overdue
+  --r48-accent-oxblood: #570408;      // Rejected, cancelled
+  --r48-accent-navy: #002d9c;         // Processing
+  --r48-accent-rose: #ee538b;         // Promotional, seasonal
+  --r48-accent-saffron: #b28600;      // Pending review
+  --r48-accent-midnight-teal: #022b30; // Deep brand accent, hero sections
+
+  // Brand charcoal scale (for custom dark surfaces beyond Carbon tokens)
+  --r48-charcoal-900: #292c2f;
+  --r48-charcoal-800: #353a3f;
+  --r48-charcoal-700: #4a5056;
+  --r48-charcoal-500: #6f7479;
+
+  // Teal interactive scale (for gradients, custom hover states)
+  --r48-teal-900: #063c44;
+  --r48-teal-700: #0a6b6b;
+  --r48-teal-600: #0d8a8a;
+  --r48-teal-400: #3db8b8;
+  --r48-teal-200: #a8e0e0;
+  --r48-teal-50: #e0f5f5;
+}

@@ -140,6 +140,16 @@ for Reel48+-specific composite components built from Carbon primitives.
   harness guidance: "If Carbon has a component, use Carbon. If you need
   layout, use Tailwind."
 
+## Addendum: Theming Finalized (2026-04-07)
+
+The Reel48+ color scheme has been defined and committed. The brand anchor is `#292c2f`
+(dark charcoal), with a teal primary interactive (`#0a6b6b`) replacing Carbon's default
+IBM blue. A 10-color accent palette provides differentiation for charts, badges, and
+categories. All values are centralized in `frontend/src/styles/carbon-theme.scss`
+(single source of truth) and bridged into Tailwind via CSS custom properties in
+`frontend/tailwind.config.ts`. See `frontend/CLAUDE.md` Theming section for full
+usage guidance.
+
 ## References
 - IBM Carbon Design System: https://carbondesignsystem.com
 - @carbon/react: https://react.carbondesignsystem.com

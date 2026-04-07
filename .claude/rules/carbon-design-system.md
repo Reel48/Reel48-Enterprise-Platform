@@ -212,12 +212,17 @@ Theme customization uses the `$fallback` and `$theme` parameters (NOT `map-merge
 
 ```scss
 // ✅ CORRECT — Sass @use with $fallback for theme customization
+// These are the ACTUAL Reel48+ values from src/styles/carbon-theme.scss
 @use '@carbon/react/scss/themes';
 @use '@carbon/react/scss/theme' with (
   $fallback: themes.$g10,
   $theme: (
-    interactive: #0f62fe,
-    background: #f4f4f4,
+    background-brand: #292c2f,    // Reel48 charcoal brand
+    background-inverse: #292c2f,
+    interactive: #0a6b6b,         // Teal primary (replaces IBM blue #0f62fe)
+    link-primary: #0a6b6b,
+    focus: #0a6b6b,
+    support-info: #0d8a8a,        // Brand-aligned teal for info
   )
 );
 
@@ -243,6 +248,43 @@ $custom: map.merge(themes.$g10, (background: #fff));
 BEFORE `@use '@carbon/react'`. Sass modules can only be configured once, at the
 first `@use` — if Carbon loads the theme module internally before your `with ()`
 clause runs, the customization is silently ignored.
+
+### Reel48+ Color System Quick Reference
+
+# --- ADDED 2026-04-07 — Color scheme finalized ---
+# Reason: The color scheme is defined in carbon-theme.scss but this rule file is
+#   the primary reference when Claude Code is writing components. Having key values
+#   here prevents round-trips to the theme file for common decisions.
+# Impact: Claude Code picks the right colors on first attempt during component work.
+
+The full color system lives in `src/styles/carbon-theme.scss` (single source of truth).
+Key values for quick reference during component work:
+
+| Role | Hex | CSS Variable / Carbon Token |
+|------|-----|-----------------------------|
+| Brand (header, sidebar) | `#292c2f` | `--cds-background-brand` |
+| Primary interactive | `#0a6b6b` | `--cds-interactive` |
+| Interactive hover | `#0d8a8a` | `--r48-teal-600` |
+| Interactive on dark | `#3db8b8` | `--r48-teal-400` |
+| Sidebar hover | `#353a3f` | `--r48-charcoal-800` |
+| Selected row tint | `#e0f5f5` | `--r48-teal-50` |
+| Info notifications | `#0d8a8a` | `--cds-support-info` |
+
+**Accent palette** (for badges, charts, categories — use via Tailwind `accent-*` classes):
+`amethyst` `azure` `evergreen` `garnet` `coral` `oxblood` `navy` `rose` `saffron` `midnight-teal`
+
+**Layout pattern for dark brand zones:**
+```tsx
+// Sidebar/header: wrap in g100 Theme for dark Carbon tokens
+<Theme theme="g100">
+  <SideNav style={{ backgroundColor: '#292c2f' }} />
+</Theme>
+
+// Content area: default g10 theme
+<Theme theme="g10">
+  <main>{children}</main>
+</Theme>
+```
 
 ## Next.js App Router: `'use client'` Directive
 
