@@ -744,6 +744,7 @@ helps during the post-module review when deciding whether guidance is still rele
 | S3 / file storage pattern             | `.claude/rules/s3-storage.md`           |
 | Stripe / invoicing / billing pattern  | `.claude/rules/stripe-invoicing.md`     |
 | Harness maintenance process itself    | `.claude/rules/harness-maintenance.md`  |
+| Design system / Carbon pattern        | `.claude/rules/carbon-design-system.md` |
 | An architectural decision (why)       | `docs/adr/{NNN}-{title}.md` (new file)  |
 | A reusable task pattern               | `prompts/{task-name}.md` (new file)     |
 | What changed and when                 | `docs/harness-changelog.md` (append)    |

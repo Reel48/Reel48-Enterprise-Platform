@@ -592,3 +592,52 @@ TEMPLATE FOR NEW ENTRIES (copy and fill in):
 
 ### Notes
 Decision was made after evaluating IBM Carbon, shadcn/ui, MUI, Fluent UI, and Headless UI against the Reel48+ frontend requirements. Carbon won on enterprise UI/UX quality for data-dense workflows despite requiring a relaxation of the original Tailwind-only constraint.
+
+---
+
+## 2026-04-07 — Carbon Design System Harness Gap Review (Pre-Module 1)
+
+### Summary
+Reviewed the Carbon design system implementation across the harness for completeness
+and accuracy before any frontend code is generated. Identified and closed 7 gaps that
+would have caused incorrect or inconsistent code generation.
+
+### Files Changed
+
+- **File:** `.claude/rules/carbon-design-system.md` (**NEW**)
+  - **Change:** Created dedicated rule file for Carbon conventions, activated by component/styling file paths. Covers: component selection, import patterns, icon usage, styling boundaries (Carbon vs Tailwind), CSS load order, SCSS/theming rules, and common mistakes.
+  - **Reason:** Every other major domain (auth, database, API, testing, S3, Stripe) had an auto-activated rule file. Carbon had none, meaning no path-triggered reinforcement when editing component files.
+  - **Impact:** Claude Code now receives Carbon-specific guidance automatically when working on any component, style, or layout file.
+
+- **File:** `frontend/CLAUDE.md` (Theming section)
+  - **Change:** Fixed outdated Carbon v10 token names (`$interactive-01` → `$interactive`, `$ui-background` → `$background`). Added `carbon-theme.scss` scaffold showing correct v11 `@use` module syntax. Added global stylesheet import order example.
+  - **Reason:** Original references used Carbon v10 token names; `@carbon/react` is v11. Missing scaffold meant Claude Code would guess the SCSS structure.
+  - **Impact:** Prevents broken SCSS compilation and incorrect token overrides from the first scaffolding session.
+
+- **File:** `frontend/CLAUDE.md` (Framework & Configuration section)
+  - **Change:** Added "Next.js Configuration for Carbon SCSS" subsection with `sassOptions`, `sass` devDependency requirement, and Dart Sass module system notes.
+  - **Reason:** Without correct `next.config.mjs` settings, the first `npm run dev` would fail on SCSS imports.
+  - **Impact:** Prevents immediate build failure during frontend scaffolding.
+
+- **File:** `frontend/CLAUDE.md` (Responsive Design section)
+  - **Change:** Replaced vague "page-level vs fine-grained" guidance with a concrete decision rule: Carbon Grid for outer page column structure, Tailwind for arranging items within a Carbon Column.
+  - **Reason:** Original guidance was ambiguous; Claude Code would make inconsistent layout decisions.
+  - **Impact:** Consistent layout approach across all pages and components.
+
+- **File:** `frontend/CLAUDE.md` (new Tailwind-Carbon Token Alignment section)
+  - **Change:** Added guidance on referencing Carbon CSS custom properties (`var(--cds-interactive)`) in `tailwind.config.ts`. Full mapping deferred to Module 1 scaffolding.
+  - **Reason:** ADR-008 and frontend/CLAUDE.md both mentioned aligning tokens but never showed how.
+  - **Impact:** Prevents color drift between Carbon components and Tailwind utility classes.
+
+- **File:** `CLAUDE.md` (Harness Files Quick Reference table)
+  - **Change:** Added row: `Design system / Carbon pattern → .claude/rules/carbon-design-system.md`
+  - **Reason:** New rule file needs to be discoverable in the quick reference.
+  - **Impact:** Future sessions know where to find and update Carbon conventions.
+
+### Gaps Resolved from Previous Review
+- ✅ "Carbon + Next.js SCSS configuration will need to be documented" — now documented
+- ✅ "Carbon Grid vs Tailwind Grid usage boundaries may need refinement" — now refined with decision rule
+
+### Deferred Items
+- Full Tailwind-to-Carbon token mapping in `tailwind.config.ts` — deferred to Module 1 scaffolding when exact brand colors are known
+- `prompts/frontend-scaffold.md` template — deferred to just before Module 1 begins
