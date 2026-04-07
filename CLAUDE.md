@@ -73,7 +73,9 @@ brands or subsidiaries.
 ### Frontend
 - **Framework:** Next.js 14+ (App Router)
 - **Language:** TypeScript (strict mode)
-- **Styling:** Tailwind CSS
+- **Design System:** IBM Carbon (`@carbon/react`) — primary component library and design tokens
+- **Utility CSS:** Tailwind CSS — layout utilities and custom spacing alongside Carbon
+- **SCSS:** Sass (required for Carbon theme customization)
 - **Auth Integration:** AWS Amplify (Cognito client)
 - **Hosting:** Vercel
 - **Testing:** React Testing Library + Vitest
@@ -582,6 +584,7 @@ reel48-plus/
 │   │   ├── components/                # Shared UI components
 │   │   ├── lib/                       # Utilities, API client, auth helpers
 │   │   ├── hooks/                     # Custom React hooks
+│   │   ├── styles/                    # Carbon theme overrides and global styles
 │   │   └── types/                     # TypeScript type definitions
 │   ├── package.json
 │   └── tsconfig.json

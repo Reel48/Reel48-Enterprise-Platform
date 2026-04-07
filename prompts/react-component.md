@@ -32,9 +32,16 @@ Create a React component for {COMPONENT_PURPOSE}.
 - Does it need TenantContext? {yes/no}
 
 ### Styling
-- Use Tailwind CSS (no CSS modules or styled-components)
-- Responsive: {mobile-first breakpoints needed}
-- Design tokens: {reference any specific colors, spacing from tailwind.config}
+- Use Carbon components from `@carbon/react` for all standard UI elements
+  (buttons, inputs, modals, tables, dropdowns, notifications)
+- Use Carbon component props for variants (e.g., `kind="primary"`,
+  `size="lg"`) — do NOT use cva/clsx
+- Use Tailwind CSS for layout utilities (flex, grid, gap, spacing) and
+  custom styles where Carbon has no equivalent
+- Do NOT override Carbon component internals with Tailwind classes
+- Responsive: {mobile-first — Carbon Grid for page layout, Tailwind
+  breakpoints for fine-grained adjustments}
+- Theme tokens: {reference brand colors from src/styles/carbon-theme.scss}
 
 ### Tests
 Write tests using Vitest + React Testing Library that verify:
@@ -48,6 +55,8 @@ Write tests using Vitest + React Testing Library that verify:
 - [ ] Named export (not default export, unless it's a page component)
 - [ ] Props interface defined and exported
 - [ ] Loading, error, and empty states handled
+- [ ] Uses Carbon components where available (not custom implementations)
+- [ ] No Tailwind overrides on Carbon component internals
 - [ ] Accessible (proper aria labels, keyboard navigation)
 - [ ] Tests written with accessible queries (getByRole, getByLabelText)
 ```

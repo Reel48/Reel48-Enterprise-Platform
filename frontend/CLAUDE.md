@@ -32,8 +32,15 @@
 - **Next.js 14+** with the **App Router** (NOT Pages Router)
 - **TypeScript** in strict mode — no `any` types except as a last resort with a
   justifying comment
-- **Tailwind CSS** for all styling — no CSS modules, no styled-components, no
-  inline style objects
+- **IBM Carbon** (`@carbon/react`) as the primary design system — use Carbon
+  components for all standard UI elements (buttons, inputs, modals, data tables,
+  dropdowns, notifications, tabs, etc.). See ADR-008 for the full rationale.
+- **Tailwind CSS** as a utility layer for layout (`flex`, `grid`, `gap-*`),
+  spacing between components, and custom styles where Carbon has no equivalent.
+  Do NOT use Tailwind classes to override Carbon component internals.
+- **SCSS** for Carbon theme customization only (`src/styles/carbon-theme.scss`).
+  No standalone CSS modules or styled-components.
+- **No inline style objects** except as a last resort with a justifying comment.
 - **Package manager:** npm (not yarn, not pnpm)
 
 
@@ -127,19 +134,52 @@ Use a `<ProtectedRoute>` wrapper component that:
 # create new components and how to organize them. Without this, components
 # end up in random locations with inconsistent naming and structure.
 
+### Carbon Component Usage
+
+# --- ADDED 2026-04-06 after ADR-008 ---
+# Reason: IBM Carbon adopted as primary design system, replacing custom UI primitives.
+# Impact: Claude Code imports standard components from @carbon/react instead of building them.
+
+Standard UI elements come from `@carbon/react`, not from custom implementations.
+Common imports:
+
+```typescript
+import {
+  Button, TextInput, NumberInput, Dropdown, ComboBox,
+  Modal, DataTable, Table, TableHead, TableRow, TableCell, TableBody,
+  TableHeader, TableContainer, TableToolbar, TableToolbarContent,
+  Tabs, TabList, Tab, TabPanels, TabPanel,
+  Tag, InlineNotification, ToastNotification,
+  Breadcrumb, BreadcrumbItem, Loading, Pagination,
+  SideNav, SideNavItems, SideNavLink, SideNavMenu, SideNavMenuItem,
+  Grid, Column, Theme,
+} from '@carbon/react';
+```
+
+Feature components in `src/components/features/` use these Carbon components
+directly. There is no intermediate wrapper layer.
+
 ### Component Locations
 ```
 src/
+├── styles/
+│   └── carbon-theme.scss     # Carbon SCSS variable overrides (brand colors, tokens)
 ├── components/
-│   ├── ui/                    # Generic, reusable UI primitives
-│   │   ├── Button.tsx         #   (buttons, inputs, modals, cards)
-│   │   ├── Input.tsx          #   These have NO business logic
-│   │   ├── Modal.tsx          #   and NO awareness of Reel48+ domain
-│   │   └── DataTable.tsx
+│   ├── ui/                    # Reel48+-specific reusable compositions
+│   │   ├── TenantBadge.tsx    #   Built FROM Carbon primitives (Tag, etc.)
+│   │   ├── EmptyState.tsx     #   For scenarios Carbon doesn't cover
+│   │   ├── PageHeader.tsx     #   Consistent page header with breadcrumbs
+│   │   └── StatusIndicator.tsx#   Order/invoice/approval status display
+│   │                          #
+│   │   NOTE: Do NOT create wrappers for Carbon components here.
+│   │   Import directly from @carbon/react. This directory is for
+│   │   COMPOSITE components that combine multiple Carbon primitives
+│   │   with Reel48+ domain logic.
+│   │
 │   ├── layout/                # App shell components
-│   │   ├── Sidebar.tsx        #   (navigation, header, footer)
-│   │   ├── Header.tsx
-│   │   └── MainLayout.tsx
+│   │   ├── Sidebar.tsx        #   (uses Carbon SideNav)
+│   │   ├── Header.tsx         #   (uses Carbon Header/HeaderNavigation)
+│   │   └── MainLayout.tsx     #   (uses Carbon Grid + Theme provider)
 │   └── features/              # Feature-specific components
 │       ├── auth/              #   Grouped by domain module
 │       │   ├── LoginForm.tsx
@@ -301,23 +341,56 @@ export const api = {
 ```
 
 
-## Styling Rules (Tailwind)
+## Styling Rules (Carbon + Tailwind)
 
-# --- WHY THIS SECTION EXISTS ---
-# Tailwind keeps styles co-located with components, but it needs conventions
-# to prevent inconsistency. Without these rules, Claude Code might use
-# different spacing scales, color values, or responsive patterns in different
-# components.
+# --- SUPERSEDED 2026-04-06 after ADR-008 ---
+# Original: Tailwind-only styling rules with cva/clsx for component variants.
+# Replaced by: Carbon-first approach with Tailwind as utility layer.
+# Reason: IBM Carbon adopted as primary design system for enterprise-grade
+#   components, accessibility, and design token theming. See ADR-008.
 
-- **Use the design system tokens** defined in `tailwind.config.ts` (brand colors,
-  spacing scale, typography). Don't use arbitrary values like `text-[#3B82F6]` when
-  a named token exists.
-- **Responsive design:** Mobile-first. Use `sm:`, `md:`, `lg:` breakpoints.
-  The main app layout should work on tablets (768px+); full mobile support
+### Hierarchy: When to Use What
+1. **Carbon components first.** If Carbon has a component for the UI element
+   (button, input, modal, table, dropdown, notification, etc.), use it.
+   Do NOT recreate these in Tailwind.
+2. **Carbon props for variants.** Carbon components have built-in variant props
+   (e.g., `<Button kind="primary">`, `<Button kind="danger">`). Use these
+   instead of custom variant logic. cva/clsx are NOT needed.
+3. **Tailwind for layout.** Use Tailwind utilities for page layout, spacing
+   between components, and responsive adjustments:
+   - `<div className="flex gap-4 items-center">` (layout between Carbon components)
+   - `<div className="grid grid-cols-3 gap-6 mt-8">` (page grid)
+   - Do NOT use: `<button className="bg-blue-500 text-white px-4 py-2">` (use Carbon Button)
+4. **Carbon theme for brand customization.** Brand colors, typography scale, and
+   spacing tokens are set in `src/styles/carbon-theme.scss`. Tailwind's
+   `tailwind.config.ts` should reference Carbon's token values where possible
+   to prevent divergence.
+
+### Theming
+- **Theme file:** `src/styles/carbon-theme.scss` — override Carbon's default
+  theme tokens (e.g., `$interactive-01`, `$ui-background`) with Reel48+ brand
+  colors.
+- **Theme provider:** Wrap the app in Carbon's `<Theme theme="g10">` (or `"white"`,
+  `"g90"`, `"g100"` for different density). Set in the root layout.
+- **Dark mode:** Not in initial scope. Use `g10` (light gray) or `white` theme.
+
+### Responsive Design
+- **Page-level layout:** Use Carbon's Grid and Column components.
+- **Fine-grained adjustments:** Use Tailwind breakpoints (`sm:`, `md:`, `lg:`).
+- The main app layout should work on tablets (768px+); full mobile support
   is a post-launch enhancement.
-- **Dark mode:** Not in initial scope. Don't add `dark:` variants.
-- **Component variants:** Use `clsx` or `cva` (class-variance-authority) for
-  components with multiple visual states (e.g., Button with primary/secondary/danger).
+
+### What NOT to Do
+- Do NOT use Tailwind classes to style Carbon component internals (e.g.,
+  adding `className="text-red-500"` to a Carbon `<TextInput>`). Use Carbon's
+  props (`invalid`, `warn`) or theme tokens instead.
+- Do NOT create `Button.tsx`, `Input.tsx`, `Modal.tsx`, or `DataTable.tsx`
+  in `src/components/ui/`. These come from `@carbon/react`.
+- Do NOT use `cva` or `clsx` for component variants. Carbon handles variants
+  via props (`kind`, `size`, `type`).
+- Do NOT use `dark:` Tailwind variants (dark mode is out of scope).
+- Do NOT use arbitrary Tailwind values like `text-[#3B82F6]` when a Carbon
+  theme token or Tailwind named token exists.
 
 
 ## Testing Approach

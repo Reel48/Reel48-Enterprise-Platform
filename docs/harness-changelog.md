@@ -559,3 +559,36 @@ TEMPLATE FOR NEW ENTRIES (copy and fill in):
 {Any additional observations or context}
 
 -->
+
+## 2026-04-06 — IBM Carbon Design System Adoption (Pre-Build)
+
+**Type:** Reactive update (architectural decision before Module 1 frontend build)
+**Module:** N/A — cross-cutting frontend architecture change
+
+### Changes Made
+- **File:** `docs/adr/008-ibm-carbon-design-system.md` (NEW)
+  - **Change:** Created ADR documenting the decision to adopt IBM Carbon over shadcn/ui, MUI, Fluent UI, and Headless UI
+  - **Reason:** Reel48+ is ~70% dense admin tooling; Carbon's enterprise design language (data tables, workflow patterns, accessibility) is purpose-built for this use case
+  - **Impact:** Claude Code understands why Carbon was chosen and will not suggest alternative design systems
+
+- **File:** `CLAUDE.md` (root, Technology Stack + Directory Structure)
+  - **Change:** Updated frontend styling from "Tailwind CSS" to Carbon as primary design system with Tailwind as utility layer; added SCSS and `src/styles/` to directory structure
+  - **Reason:** Carbon requires SCSS for theming; Tailwind is retained for layout utilities
+  - **Impact:** Claude Code will list correct dependencies when scaffolding the frontend project
+
+- **File:** `frontend/CLAUDE.md` (Framework & Configuration, Component Locations, Styling Rules)
+  - **Change:** Rewrote Framework & Configuration for Carbon+Tailwind hybrid; restructured `src/components/ui/` from custom primitives (Button, Input, Modal, DataTable) to Reel48+-specific compositions built from Carbon primitives; replaced Tailwind-only styling rules with Carbon-first hierarchy; removed cva/clsx references; added Carbon import examples and usage guidance
+  - **Reason:** Carbon components replace custom UI primitives; Carbon's prop-based variant system replaces cva/clsx
+  - **Impact:** Claude Code will import from `@carbon/react` for standard UI elements, will not create wrapper components, and will follow the correct styling hierarchy
+
+- **File:** `prompts/react-component.md` (Styling section + Acceptance Criteria)
+  - **Change:** Updated styling instructions to Carbon-first approach; added two acceptance criteria (uses Carbon where available, no Tailwind overrides on Carbon internals)
+  - **Reason:** Component generation prompt must align with the new design system
+  - **Impact:** Every generated component will follow Carbon-first conventions
+
+### Gaps Identified
+- Carbon + Next.js SCSS configuration (`next.config.js` sassOptions) will need to be documented in frontend/CLAUDE.md when the project is scaffolded
+- Carbon Grid vs Tailwind Grid usage boundaries may need refinement after the first module is built
+
+### Notes
+Decision was made after evaluating IBM Carbon, shadcn/ui, MUI, Fluent UI, and Headless UI against the Reel48+ frontend requirements. Carbon won on enterprise UI/UX quality for data-dense workflows despite requiring a relaxation of the original Tailwind-only constraint.
