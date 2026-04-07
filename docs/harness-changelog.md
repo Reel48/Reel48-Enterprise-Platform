@@ -30,6 +30,64 @@
 
 ---
 
+## 2026-04-07 — Module 1 Phase 2: SQLAlchemy Models + Alembic Migration with RLS
+
+**Type:** End-of-session self-audit
+**Author:** Claude Code
+**Session scope:** Phase 2 — 5 SQLAlchemy models (Company, SubBrand, User, Invite, OrgCode) + single Alembic migration with RLS policies
+
+### Self-Audit Findings
+
+1. **New pattern introduced? YES**
+   - Deferred FK pattern for circular dependencies: when two tables reference each other
+     (org_codes ↔ users), create one table without the FK constraint, create the other
+     with its FK, then add the deferred FK via `op.create_foreign_key()`.
+   - Single migration for tightly coupled identity tables (all 5 Module 1 tables in one
+     migration) rather than one migration per table.
+   - **Action:** Added "Circular Foreign Key Dependencies" section to
+     `.claude/rules/database-migrations.md` documenting the deferred FK pattern.
+
+2. **Existing pattern violated? NO**
+   - All models use the correct base classes (GlobalBase, CompanyBase, TenantBase).
+   - All RLS policies follow the exact templates from the harness.
+   - FK and index naming follows `fk_{table}_{column}_{ref_table}` and `ix_{table}_{column}`.
+   - Migration is fully reversible with correct downgrade ordering.
+
+3. **New decision made? YES — minor**
+   - Used a single migration for all 5 identity tables rather than one per table. These
+     tables form a tightly coupled identity layer with no valid intermediate state. Not
+     significant enough for a standalone ADR.
+
+4. **Missing guidance discovered? YES**
+   - No documented pattern for resolving circular FK dependencies in migrations.
+   - **Action:** Added guidance to `.claude/rules/database-migrations.md` (see above).
+
+5. **Prompt template needed? NO**
+   - Identity table creation is a one-time task, not a recurring pattern.
+
+### Files Updated
+- **File:** `.claude/rules/database-migrations.md`
+  - **Change:** Added "Circular Foreign Key Dependencies" section with deferred FK pattern
+  - **Reason:** org_codes ↔ users circular FK had no documented resolution
+  - **Impact:** Future modules with cross-table FK cycles have a standard approach
+
+### Harness Health Metrics (Phase 2)
+| Metric | Value | Notes |
+|--------|-------|-------|
+| Patterns violated | 0 | All harness conventions followed correctly |
+| Harness gaps found | 1 | Circular FK resolution — now documented |
+| Rules added | 1 section | "Circular Foreign Key Dependencies" in database-migrations.md |
+| First-attempt accuracy | High | Models and migration matched harness schemas on first pass |
+
+### What Phase 3 Needs
+Phase 3 (auth middleware, tenant context, JWT validation) will need:
+- `app/middleware/` — tenant context middleware that sets RLS session variables
+- `app/core/security.py` — JWT validation against Cognito JWKS
+- `get_tenant_context` dependency — extracts claims, sets PostgreSQL session vars
+- Tests for cross-tenant isolation using the models created in this phase
+
+---
+
 ## 2026-04-07 — Module 1 Phase 1: Backend Project Scaffolding
 
 **Type:** End-of-session self-audit

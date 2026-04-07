@@ -133,6 +133,36 @@ TenantBase `sub_brand_id`). RLS handling:
   Sub-brand-level filtering (e.g., a `sub_brand_admin` seeing only their own brand's
   invites) is handled in the application layer by filtering on `target_sub_brand_id`.
 
+## Circular Foreign Key Dependencies
+
+# --- ADDED 2026-04-07 after Module 1 Phase 2 ---
+# Reason: org_codes.created_by → users and users.org_code_id → org_codes created a
+# circular FK that had no documented resolution pattern.
+# Impact: Future modules with cross-table FK cycles know the standard approach.
+
+When two tables reference each other (e.g., `org_codes.created_by → users` and
+`users.org_code_id → org_codes`), resolve the cycle by **deferring one FK constraint**:
+
+1. Create Table A **without** the FK constraint on the cross-referencing column
+   (define the column as a plain UUID, no `ForeignKey`)
+2. Create Table B with its FK to Table A
+3. Add the deferred FK via `op.create_foreign_key()` after both tables exist
+4. In the downgrade, drop the deferred FK **before** dropping Table B
+
+```python
+# Example from Module 1: org_codes ↔ users
+
+# upgrade():
+#   1. Create org_codes with created_by as plain UUID (no FK)
+#   2. Create users with org_code_id FK → org_codes
+#   3. op.create_foreign_key("fk_org_codes_created_by_users", "org_codes", "users", ...)
+
+# downgrade():
+#   1. op.drop_constraint("fk_org_codes_created_by_users", "org_codes")
+#   2. Drop users table
+#   3. Drop org_codes table
+```
+
 ## Common Mistakes to Avoid
 - ❌ Creating a table without RLS policies
 - ❌ Using raw SQL DDL instead of Alembic operations
