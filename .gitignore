@@ -12,3 +12,24 @@ shim-perm/requests/*
 shim-perm/responses/*
 !shim-perm/requests/.gitkeep
 !shim-perm/responses/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+dist/
+build/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Environment variables (contain secrets)
+.env
+backend/.env
+
+# Node.js / Frontend
+node_modules/
+.next/
+frontend/.env.local
