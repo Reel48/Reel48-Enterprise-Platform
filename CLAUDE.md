@@ -137,7 +137,8 @@ CREATE POLICY {table_name}_company_isolation ON {table_name}
 
 -- Sub-brand scoping (applied for non-corporate users)
 -- Corporate admins and reel48_admins (sub_brand_id IS NULL in their token) see all sub-brands
-CREATE POLICY {table_name}_sub_brand_scoping ON {table_name}
+-- CRITICAL: Must be AS RESTRICTIVE so it ANDs with company isolation (not ORs).
+CREATE POLICY {table_name}_sub_brand_scoping ON {table_name} AS RESTRICTIVE
     USING (
         current_setting('app.current_sub_brand_id', true) IS NULL
         OR current_setting('app.current_sub_brand_id', true) = ''

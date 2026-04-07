@@ -30,6 +30,44 @@
 
 ---
 
+## 2026-04-07 — Module 1 Phase 4: CRUD Endpoints, Schemas & Services
+
+**Type:** End-of-session self-audit
+**Author:** Claude Code
+**Session scope:** Phase 4 — Pydantic schemas, service layer, API endpoints, and tests for all 5 Module 1 entities (Companies, SubBrands, OrgCodes, Users, Invites). 22 new files, 93 tests passing, ruff + mypy clean.
+
+### Self-Audit Findings
+
+1. **New patterns introduced? YES**
+   - `db.refresh()` after `flush()` in service methods where `onupdate=func.now()` expires attributes — prevents `MissingGreenlet` when Pydantic serializes the response.
+   - Isolation test commit/cleanup pattern: seed data must be COMMITTED (not just flushed) for cross-session RLS testing, with explicit cleanup in `finally` blocks.
+   - **Action:** Added both patterns to `backend/CLAUDE.md` with examples.
+
+2. **Existing pattern violated? YES — critical RLS bug fixed**
+   - PostgreSQL combines multiple PERMISSIVE policies with OR. The `users_sub_brand_scoping` policy was PERMISSIVE (default), meaning sub-brand filtering was ineffective — any row passing company isolation was visible regardless of sub-brand. **This was a data leakage vulnerability.**
+   - **Fix:** Changed `users_sub_brand_scoping` to `AS RESTRICTIVE` in the migration. RESTRICTIVE policies are ANDed with PERMISSIVE policies.
+   - **Action:** Updated RLS template in root `CLAUDE.md` and `.claude/rules/database-migrations.md` to use `AS RESTRICTIVE` for sub-brand scoping. Added new "RESTRICTIVE vs PERMISSIVE" section to database-migrations rule.
+
+3. **Existing pattern violated? YES — SET LOCAL bind parameters**
+   - Harness showed `SET LOCAL` with bind parameters (`:param`). PostgreSQL's SET statement does not support bind parameters — causes `PostgresSyntaxError`.
+   - **Fix:** Changed to f-string interpolation. Safe because values are validated UUIDs from JWTs.
+   - **Action:** Added "SET LOCAL Does Not Support Bind Parameters" section to `backend/CLAUDE.md`. Updated isolation test pattern in `.claude/rules/testing.md`.
+
+4. **New decision? YES — pytest-asyncio session-scoped loop**
+   - Added `asyncio_default_fixture_loop_scope = "session"` and `asyncio_default_test_loop_scope = "session"` to `pyproject.toml`. Required because session-scoped fixtures (database engines) must share the same event loop as tests.
+
+5. **Missing guidance discovered? NO** — All other patterns were covered by existing harness.
+
+6. **Prompt template needed? NO** — Phase 4 patterns are now documented in harness files.
+
+### Files Updated
+- `CLAUDE.md` — RLS template: added `AS RESTRICTIVE` to sub-brand scoping policy
+- `backend/CLAUDE.md` — Added: SET LOCAL bind parameter limitation, db.refresh() after flush pattern
+- `.claude/rules/database-migrations.md` — Added: RESTRICTIVE vs PERMISSIVE section, updated RLS template
+- `.claude/rules/testing.md` — Updated isolation test pattern with f-string SET LOCAL and commit requirement
+
+---
+
 ## 2026-04-07 — Module 1 Phase 3: Auth Middleware & Tenant Context
 
 **Type:** End-of-session self-audit

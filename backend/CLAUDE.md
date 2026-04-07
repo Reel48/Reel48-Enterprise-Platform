@@ -196,14 +196,20 @@ async def get_tenant_context(
     # Without this, RLS policies have no way to know which tenant is making the request.
     # For reel48_admin: company_id is empty string, which triggers the RLS bypass.
     # SET LOCAL scopes values to the current transaction only, preventing leakage
-    # across pooled connections. Use parameterized queries for defense-in-depth.
+    # across pooled connections.
+    # NOTE: SET LOCAL does not support bind parameters ($1) in PostgreSQL.
+    # Values are safe — company_id and sub_brand_id are parsed as UUID from validated JWTs.
     if context.is_reel48_admin:
         await db.execute(text("SET LOCAL app.current_company_id = ''"))
         await db.execute(text("SET LOCAL app.current_sub_brand_id = ''"))
     else:
-        await db.execute(text("SET LOCAL app.current_company_id = :cid"), {"cid": str(context.company_id)})
+        await db.execute(
+            text(f"SET LOCAL app.current_company_id = '{context.company_id}'")
+        )
         if context.sub_brand_id:
-            await db.execute(text("SET LOCAL app.current_sub_brand_id = :sbid"), {"sbid": str(context.sub_brand_id)})
+            await db.execute(
+                text(f"SET LOCAL app.current_sub_brand_id = '{context.sub_brand_id}'")
+            )
         else:
             await db.execute(text("SET LOCAL app.current_sub_brand_id = ''"))
 
@@ -229,6 +235,50 @@ scopes the value to the current **transaction** only — when the transaction co
 back, the value is discarded. Since `get_db_session()` wraps each request in a transaction,
 this ensures session variables never leak between requests on the same pooled connection.
 Plain `SET` persists for the connection's lifetime, which is dangerous with connection pooling.
+
+### SET LOCAL Does Not Support Bind Parameters
+# --- ADDED 2026-04-07 after Module 1 Phase 4 ---
+# Reason: Using parameterized queries (`text("SET LOCAL ... = :val")`) with SET LOCAL
+# causes `PostgresSyntaxError: syntax error at or near "$1"`. PostgreSQL's SET statement
+# does not support bind parameters.
+# Impact: All SET LOCAL calls must use f-string interpolation. This is safe because the
+# values are UUIDs parsed from validated JWTs, not user-supplied strings.
+
+PostgreSQL's `SET LOCAL` does not support bind parameters (`$1`, `:param`). You must use
+f-string interpolation for the values. This is safe in the auth middleware because values
+are UUIDs parsed from validated JWT claims (not raw user input):
+
+```python
+# ✅ CORRECT — f-string (safe: values are validated UUIDs from JWTs)
+await db.execute(text(f"SET LOCAL app.current_company_id = '{context.company_id}'"))
+
+# ❌ WRONG — bind parameters cause PostgresSyntaxError
+await db.execute(text("SET LOCAL app.current_company_id = :cid"), {"cid": str(context.company_id)})
+```
+
+### SQLAlchemy: Refresh After Flush for Server-Side Column Updates
+# --- ADDED 2026-04-07 after Module 1 Phase 4 ---
+# Reason: SQLAlchemy's `onupdate=func.now()` expires the `updated_at` attribute after
+# flush(). When Pydantic's `model_validate(from_attributes=True)` reads it, it triggers
+# a lazy load outside the greenlet context, causing MissingGreenlet errors.
+# Impact: All service methods that modify and return objects must refresh after flush.
+
+When a model has `server_default` or `onupdate` columns (like `updated_at`), SQLAlchemy
+marks those attributes as expired after `flush()`. If Pydantic tries to read the expired
+attribute (e.g., during `model_validate()`), it triggers a lazy load that fails with
+`MissingGreenlet` in async code. Always `await db.refresh(obj)` after `flush()` when
+the object will be serialized:
+
+```python
+# ✅ CORRECT — refresh reloads expired attributes
+await self.db.flush()
+await self.db.refresh(obj)
+return obj  # Safe for Pydantic serialization
+
+# ❌ WRONG — expired updated_at causes MissingGreenlet
+await self.db.flush()
+return obj  # Pydantic reads updated_at → lazy load → crash
+```
 
 ### Login & Token Refresh
 # --- ADDED 2026-04-06 during pre-build harness review ---
@@ -1018,7 +1068,7 @@ def upgrade():
         )
     """)
     op.execute("""
-        CREATE POLICY products_sub_brand_scoping ON products
+        CREATE POLICY products_sub_brand_scoping ON products AS RESTRICTIVE
         USING (
             current_setting('app.current_sub_brand_id', true) IS NULL
             OR current_setting('app.current_sub_brand_id', true) = ''

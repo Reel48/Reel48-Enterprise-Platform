@@ -186,10 +186,35 @@ CREATE POLICY {table}_company_isolation ON {table}
     );
 
 -- Policy 2: Sub-brand scoping (required for tables with sub_brand_id)
-CREATE POLICY {table}_sub_brand_scoping ON {table}
+-- CRITICAL: Must use AS RESTRICTIVE so it is ANDed with company isolation.
+-- Without RESTRICTIVE, PostgreSQL combines multiple PERMISSIVE policies with OR,
+-- meaning a row passing company_isolation would be visible even if sub_brand_scoping
+-- should have excluded it.
+CREATE POLICY {table}_sub_brand_scoping ON {table} AS RESTRICTIVE
     USING (
         current_setting('app.current_sub_brand_id', true) IS NULL
         OR current_setting('app.current_sub_brand_id', true) = ''
         OR sub_brand_id = current_setting('app.current_sub_brand_id')::uuid
     );
 ```
+
+## RESTRICTIVE vs PERMISSIVE RLS Policies
+
+# --- ADDED 2026-04-07 after Module 1 Phase 4 ---
+# Reason: Sub-brand scoping was failing because PostgreSQL combines multiple
+# PERMISSIVE policies with OR. A row passing company_isolation was visible even
+# when sub_brand_scoping should have filtered it out. This was a data leakage bug.
+# Impact: All future sub-brand scoping policies use AS RESTRICTIVE to enforce AND logic.
+
+PostgreSQL has two policy enforcement modes:
+- **PERMISSIVE** (default): Multiple PERMISSIVE policies on the same table are combined
+  with **OR**. A row is visible if ANY PERMISSIVE policy passes.
+- **RESTRICTIVE**: Combined with **AND** against the PERMISSIVE result. A row must pass
+  ALL RESTRICTIVE policies AND at least one PERMISSIVE policy.
+
+For Reel48+ tables with both company isolation and sub-brand scoping:
+- `{table}_company_isolation` → **PERMISSIVE** (default). This is the primary isolation.
+- `{table}_sub_brand_scoping` → **RESTRICTIVE**. This narrows within the company.
+
+This ensures both conditions must pass: the user must be in the correct company **AND**
+the correct sub-brand (or have an empty sub_brand_id for corporate/reel48 admins).
