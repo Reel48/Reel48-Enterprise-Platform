@@ -30,6 +30,42 @@
 
 ---
 
+## 2026-04-08 — Module 3 Phase 2 End-of-Session Self-Audit
+
+**Type:** End-of-session self-audit
+**Author:** Claude Code
+**Scope:** Module 3 Phase 2 — Products CRUD (service, schemas, API endpoints, 24 tests)
+
+### Self-Audit Checklist
+
+| Question | Finding | Action |
+|----------|---------|--------|
+| New pattern introduced? | YES — Product status lifecycle with draft-only edit/delete restrictions; status-based visibility (employees see only active); submit endpoint for status transitions | Added "Product Status Lifecycle & Visibility" section to backend/CLAUDE.md |
+| Existing pattern violated? | NO — followed employee_profiles patterns for service, schema, endpoint, and test structure | No action |
+| New decision made? | Draft-only editing is an implicit constraint not previously documented. Employees seeing only active products is a visibility rule not in the harness. | Documented in backend/CLAUDE.md |
+| Missing guidance discovered? | NO — harness covered CRUD patterns, defense-in-depth, SKU uniqueness, and test organization | No action |
+| Prompt template needed? | NO — standard CRUD build following established patterns | No action |
+
+### Harness Files Updated
+
+| File | Change |
+|------|--------|
+| `backend/CLAUDE.md` | Added "Product Status Lifecycle & Visibility" section documenting status transitions, edit restrictions, and role-based visibility |
+| `docs/harness-changelog.md` | This entry |
+
+### Module 3 Phase 2 Completeness Summary
+
+| Area | Count | Status |
+|------|-------|--------|
+| Schema file | 1 (product.py) | Complete |
+| Service file | 1 (product_service.py) | Complete |
+| Endpoint file | 1 (products.py) | Complete |
+| Router update | 1 (router.py) | Complete |
+| Tests | 24 (7 create, 5 list, 3 get, 2 update, 2 delete, 2 submit, 3 isolation) | All passing |
+| Total test suite | 165 tests | All passing |
+
+---
+
 ## 2026-04-08 — Module 3 Phase 1 End-of-Session Self-Audit
 
 **Type:** End-of-session self-audit
