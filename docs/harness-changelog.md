@@ -30,6 +30,94 @@
 
 ---
 
+## 2026-04-08 — Module 1 Post-Module Review (Phases 1–7 Complete)
+
+**Type:** Post-module harness review
+**Author:** Claude Code
+**Scope:** Full Module 1 (Auth & Multi-Tenancy) review — backend (7 phases), frontend (2 phases), harness updates.
+
+### Module 1 Completeness Summary
+
+| Area | Count | Status |
+|------|-------|--------|
+| Backend models | 5 (Company, SubBrand, User, Invite, OrgCode) | Complete |
+| Alembic migrations | 1 (all 5 tables + RLS policies) | Complete |
+| Backend endpoints | 19 CRUD + 3 auth/registration | Complete |
+| Backend services | 7 + CognitoService + RegistrationService | Complete |
+| Backend tests | 116 test functions across 8 files | All passing |
+| Frontend pages | 5 (login, register, invite landing, invite/[token], dashboard placeholder) | Complete |
+| Frontend components | Header, Sidebar, MainLayout, ProtectedRoute, ErrorBoundary | Complete |
+| Frontend tests | 43 tests across 7 files | All passing |
+| TODOs/FIXMEs | 0 in both backend and frontend | Clean |
+
+### Pattern Consistency Scan
+- All 5 tables have RLS policies created in the same migration
+- All CRUD endpoints use TenantContext from JWT (no tenant IDs accepted as params)
+- All unauthenticated endpoints (validate-org-code, register, register-from-invite) use `skipAuth` and rate limiting
+- Standard API response format (`{ data, meta, errors }`) used consistently
+- Frontend follows Carbon-first pattern with Tailwind for layout only
+
+### Phase 7 Self-Audit Findings
+
+1. **New pattern introduced? YES — `skipAuth` on API client**
+   - Registration pages need to call unauthenticated endpoints. Added `skipAuth?: boolean` option to the API client's `FetchOptions`. When true, skips `fetchAuthSession()` and 401 retry.
+   - **Action:** Documented in `frontend/CLAUDE.md` under "Unauthenticated API Calls (`skipAuth`)" section.
+
+2. **Existing pattern violated? NO** — All Phase 7 code follows login page patterns exactly.
+
+3. **New decision? NO** — Registration flow design followed ADR-007 and the Phase 7 prompt.
+
+4. **Missing guidance discovered? YES — `invite/page.tsx` landing page**
+   - The routing structure in `frontend/CLAUDE.md` listed `invite/[token]/page.tsx` but not the `invite/page.tsx` landing page for manual token entry.
+   - **Action:** Updated routing structure to include `invite/page.tsx`.
+
+5. **Prompt template needed? NO** — Registration pages are a one-time build.
+
+### Files Updated
+- **`frontend/CLAUDE.md`** — Added `skipAuth` API client documentation; updated routing structure to include `invite/page.tsx`; updated API client code example with `skipAuth` option signatures
+- **`docs/harness-changelog.md`** — This entry
+
+### Harness Health Metrics (Module 1 Complete)
+| Metric | Value | Notes |
+|--------|-------|-------|
+| Patterns violated across all phases | 4 | Route group collision, ErrorBoundary class component, RESTRICTIVE RLS, SET LOCAL bind params |
+| Harness gaps found | 6 | Vitest setup, matchMedia polyfill, Amplify v6 mocks, route collisions, skipAuth, invite landing page |
+| Rules added (total) | 8 sections | Test infrastructure, route collision, icon typing, Header style, RESTRICTIVE RLS, SET LOCAL, skipAuth, invite route |
+| Backend test count | 116 | 8 test files |
+| Frontend test count | 43 | 7 test files |
+
+### What Module 2 Needs
+Module 2 (Employee Profiles) will depend on:
+- Auth middleware and TenantContext (Module 1 Phase 3)
+- User model and CRUD endpoints (Module 1 Phase 4)
+- Frontend auth integration and layout shell (Module 1 Phase 6)
+- The `skipAuth` pattern is NOT needed for Module 2 (all profile endpoints are authenticated)
+
+---
+
+## 2026-04-08 — Module 1 Phase 7: Registration Pages (Frontend)
+
+**Type:** End-of-session self-audit
+**Author:** Claude Code
+**Session scope:** Phase 7 — Self-registration page (two-step org code flow), invite registration page (dynamic route + landing), API client `skipAuth` option, TypeScript registration types, 17 new tests.
+
+### Changes Made
+- **`src/types/registration.ts`** (new) — TypeScript types for registration API responses
+- **`src/lib/api/client.ts`** (modified) — Added `skipAuth?: boolean` to FetchOptions and all api methods
+- **`src/app/(public)/register/page.tsx`** (new) — Two-step self-registration: org code validation → registration form with sub-brand dropdown
+- **`src/app/(public)/invite/page.tsx`** (new) — Landing page for manual invite token entry
+- **`src/app/(public)/invite/[token]/page.tsx`** (new) — Invite registration form with token from URL
+- **`src/__tests__/register-page.test.tsx`** (new) — 9 tests covering both steps, validation, success/error
+- **`src/__tests__/invite-page.test.tsx`** (new) — 8 tests covering landing page and token registration
+
+### Verification
+- `npm run lint` — No warnings or errors
+- `npm run type-check` — Clean
+- `npm run test:run` — 43/43 passing (26 existing + 17 new)
+- `npm run build` — Compiled successfully, all routes generated
+
+---
+
 ## 2026-04-07 — Module 1 Phase 6: Frontend Application Shell
 
 **Type:** End-of-session self-audit

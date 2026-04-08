@@ -39,6 +39,7 @@ async function refreshAndGetToken(): Promise<string | null> {
 interface FetchOptions {
   body?: unknown;
   params?: Record<string, string>;
+  skipAuth?: boolean;
 }
 
 async function fetchWithAuth<T>(
@@ -47,7 +48,11 @@ async function fetchWithAuth<T>(
   options?: FetchOptions,
   isRetry = false,
 ): Promise<ApiResponse<T>> {
-  const token = isRetry ? await refreshAndGetToken() : await getAuthToken();
+  const token = options?.skipAuth
+    ? null
+    : isRetry
+      ? await refreshAndGetToken()
+      : await getAuthToken();
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -76,7 +81,7 @@ async function fetchWithAuth<T>(
 
   const response = await fetch(fullUrl, fetchInit);
 
-  if (response.status === 401 && !isRetry) {
+  if (response.status === 401 && !isRetry && !options?.skipAuth) {
     return fetchWithAuth<T>(method, url, options, true);
   }
 
@@ -95,17 +100,18 @@ async function fetchWithAuth<T>(
 }
 
 export const api = {
-  get: <T>(url: string, params?: Record<string, string>) =>
-    fetchWithAuth<T>('GET', url, { params }),
+  get: <T>(url: string, params?: Record<string, string>, options?: { skipAuth?: boolean }) =>
+    fetchWithAuth<T>('GET', url, { params, ...options }),
 
-  post: <T>(url: string, body?: unknown) =>
-    fetchWithAuth<T>('POST', url, { body }),
+  post: <T>(url: string, body?: unknown, options?: { skipAuth?: boolean }) =>
+    fetchWithAuth<T>('POST', url, { body, ...options }),
 
-  put: <T>(url: string, body?: unknown) =>
-    fetchWithAuth<T>('PUT', url, { body }),
+  put: <T>(url: string, body?: unknown, options?: { skipAuth?: boolean }) =>
+    fetchWithAuth<T>('PUT', url, { body, ...options }),
 
-  patch: <T>(url: string, body?: unknown) =>
-    fetchWithAuth<T>('PATCH', url, { body }),
+  patch: <T>(url: string, body?: unknown, options?: { skipAuth?: boolean }) =>
+    fetchWithAuth<T>('PATCH', url, { body, ...options }),
 
-  delete: <T>(url: string) => fetchWithAuth<T>('DELETE', url),
+  delete: <T>(url: string, options?: { skipAuth?: boolean }) =>
+    fetchWithAuth<T>('DELETE', url, options),
 };
