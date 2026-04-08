@@ -60,6 +60,24 @@ globs: "**/migrations/**,**/models/**,**/*alembic*"
 - Index foreign keys used in JOIN operations
 - Add composite indexes for common query patterns (e.g., `company_id + status`)
 
+### 7. Multi-table migrations are acceptable for related tables
+
+# --- ADDED 2026-04-08 after Module 1 post-module review ---
+# Reason: Module 1 created all 5 identity tables in a single migration. The migration
+# template shows one-table-per-migration, which could imply this is the only option.
+# Impact: Future modules know that grouping related tables is valid and sometimes preferred.
+
+When tables are tightly coupled and must exist together (e.g., Module 1's identity
+tables: companies → sub_brands → org_codes → users → invites), creating them in a
+**single migration** is preferred over splitting across multiple files. Benefits:
+- All RLS policies are visible in one place for review
+- Circular FK dependencies can be resolved cleanly (deferred constraints)
+- Atomic rollback — all tables or none
+- Simpler migration history for module-level changes
+
+Use separate migrations when: adding a column to an existing table, creating a table
+that doesn't depend on other new tables, or when the migration would exceed ~300 lines.
+
 ## Special Cases: Identity & Company-Level Tables
 
 # --- ADDED 2026-04-06 during pre-build harness review ---

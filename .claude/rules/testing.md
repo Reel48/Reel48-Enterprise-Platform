@@ -232,6 +232,75 @@ When building or modifying the self-registration feature, include these addition
 - A self-registered user lands on the sub-brand they selected during registration
 - Company B's admin CANNOT see or manage Company A's org codes
 
+## External Service Mock Pattern
+
+# --- ADDED 2026-04-08 after Module 1 post-module review ---
+# Reason: Module 1 established a reusable pattern for mocking external services
+# (CognitoService) that future modules should follow for Stripe, SES, S3.
+# Impact: Consistent external service mocking across all modules.
+
+External services (Cognito, Stripe, SES, S3) are mocked in tests via a four-part pattern:
+
+1. **MockXxxService class** in `conftest.py` — Does not call the real API. Records
+   calls in lists (e.g., `created_users`, `disabled_users`) for test assertions.
+   Does NOT call `super().__init__()` since no real client is needed.
+
+2. **Autouse fixture** that registers the mock via `app.dependency_overrides`:
+   ```python
+   @pytest.fixture(autouse=True)
+   def mock_cognito() -> MockCognitoService:
+       mock = MockCognitoService()
+       app.dependency_overrides[get_cognito_service] = lambda: mock
+       yield mock
+       app.dependency_overrides.pop(get_cognito_service, None)
+   ```
+
+3. **Yield the mock** so individual tests can inspect recorded calls:
+   ```python
+   async def test_registration_creates_cognito_user(client, mock_cognito, ...):
+       await client.post("/api/v1/auth/register", ...)
+       assert len(mock_cognito.created_users) == 1
+       assert mock_cognito.created_users[0]["role"] == "employee"
+   ```
+
+4. **Cleanup in teardown** — `dependency_overrides.pop()` prevents leakage between tests.
+
+When adding a new external service (e.g., Stripe in Module 7):
+- Create `MockStripeService` following the same pattern
+- Add an autouse fixture for `get_stripe_service`
+- Both mocks coexist in `conftest.py`
+
+
+## Rate Limit Testing
+
+# --- ADDED 2026-04-08 after Module 1 post-module review ---
+# Reason: The autouse `no_rate_limit` fixture disables rate limiting for all tests,
+# but rate limiting tests need guidance on how to opt out of this.
+# Impact: Tests that verify rate limit behavior know to re-enable it.
+
+An autouse `no_rate_limit` fixture in `conftest.py` disables rate limiting for all
+tests by default (prevents tests from hitting Redis). To test rate limiting behavior:
+
+1. **Do NOT** remove the autouse fixture — it protects all other tests
+2. **Re-override** the dependency in the specific test function:
+   ```python
+   async def test_rate_limiting_returns_429(client):
+       # Re-enable rate limiting for this test
+       app.dependency_overrides[rate_limit_auth] = rate_limit_auth
+       try:
+           for _ in range(6):
+               response = await client.post(
+                   "/api/v1/auth/validate-org-code",
+                   json={"code": "INVALID1"},
+               )
+           assert response.status_code == 429
+       finally:
+           # Restore the no-op override
+           app.dependency_overrides[rate_limit_auth] = lambda: None
+   ```
+3. Rate limit tests require a running Redis instance (or mock `_get_redis_client`)
+
+
 ## Common Mistakes to Avoid
 - ❌ Testing only the happy path
 - ❌ Skipping isolation tests ("RLS will handle it")

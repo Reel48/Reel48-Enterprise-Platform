@@ -366,6 +366,30 @@ the auth middleware sets the PostgreSQL session variable `app.current_company_id
 a string, and the RLS company isolation policy checks for `= ''` as the bypass signal.
 In short: **`None` in Python, `''` in PostgreSQL** — both represent "no company scope."
 
+### TenantContext.user_id vs users.id (created_by FK Pattern)
+
+# --- ADDED 2026-04-08 after Module 1 post-module review ---
+# Reason: Multiple endpoints need to set `created_by` FKs, but TenantContext.user_id
+# is the Cognito 'sub' string, not the local users.id UUID. Without guidance, Claude
+# Code may incorrectly use TenantContext.user_id as a FK value.
+# Impact: Future modules correctly resolve the local user ID for FK columns.
+
+`TenantContext.user_id` is the Cognito `sub` (a string). FK columns like `created_by`
+reference `users.id` (a UUID). These are different values. To bridge this gap, use
+`resolve_current_user_id(db, context.user_id)` from `app.services.helpers`:
+
+```python
+from app.services.helpers import resolve_current_user_id
+
+# In route handler:
+created_by = await resolve_current_user_id(db, context.user_id)
+org_code = await service.generate_code(company_id, created_by)
+```
+
+This helper looks up the User record by `cognito_sub` and returns the `users.id` UUID.
+It raises `NotFoundError` if no matching user exists (which shouldn't happen for
+authenticated users, but provides defense-in-depth).
+
 
 ## Endpoint Pattern
 
@@ -435,6 +459,45 @@ async def create_product(
     )
     return ProductResponse(data=product, errors=[])
 ```
+
+### Company-Scoped Endpoint Guard
+
+# --- ADDED 2026-04-08 after Module 1 post-module review ---
+# Reason: Three route files independently created the same guard pattern to reject
+# reel48_admin requests on tenant-scoped CRUD endpoints. Documenting it prevents
+# inconsistent implementations in future modules.
+# Impact: Future modules use a consistent guard for company-scoped endpoints.
+
+For tenant CRUD endpoints that operate within a single company (not platform-wide),
+add a guard that rejects `reel48_admin` requests with a redirect to platform endpoints.
+The `reel48_admin` role has `company_id = None` in TenantContext, so these endpoints
+cannot determine which company to operate on:
+
+```python
+def _require_company_id(context: TenantContext) -> UUID:
+    """Guard: tenant-scoped write endpoints require company_id from context."""
+    if context.company_id is None:
+        raise ForbiddenError(
+            "Use platform endpoints for cross-company operations"
+        )
+    return context.company_id
+```
+
+This is a **route-level** helper (defined at the top of each route module), not a
+FastAPI dependency. It is called inside route handlers after `get_tenant_context`.
+
+### Delete Endpoint Return Conventions
+
+# --- ADDED 2026-04-08 after Module 1 post-module review ---
+# Reason: Inconsistent HTTP status codes for soft-delete vs hard-delete endpoints
+# across Module 1 (companies/sub_brands returned 200, users returned 204).
+# Impact: Future modules return consistent status codes for delete operations.
+
+- **Soft-delete** (sets `deleted_at` or `is_active = false`): Return **200** with
+  `ApiResponse[T]` containing the deactivated/deleted resource. The caller sees the
+  final state of the record.
+- **Hard-delete** (row permanently removed): Return **204 No Content** with no body.
+  The resource no longer exists, so there is nothing to return.
 
 
 ## Service Layer Pattern

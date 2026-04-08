@@ -169,11 +169,14 @@ class UserService:
         await self.db.refresh(user)
         return user
 
-    async def soft_delete_user(self, user_id: UUID, company_id: UUID) -> None:
+    async def soft_delete_user(self, user_id: UUID, company_id: UUID) -> User:
         user = await self.get_user(user_id, company_id)
         user.deleted_at = datetime.now(UTC)  # type: ignore[assignment]
         await self.db.flush()
+        await self.db.refresh(user)
 
         # Disable Cognito user if service is available
         if self.cognito_service is not None:
             await self.cognito_service.disable_cognito_user(user.cognito_sub)  # type: ignore[arg-type]
+
+        return user

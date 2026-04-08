@@ -30,9 +30,87 @@
 
 ---
 
+## 2026-04-08 — Module 1 Formal Post-Module Harness Review
+
+**Type:** Post-module harness review (deep audit)
+**Author:** Claude Code
+**Scope:** Complete file-by-file review of all Module 1 code for pattern compliance, harness gap identification, rule effectiveness assessment, ADR verification, and harness updates.
+
+### Pattern Consistency Scan Results
+
+**Models (5/5 PASS):** All models use the correct base class (GlobalBase, CompanyBase, TenantBase).
+**Migration (PASS):** Single migration creates all 5 tables with RLS policies in the same file. ENABLE + FORCE on all tables. RESTRICTIVE on sub-brand scoping. Circular FK resolved with deferred constraint. Downgrade reverses cleanly.
+**Endpoints (PASS with 1 fix):** All use TenantContext from JWT. Standard response format. Pagination on all list endpoints. Explicit role checks. Defense-in-depth filtering in all services.
+**Frontend (PASS):** `'use client'` on all Carbon imports. Carbon-first UI. Tailwind for layout only. Correct icon typing and Header className usage. API client transforms snake/camelCase correctly.
+
+### Consistency Fix Applied
+- **`DELETE /users/{user_id}`** changed from 204 (no body) to 200 with `ApiResponse[UserResponse]` — aligns with companies/sub_brands soft-delete pattern.
+- **`UserService.soft_delete_user`** now returns the User object (was `None`).
+- Test updated to assert 200 + response body.
+
+### Harness Gaps Found and Filled
+
+| Gap | File Updated | Section Added |
+|-----|-------------|---------------|
+| No soft-delete vs hard-delete HTTP status convention | `backend/CLAUDE.md`, `.claude/rules/api-endpoints.md` | "Delete Endpoint Return Conventions" |
+| `resolve_current_user_id` helper undocumented | `backend/CLAUDE.md` | "TenantContext.user_id vs users.id" |
+| `_require_company_id` guard pattern undocumented | `backend/CLAUDE.md` | "Company-Scoped Endpoint Guard" |
+| External service mock pattern undocumented | `.claude/rules/testing.md` | "External Service Mock Pattern" |
+| Rate limit test bypass undocumented | `.claude/rules/testing.md` | "Rate Limit Testing" |
+| Multi-table migration guidance missing | `.claude/rules/database-migrations.md` | "Multi-table migrations are acceptable" |
+
+### Rule File Effectiveness Assessment
+
+| Rule File | Activated? | Effective? | Changes Made |
+|-----------|-----------|------------|--------------|
+| `database-migrations.md` | YES | YES | Added multi-table migration note |
+| `api-endpoints.md` | YES | YES | Added soft-delete convention |
+| `authentication.md` | YES | YES | No changes needed |
+| `testing.md` | YES | YES | Added 2 new sections |
+| `carbon-design-system.md` | YES | YES | No changes needed |
+| `s3-storage.md` | NO (expected) | N/A | — |
+| `stripe-invoicing.md` | NO (expected) | N/A | — |
+| `harness-maintenance.md` | YES | YES | No changes needed |
+
+### ADR Verification
+
+All 8 ADRs reviewed. All active. No decisions reversed. No new ADRs needed.
+- ADR-001 through ADR-005, ADR-007, ADR-008: Fully implemented and matching.
+- ADR-006 (Stripe): Not yet implemented (Module 7). Still valid.
+
+### Harness Health Metrics (Updated)
+
+| Metric | Value | Trend |
+|--------|-------|-------|
+| Patterns violated during Module 1 | 4 | Baseline |
+| Harness gaps found (in-session) | 6 | Baseline |
+| Harness gaps found (post-module review) | 6 more | Expected for first module |
+| Total harness rules added (Module 1) | 14 sections | Stabilizing expected |
+| Backend test count | 116 | 8 files |
+| Frontend test count | 43 | 7 files |
+
+### Files Modified in This Review
+- **`backend/app/api/v1/users.py`** — DELETE endpoint: 204→200 with response body
+- **`backend/app/services/user_service.py`** — `soft_delete_user` now returns User
+- **`backend/tests/test_users.py`** — Updated assertion for DELETE response
+- **`backend/CLAUDE.md`** — Added 3 sections: resolve_current_user_id, _require_company_id guard, delete conventions
+- **`.claude/rules/testing.md`** — Added 2 sections: external service mocks, rate limit testing
+- **`.claude/rules/database-migrations.md`** — Added multi-table migration note
+- **`.claude/rules/api-endpoints.md`** — Added soft-delete return convention
+- **`docs/harness-changelog.md`** — This entry
+
+### Readiness for Module 2 (Employee Profiles)
+The harness is ready. Module 2 will depend on:
+- Auth middleware + TenantContext (fully documented)
+- User model + CRUD (consistent patterns, tested)
+- Frontend auth + layout shell (Carbon-first, tested)
+- New patterns documented: resolve_current_user_id, _require_company_id guard, external service mocking, soft-delete conventions
+
+---
+
 ## 2026-04-08 — Module 1 Post-Module Review (Phases 1–7 Complete)
 
-**Type:** Post-module harness review
+**Type:** End-of-session self-audit (Phase 7)
 **Author:** Claude Code
 **Scope:** Full Module 1 (Auth & Multi-Tenancy) review — backend (7 phases), frontend (2 phases), harness updates.
 

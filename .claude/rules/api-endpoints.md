@@ -81,6 +81,16 @@ globs: "**/api/**,**/routes/**,**/endpoints/**"
 - Maximum `per_page`: 100
 - Return total count in the `meta` object
 
+### 7. Delete endpoint return conventions
+
+# --- ADDED 2026-04-08 after Module 1 post-module review ---
+# Reason: Inconsistent DELETE responses across Module 1 endpoints.
+# Impact: All future delete endpoints use consistent status codes.
+
+- **Soft-delete** (sets `deleted_at` or `is_active = false`): Return **200** with
+  `ApiResponse[T]` containing the deactivated resource. The caller sees the final state.
+- **Hard-delete** (row permanently removed): Return **204 No Content** with no body.
+
 ## Common Mistakes to Avoid
 - ❌ Accepting tenant IDs as request parameters
 - ❌ Returning data without the standard wrapper format
