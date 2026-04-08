@@ -108,6 +108,37 @@ For platform admin endpoints that need a real User record (e.g., to set `approve
 Use `reel48_admin_user_token` (not `reel48_admin_token`) when the endpoint needs to
 resolve the admin's local User ID.
 
+### Role-Specific User + Token Fixtures
+
+# --- ADDED 2026-04-08 during Module 4 Phase 3 ---
+# Reason: Module 4 introduced role-based visibility (managers see all orders,
+# employees see own). Testing this requires User records with matching JWT tokens
+# for each role. Several "token-only" fixtures existed without backing User records.
+# Impact: Future modules use the correct fixtures when testing role-based endpoints.
+
+Many test scenarios require both a **User record** and a **matching JWT token** (where
+the token's `cognito_sub` maps to the User). Token-only fixtures (e.g.,
+`company_a_brand_a1_manager_token`) generate random `cognito_sub` values that don't
+match any User — these are fine for auth/403 tests but fail when endpoints call
+`resolve_current_user_id`.
+
+**User + Token fixture pairs (cognito_sub matches):**
+- `user_a1_employee` + `user_a1_employee_token` — Employee in Company A, Brand A1
+- `user_a1_admin` + `user_a1_admin_token` — Sub-brand admin in Company A, Brand A1
+- `user_a1_manager` + `user_a1_manager_token` — Regional manager in Company A, Brand A1
+- `user_a_corporate_admin` + `user_a_corporate_admin_token` — Corporate admin in Company A (sub_brand_id=None)
+- `user_b1_employee` — Employee in Company B, Brand B1 (token created inline via `create_test_token`)
+- `reel48_admin_user` + `reel48_admin_user_token` — Platform admin (no company_id in JWT)
+
+**Token-only fixtures (no matching User record):**
+- `reel48_admin_token`, `company_a_corporate_admin_token`, `company_a_brand_a1_admin_token`,
+  `company_a_brand_a1_employee_token`, `company_a_brand_a2_employee_token`,
+  `company_b_employee_token`, `company_a_brand_a2_admin_token`,
+  `company_b_corporate_admin_token`, `company_a_brand_a1_manager_token`
+
+Use token-only fixtures for permission rejection tests (403 checks). Use User + Token
+pairs when the endpoint resolves the user's local ID.
+
 ## Backend Test Conventions (pytest)
 
 - **Naming:** `test_{action}_{condition}_{expected_result}`

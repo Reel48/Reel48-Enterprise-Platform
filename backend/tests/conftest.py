@@ -413,6 +413,35 @@ def company_a_brand_a1_manager_token(company_a) -> str:
 
 
 @pytest.fixture
+async def user_a1_manager(admin_db_session: AsyncSession, company_a):
+    """A regional_manager user in Company A, Brand A1."""
+    company, brand_a1, _brand_a2 = company_a
+    user = User(
+        company_id=company.id,
+        sub_brand_id=brand_a1.id,
+        cognito_sub=str(uuid4()),
+        email=f"manager-a1-{uuid4().hex[:6]}@companya.com",
+        full_name="Manager A1",
+        role="regional_manager",
+    )
+    admin_db_session.add(user)
+    await admin_db_session.flush()
+    return user
+
+
+@pytest.fixture
+def user_a1_manager_token(user_a1_manager, company_a) -> str:
+    """JWT for the user_a1_manager fixture (cognito_sub matches the User record)."""
+    company, brand_a1, _a2 = company_a
+    return create_test_token(
+        user_id=user_a1_manager.cognito_sub,
+        company_id=str(company.id),
+        sub_brand_id=str(brand_a1.id),
+        role="regional_manager",
+    )
+
+
+@pytest.fixture
 async def reel48_company(admin_db_session: AsyncSession):
     """Internal 'Reel48 Operations' company for platform admin users."""
     company = Company(name="Reel48 Operations", slug="reel48-ops", is_active=True)

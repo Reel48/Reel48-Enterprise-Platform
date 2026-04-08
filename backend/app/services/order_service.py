@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ForbiddenError, NotFoundError, ValidationError
@@ -107,6 +107,93 @@ class OrderService:
             await self.db.refresh(li)
 
         return order, line_items
+
+    # ------------------------------------------------------------------
+    # Read methods (Phase 3)
+    # ------------------------------------------------------------------
+
+    async def list_orders(
+        self,
+        company_id: UUID,
+        sub_brand_id: UUID | None,
+        page: int,
+        per_page: int,
+        status_filter: str | None = None,
+        catalog_id_filter: UUID | None = None,
+    ) -> tuple[list[Order], int]:
+        """List orders visible to managers/admins within their tenant scope."""
+        query = select(Order).where(
+            Order.company_id == company_id,
+        )
+        if sub_brand_id is not None:
+            query = query.where(Order.sub_brand_id == sub_brand_id)
+        if status_filter is not None:
+            query = query.where(Order.status == status_filter)
+        if catalog_id_filter is not None:
+            query = query.where(Order.catalog_id == catalog_id_filter)
+
+        total = await self.db.scalar(
+            select(func.count()).select_from(query.subquery())
+        )
+        query = query.order_by(Order.created_at.desc())
+        query = query.offset((page - 1) * per_page).limit(per_page)
+        result = await self.db.execute(query)
+        return list(result.scalars().all()), total or 0
+
+    async def list_my_orders(
+        self,
+        user_id: UUID,
+        company_id: UUID,
+        page: int,
+        per_page: int,
+        status_filter: str | None = None,
+    ) -> tuple[list[Order], int]:
+        """List orders placed by a specific user."""
+        query = select(Order).where(
+            Order.company_id == company_id,
+            Order.user_id == user_id,
+        )
+        if status_filter is not None:
+            query = query.where(Order.status == status_filter)
+
+        total = await self.db.scalar(
+            select(func.count()).select_from(query.subquery())
+        )
+        query = query.order_by(Order.created_at.desc())
+        query = query.offset((page - 1) * per_page).limit(per_page)
+        result = await self.db.execute(query)
+        return list(result.scalars().all()), total or 0
+
+    async def get_order(
+        self,
+        order_id: UUID,
+        company_id: UUID | None = None,
+    ) -> Order:
+        """Fetch a single order by ID with optional company_id filter."""
+        query = select(Order).where(Order.id == order_id)
+        if company_id is not None:
+            query = query.where(Order.company_id == company_id)
+        result = await self.db.execute(query)
+        order = result.scalar_one_or_none()
+        if order is None:
+            raise NotFoundError("Order", str(order_id))
+        return order
+
+    async def get_order_line_items(
+        self,
+        order_id: UUID,
+    ) -> list[OrderLineItem]:
+        """Get all line items for an order, ordered by created_at."""
+        result = await self.db.execute(
+            select(OrderLineItem)
+            .where(OrderLineItem.order_id == order_id)
+            .order_by(OrderLineItem.created_at)
+        )
+        return list(result.scalars().all())
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
 
     async def _validate_catalog(self, catalog_id: UUID, company_id: UUID) -> Catalog:
         """Validate catalog exists, belongs to company, is active, and buying window is open."""

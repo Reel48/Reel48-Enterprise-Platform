@@ -30,6 +30,33 @@
 
 ---
 
+## 2026-04-08 — Module 4 Phase 3 End-of-Session Self-Audit
+
+**Type:** End-of-session self-audit
+**Module:** Module 4 — Ordering Flow (Phase 3: Order List & Get Endpoints)
+
+### Self-Audit Checklist
+- [x] **New pattern?** Yes — ownership-based visibility for orders (managers see all in scope, employees see only own). This differs from the status-based visibility used by products/catalogs. Also introduced the `/my/` explicit endpoint pattern. Both documented in `backend/CLAUDE.md`.
+- [x] **Pattern violated?** No — followed existing patterns for pagination, defense-in-depth filtering, and standard response format.
+- [x] **New decision?** No — the role-based visibility split was specified in the prompt and aligns with the auth access matrix.
+- [ ] **Reusable task?** No — standard CRUD list/get pattern.
+- [x] **Changelog updated?** This entry.
+
+### Harness Files Updated
+- **`backend/CLAUDE.md`** — Added "Module 4 Table Schemas" section documenting `orders` and `order_line_items` tables (column definitions, RLS policies, snapshot pattern). Added "Order Retrieval: Role-Based Visibility" section documenting the ownership-based visibility pattern, the `/my/` endpoint pattern, and the role-to-endpoint access matrix.
+- **`.claude/rules/testing.md`** — Added "Role-Specific User + Token Fixtures" section listing all User+Token fixture pairs vs token-only fixtures, explaining when to use each. Documents the new `user_a1_manager` + `user_a1_manager_token` fixtures.
+
+### New Fixtures Added
+- `user_a1_manager` + `user_a1_manager_token` in `conftest.py` — regional_manager User record with matching JWT. Previously only the token fixture existed without a backing User record.
+
+### Session Metrics
+- **Tests written:** 14 new (5 functional, 6 role-visibility, 3 isolation)
+- **Total order tests:** 36 passed (22 Phase 2 + 14 Phase 3)
+- **Mistakes caught by harness:** 0
+- **Gaps found:** 2 (Module 4 table schemas not documented, role-based list visibility pattern not documented — both now fixed)
+
+---
+
 ## 2026-04-08 — Module 3 Phase 3 End-of-Session Self-Audit
 
 **Type:** End-of-session self-audit

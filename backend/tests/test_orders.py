@@ -1,4 +1,4 @@
-"""Tests for Order Placement endpoint (Module 4 Phase 2)."""
+"""Tests for Order endpoints (Module 4 Phases 2-3)."""
 
 import re
 from datetime import UTC, datetime, timedelta
@@ -859,4 +859,514 @@ class TestCreateOrderIsolation:
             headers={"Authorization": f"Bearer {token_b}"},
         )
         # Company B's catalog query won't find Company A's catalog
+        assert response.status_code == 404
+
+
+# ===========================================================================
+# Phase 3: List & Get Order Endpoints
+# ===========================================================================
+
+
+async def _place_test_order(
+    client: AsyncClient,
+    token: str,
+    catalog_id,
+    product_id,
+    quantity: int = 1,
+) -> dict:
+    """Place a test order and return the response JSON data."""
+    response = await client.post(
+        "/api/v1/orders/",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "catalog_id": str(catalog_id),
+            "line_items": [{"product_id": str(product_id), "quantity": quantity}],
+        },
+    )
+    assert response.status_code == 201
+    return response.json()["data"]
+
+
+# ---------------------------------------------------------------------------
+# Functional Tests — List & Get
+# ---------------------------------------------------------------------------
+
+
+class TestListOrdersFunctional:
+    async def test_list_orders_returns_paginated_results(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_employee,
+        user_a1_employee_token: str,
+        company_a,
+    ):
+        """GET /orders/ returns data + meta with total count."""
+        company, brand_a1, _a2 = company_a
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_employee.id
+        )
+        await _place_test_order(
+            client, user_a1_employee_token, catalog.id, products[0].id
+        )
+        await _place_test_order(
+            client, user_a1_employee_token, catalog.id, products[1].id
+        )
+
+        response = await client.get(
+            "/api/v1/orders/",
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body["data"]) == 2
+        assert body["meta"]["total"] == 2
+        assert body["meta"]["page"] == 1
+        assert body["meta"]["per_page"] == 20
+
+    async def test_get_order_returns_detail_with_line_items(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_employee,
+        user_a1_employee_token: str,
+        company_a,
+    ):
+        """GET /orders/{id} returns order with nested line_items."""
+        company, brand_a1, _a2 = company_a
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_employee.id
+        )
+        order_data = await _place_test_order(
+            client, user_a1_employee_token, catalog.id, products[0].id, quantity=3
+        )
+
+        response = await client.get(
+            f"/api/v1/orders/{order_data['id']}",
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["id"] == order_data["id"]
+        assert len(data["line_items"]) == 1
+        assert data["line_items"][0]["quantity"] == 3
+
+    async def test_list_orders_filter_by_status(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_employee,
+        user_a1_employee_token: str,
+        company_a,
+    ):
+        """?status=pending returns only pending orders."""
+        company, brand_a1, _a2 = company_a
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_employee.id
+        )
+        await _place_test_order(
+            client, user_a1_employee_token, catalog.id, products[0].id
+        )
+
+        response = await client.get(
+            "/api/v1/orders/?status=pending",
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+        assert response.status_code == 200
+        assert response.json()["meta"]["total"] >= 1
+        for order in response.json()["data"]:
+            assert order["status"] == "pending"
+
+        # Non-existent status returns zero
+        response2 = await client.get(
+            "/api/v1/orders/?status=shipped",
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+        assert response2.status_code == 200
+        assert response2.json()["meta"]["total"] == 0
+
+    async def test_list_orders_filter_by_catalog_id(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_employee,
+        user_a1_employee_token: str,
+        user_a1_manager,
+        user_a1_manager_token: str,
+        company_a,
+    ):
+        """?catalog_id=... returns only that catalog's orders (manager view)."""
+        company, brand_a1, _a2 = company_a
+        cat1, prods1, _ = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_employee.id,
+            num_products=1,
+        )
+        cat2, prods2, _ = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_employee.id,
+            num_products=1,
+        )
+        await _place_test_order(
+            client, user_a1_employee_token, cat1.id, prods1[0].id
+        )
+        await _place_test_order(
+            client, user_a1_employee_token, cat2.id, prods2[0].id
+        )
+
+        response = await client.get(
+            f"/api/v1/orders/?catalog_id={cat1.id}",
+            headers={"Authorization": f"Bearer {user_a1_manager_token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert len(data) == 1
+        assert data[0]["catalog_id"] == str(cat1.id)
+
+    async def test_list_my_orders_returns_only_own_orders(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_employee,
+        user_a1_employee_token: str,
+        user_a1_manager,
+        user_a1_manager_token: str,
+        company_a,
+    ):
+        """/my/ endpoint always returns only the authenticated user's orders."""
+        company, brand_a1, _a2 = company_a
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_employee.id
+        )
+        # Employee places an order
+        await _place_test_order(
+            client, user_a1_employee_token, catalog.id, products[0].id
+        )
+
+        # Manager calls /my/ — should see 0 (they didn't place any orders)
+        response = await client.get(
+            "/api/v1/orders/my/",
+            headers={"Authorization": f"Bearer {user_a1_manager_token}"},
+        )
+        assert response.status_code == 200
+        assert response.json()["meta"]["total"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Role-Based Visibility Tests
+# ---------------------------------------------------------------------------
+
+
+class TestListOrdersRoleVisibility:
+    async def test_list_orders_employee_sees_only_own(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_employee,
+        user_a1_employee_token: str,
+        company_a,
+    ):
+        """Employee sees only orders they placed, not other employees' orders."""
+        company, brand_a1, _a2 = company_a
+
+        # Create a second employee in the same sub-brand
+        employee2 = await _create_user(
+            admin_db_session, company.id, brand_a1.id, role="employee"
+        )
+        token_emp2 = create_test_token(
+            user_id=employee2.cognito_sub,
+            company_id=str(company.id),
+            sub_brand_id=str(brand_a1.id),
+            role="employee",
+        )
+
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_employee.id
+        )
+
+        # Employee 1 places an order
+        await _place_test_order(
+            client, user_a1_employee_token, catalog.id, products[0].id
+        )
+        # Employee 2 places an order
+        await _place_test_order(client, token_emp2, catalog.id, products[1].id)
+
+        # Employee 1 sees only their own order
+        response = await client.get(
+            "/api/v1/orders/",
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert len(data) == 1
+        assert data[0]["user_id"] == str(user_a1_employee.id)
+
+    async def test_get_order_employee_can_see_own(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_employee,
+        user_a1_employee_token: str,
+        company_a,
+    ):
+        """Employee can GET their own order detail."""
+        company, brand_a1, _a2 = company_a
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_employee.id
+        )
+        order_data = await _place_test_order(
+            client, user_a1_employee_token, catalog.id, products[0].id
+        )
+
+        response = await client.get(
+            f"/api/v1/orders/{order_data['id']}",
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+        assert response.status_code == 200
+        assert response.json()["data"]["id"] == order_data["id"]
+
+    async def test_get_order_employee_cannot_see_others(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_employee,
+        user_a1_employee_token: str,
+        company_a,
+    ):
+        """Employee gets 404 for another employee's order."""
+        company, brand_a1, _a2 = company_a
+
+        # Create a second employee who places the order
+        employee2 = await _create_user(
+            admin_db_session, company.id, brand_a1.id, role="employee"
+        )
+        token_emp2 = create_test_token(
+            user_id=employee2.cognito_sub,
+            company_id=str(company.id),
+            sub_brand_id=str(brand_a1.id),
+            role="employee",
+        )
+
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_employee.id
+        )
+        order_data = await _place_test_order(
+            client, token_emp2, catalog.id, products[0].id
+        )
+
+        # Employee 1 tries to see Employee 2's order → 404
+        response = await client.get(
+            f"/api/v1/orders/{order_data['id']}",
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+        assert response.status_code == 404
+
+    async def test_list_orders_manager_sees_sub_brand(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_employee,
+        user_a1_employee_token: str,
+        user_a1_manager,
+        user_a1_manager_token: str,
+        company_a,
+    ):
+        """Regional manager sees all orders in their sub-brand."""
+        company, brand_a1, _a2 = company_a
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_employee.id
+        )
+        await _place_test_order(
+            client, user_a1_employee_token, catalog.id, products[0].id
+        )
+
+        response = await client.get(
+            "/api/v1/orders/",
+            headers={"Authorization": f"Bearer {user_a1_manager_token}"},
+        )
+        assert response.status_code == 200
+        assert response.json()["meta"]["total"] >= 1
+
+    async def test_list_orders_sub_brand_admin_sees_sub_brand(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_employee,
+        user_a1_employee_token: str,
+        user_a1_admin,
+        user_a1_admin_token: str,
+        company_a,
+    ):
+        """Sub-brand admin sees all orders in their sub-brand."""
+        company, brand_a1, _a2 = company_a
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_employee.id
+        )
+        await _place_test_order(
+            client, user_a1_employee_token, catalog.id, products[0].id
+        )
+
+        response = await client.get(
+            "/api/v1/orders/",
+            headers={"Authorization": f"Bearer {user_a1_admin_token}"},
+        )
+        assert response.status_code == 200
+        assert response.json()["meta"]["total"] >= 1
+
+    async def test_list_orders_corporate_admin_sees_all_sub_brands(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_employee,
+        user_a1_employee_token: str,
+        user_a_corporate_admin,
+        user_a_corporate_admin_token: str,
+        company_a,
+    ):
+        """Corporate admin sees orders across all sub-brands in their company."""
+        company, brand_a1, brand_a2 = company_a
+
+        # Create catalog + order in Brand A1
+        cat1, prods1, _ = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_employee.id,
+            num_products=1,
+        )
+        await _place_test_order(
+            client, user_a1_employee_token, cat1.id, prods1[0].id
+        )
+
+        # Create employee + catalog + order in Brand A2
+        emp_a2 = await _create_user(
+            admin_db_session, company.id, brand_a2.id, role="employee"
+        )
+        token_a2 = create_test_token(
+            user_id=emp_a2.cognito_sub,
+            company_id=str(company.id),
+            sub_brand_id=str(brand_a2.id),
+            role="employee",
+        )
+        cat2, prods2, _ = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a2.id, emp_a2.id,
+            num_products=1,
+        )
+        await _place_test_order(client, token_a2, cat2.id, prods2[0].id)
+
+        # Corporate admin sees both
+        response = await client.get(
+            "/api/v1/orders/",
+            headers={"Authorization": f"Bearer {user_a_corporate_admin_token}"},
+        )
+        assert response.status_code == 200
+        assert response.json()["meta"]["total"] >= 2
+
+
+# ---------------------------------------------------------------------------
+# Isolation Tests — List & Get
+# ---------------------------------------------------------------------------
+
+
+class TestListOrdersIsolation:
+    async def test_list_orders_company_b_cannot_see_company_a(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_employee,
+        user_a1_employee_token: str,
+        company_a,
+        company_b,
+        user_b1_employee,
+    ):
+        """Company B sees zero orders when Company A has orders."""
+        company_a_obj, brand_a1, _a2 = company_a
+        company_b_obj, brand_b1 = company_b
+
+        # Company A places an order
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company_a_obj.id, brand_a1.id, user_a1_employee.id
+        )
+        await _place_test_order(
+            client, user_a1_employee_token, catalog.id, products[0].id
+        )
+
+        # Company B queries orders
+        token_b = create_test_token(
+            user_id=user_b1_employee.cognito_sub,
+            company_id=str(company_b_obj.id),
+            sub_brand_id=str(brand_b1.id),
+            role="employee",
+        )
+        response = await client.get(
+            "/api/v1/orders/",
+            headers={"Authorization": f"Bearer {token_b}"},
+        )
+        assert response.status_code == 200
+        assert response.json()["meta"]["total"] == 0
+
+    async def test_list_orders_brand_a2_cannot_see_brand_a1(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_employee,
+        user_a1_employee_token: str,
+        company_a,
+    ):
+        """Brand A2 admin cannot see Brand A1's orders."""
+        company, brand_a1, brand_a2 = company_a
+
+        # Brand A1 employee places an order
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_employee.id
+        )
+        await _place_test_order(
+            client, user_a1_employee_token, catalog.id, products[0].id
+        )
+
+        # Brand A2 admin queries — should see 0 Brand A1 orders
+        a2_admin = await _create_user(
+            admin_db_session, company.id, brand_a2.id, role="sub_brand_admin"
+        )
+        token_a2_admin = create_test_token(
+            user_id=a2_admin.cognito_sub,
+            company_id=str(company.id),
+            sub_brand_id=str(brand_a2.id),
+            role="sub_brand_admin",
+        )
+        response = await client.get(
+            "/api/v1/orders/",
+            headers={"Authorization": f"Bearer {token_a2_admin}"},
+        )
+        assert response.status_code == 200
+        assert response.json()["meta"]["total"] == 0
+
+    async def test_get_order_company_b_returns_404(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_employee,
+        user_a1_employee_token: str,
+        company_a,
+        company_b,
+        user_b1_employee,
+    ):
+        """Company B gets 404 when trying to GET Company A's order."""
+        company_a_obj, brand_a1, _a2 = company_a
+        company_b_obj, brand_b1 = company_b
+
+        # Company A places an order
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company_a_obj.id, brand_a1.id, user_a1_employee.id
+        )
+        order_data = await _place_test_order(
+            client, user_a1_employee_token, catalog.id, products[0].id
+        )
+
+        # Company B tries to GET it
+        token_b = create_test_token(
+            user_id=user_b1_employee.cognito_sub,
+            company_id=str(company_b_obj.id),
+            sub_brand_id=str(brand_b1.id),
+            role="employee",
+        )
+        response = await client.get(
+            f"/api/v1/orders/{order_data['id']}",
+            headers={"Authorization": f"Bearer {token_b}"},
+        )
         assert response.status_code == 404
