@@ -30,6 +30,30 @@
 
 ---
 
+## 2026-04-08 — Module 3 Phase 3 End-of-Session Self-Audit
+
+**Type:** End-of-session self-audit
+**Module:** Module 3 — Product Catalog & Brand Management (Phase 3: Catalogs CRUD + Catalog-Product Association)
+
+### Self-Audit Checklist
+- [x] **New pattern?** Yes — catalog slug auto-generation with collision handling, submit-guard (requires products), buying window validation tied to payment_model. Added to `backend/CLAUDE.md`.
+- [x] **Pattern violated?** No — followed the products.py endpoint, service, and schema patterns exactly.
+- [x] **New decision?** No — payment_model and buying window behavior were already specified in root CLAUDE.md.
+- [x] **Missing guidance?** Catalog status lifecycle and slug generation were not documented. Added to `backend/CLAUDE.md`.
+- [ ] **Reusable task?** No — the catalog CRUD pattern is the same as the product CRUD pattern.
+- [x] **Changelog updated?** This entry.
+
+### Harness Files Updated
+- **`backend/CLAUDE.md`** — Added "Catalog Status Lifecycle & Visibility" section documenting status transitions, edit/delete restrictions, submit guard, buying window validation, role-based visibility, and slug auto-generation pattern.
+
+### Session Metrics
+- **Tests written:** 28 (8 create, 4 list, 2 get, 2 update, 2 submit, 1 delete, 6 catalog-products, 3 isolation)
+- **Total test suite:** 193 passed, 0 failed
+- **Mistakes caught by harness:** 0 (patterns from Phase 2 carried over cleanly)
+- **Gaps found:** 1 (catalog lifecycle not documented — now fixed)
+
+---
+
 ## 2026-04-08 — Module 3 Phase 2 End-of-Session Self-Audit
 
 **Type:** End-of-session self-audit
