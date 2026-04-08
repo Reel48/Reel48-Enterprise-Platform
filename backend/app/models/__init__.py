@@ -1,7 +1,11 @@
 from app.models.base import Base, CompanyBase, GlobalBase, TenantBase
+from app.models.catalog import Catalog
+from app.models.catalog_product import CatalogProduct
 from app.models.company import Company
+from app.models.employee_profile import EmployeeProfile
 from app.models.invite import Invite
 from app.models.org_code import OrgCode
+from app.models.product import Product
 from app.models.sub_brand import SubBrand
 from app.models.user import User
 
@@ -15,4 +19,8 @@ __all__ = [
     "User",
     "Invite",
     "OrgCode",
+    "EmployeeProfile",
+    "Product",
+    "Catalog",
+    "CatalogProduct",
 ]

@@ -135,14 +135,15 @@ async def update_user(
     return ApiResponse(data=UserResponse.model_validate(updated))
 
 
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{user_id}", response_model=ApiResponse[UserResponse])
 async def delete_user(
     user_id: UUID,
     context: TenantContext = Depends(require_admin),
     db: AsyncSession = Depends(get_db_session),
     cognito_service: CognitoService = Depends(get_cognito_service),
-) -> None:
+) -> ApiResponse[UserResponse]:
     if context.company_id is None:
         raise ForbiddenError("Use platform endpoints for cross-company user deletion")
     service = UserService(db, cognito_service)
-    await service.soft_delete_user(user_id, context.company_id)
+    user = await service.soft_delete_user(user_id, context.company_id)
+    return ApiResponse(data=UserResponse.model_validate(user))

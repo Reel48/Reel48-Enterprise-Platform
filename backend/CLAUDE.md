@@ -366,6 +366,30 @@ the auth middleware sets the PostgreSQL session variable `app.current_company_id
 a string, and the RLS company isolation policy checks for `= ''` as the bypass signal.
 In short: **`None` in Python, `''` in PostgreSQL** — both represent "no company scope."
 
+### TenantContext.user_id vs users.id (created_by FK Pattern)
+
+# --- ADDED 2026-04-08 after Module 1 post-module review ---
+# Reason: Multiple endpoints need to set `created_by` FKs, but TenantContext.user_id
+# is the Cognito 'sub' string, not the local users.id UUID. Without guidance, Claude
+# Code may incorrectly use TenantContext.user_id as a FK value.
+# Impact: Future modules correctly resolve the local user ID for FK columns.
+
+`TenantContext.user_id` is the Cognito `sub` (a string). FK columns like `created_by`
+reference `users.id` (a UUID). These are different values. To bridge this gap, use
+`resolve_current_user_id(db, context.user_id)` from `app.services.helpers`:
+
+```python
+from app.services.helpers import resolve_current_user_id
+
+# In route handler:
+created_by = await resolve_current_user_id(db, context.user_id)
+org_code = await service.generate_code(company_id, created_by)
+```
+
+This helper looks up the User record by `cognito_sub` and returns the `users.id` UUID.
+It raises `NotFoundError` if no matching user exists (which shouldn't happen for
+authenticated users, but provides defense-in-depth).
+
 
 ## Endpoint Pattern
 
@@ -435,6 +459,100 @@ async def create_product(
     )
     return ProductResponse(data=product, errors=[])
 ```
+
+### Company-Scoped Endpoint Guard
+
+# --- ADDED 2026-04-08 after Module 1 post-module review ---
+# Reason: Three route files independently created the same guard pattern to reject
+# reel48_admin requests on tenant-scoped CRUD endpoints. Documenting it prevents
+# inconsistent implementations in future modules.
+# Impact: Future modules use a consistent guard for company-scoped endpoints.
+
+For tenant CRUD endpoints that operate within a single company (not platform-wide),
+add a guard that rejects `reel48_admin` requests with a redirect to platform endpoints.
+The `reel48_admin` role has `company_id = None` in TenantContext, so these endpoints
+cannot determine which company to operate on:
+
+```python
+def _require_company_id(context: TenantContext) -> UUID:
+    """Guard: tenant-scoped write endpoints require company_id from context."""
+    if context.company_id is None:
+        raise ForbiddenError(
+            "Use platform endpoints for cross-company operations"
+        )
+    return context.company_id
+```
+
+This is a **route-level** helper (defined at the top of each route module), not a
+FastAPI dependency. It is called inside route handlers after `get_tenant_context`.
+
+### Delete Endpoint Return Conventions
+
+# --- ADDED 2026-04-08 after Module 1 post-module review ---
+# Reason: Inconsistent HTTP status codes for soft-delete vs hard-delete endpoints
+# across Module 1 (companies/sub_brands returned 200, users returned 204).
+# Impact: Future modules return consistent status codes for delete operations.
+
+- **Soft-delete** (sets `deleted_at` or `is_active = false`): Return **200** with
+  `ApiResponse[T]` containing the deactivated/deleted resource. The caller sees the
+  final state of the record.
+- **Hard-delete** (row permanently removed): Return **204 No Content** with no body.
+  The resource no longer exists, so there is nothing to return.
+
+
+### PUT /me Upsert Pattern for Owned Resources
+
+# --- ADDED 2026-04-08 after Module 2 Phase 1 ---
+# Reason: Employee profiles introduced a "one resource per user" pattern where
+# the client shouldn't need to check existence before creating/updating.
+# Impact: Future modules with per-user resources (preferences, settings) follow
+# the same upsert pattern.
+
+When a resource has a 1:1 relationship with the authenticated user (e.g., employee
+profile, user preferences), use a `PUT /me` upsert endpoint instead of separate
+POST + PUT:
+
+```python
+@router.put("/me", response_model=ApiResponse[ResourceResponse])
+async def upsert_my_resource(
+    data: ResourceCreate,  # NOT ResourceUpdate — employees cannot set admin-only fields
+    context: TenantContext = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db_session),
+):
+    user_id = await resolve_current_user_id(db, context.user_id)
+    service = ResourceService(db)
+    resource = await service.upsert(user_id, context.company_id, context.sub_brand_id, data)
+    return ApiResponse(data=ResourceResponse.model_validate(resource))
+```
+
+**Key rules:**
+- Use `ResourceCreate` schema (not `Update`) so employees cannot set admin-only fields
+  (e.g., `onboarding_complete`). Admin-only updates go through `PATCH /{id}`.
+- The service checks for an existing record by `user_id`; creates if not found, updates
+  if found. Always `flush()` + `refresh()` before returning.
+- Returns 200 in both create and update cases (upsert is idempotent).
+
+### Trailing Slash Behavior in Tests
+
+# --- ADDED 2026-04-08 after Module 2 Phase 1 ---
+# Reason: FastAPI redirects `/profiles` to `/profiles/` with a 307, causing tests
+# that omit the trailing slash to fail with unexpected 307 responses.
+# Impact: All future tests use trailing slashes on list endpoint URLs.
+
+FastAPI's default `redirect_slashes=True` causes `GET /api/v1/profiles` to return
+a **307 Temporary Redirect** to `/api/v1/profiles/`. In tests, always include the
+trailing slash for list endpoints:
+
+```python
+# ✅ CORRECT — trailing slash for list endpoints
+await client.get("/api/v1/profiles/", headers=...)
+
+# ❌ WRONG — causes 307 redirect in tests
+await client.get("/api/v1/profiles", headers=...)
+```
+
+This applies to all `router.get("/")` list endpoints. Individual resource endpoints
+(`/profiles/me`, `/profiles/{id}`) are not affected.
 
 
 ## Service Layer Pattern
@@ -672,6 +790,7 @@ class TenantBase(Base):
 | `org_codes` | `CompanyBase` | Company-level codes, no sub-brand scoping |
 | `invites` | `CompanyBase` | Invite targets a sub-brand, but the FK is explicit (`target_sub_brand_id`), not the TenantBase `sub_brand_id` |
 | `users` | `TenantBase` | Scoped to company + sub-brand |
+| `employee_profiles` | `TenantBase` | Scoped to company + sub-brand (one per user) |
 | `products` | `TenantBase` | Scoped to company + sub-brand |
 | `orders` | `TenantBase` | Scoped to company + sub-brand |
 | `invoices` | `TenantBase` | Scoped to company + sub-brand |
@@ -842,6 +961,111 @@ RLS: Company isolation only (no `sub_brand_id` — org codes are per-company).
 Only one active code per company at a time. Generating a new code deactivates the previous.
 Public lookup (unauthenticated `POST /api/v1/auth/register`) queries this table via direct
 `WHERE code = :code` outside the RLS-scoped session. See ADR-007.
+
+
+## Module 2 Table Schema
+
+### `employee_profiles` Table (TenantBase)
+# --- ADDED 2026-04-08 during Module 2 Phase 1 ---
+# Reason: Module 2 adds the employee_profiles table. Documenting it here for
+# implementation consistency with Module 1 table schemas.
+# Impact: Future modules know the employee_profiles shape for FK references.
+```
+id                      UUID        PRIMARY KEY
+company_id              UUID        NOT NULL (FK → companies, indexed)
+sub_brand_id            UUID        NULL (FK → sub_brands, indexed)
+user_id                 UUID        NOT NULL UNIQUE (FK → users)
+department              VARCHAR(255) NULL
+job_title               VARCHAR(255) NULL
+location                VARCHAR(255) NULL       -- office/site name
+shirt_size              VARCHAR(10)  NULL       -- XS, S, M, L, XL, 2XL, 3XL
+pant_size               VARCHAR(20)  NULL
+shoe_size               VARCHAR(20)  NULL
+delivery_address_line1  VARCHAR(255) NULL
+delivery_address_line2  VARCHAR(255) NULL
+delivery_city           VARCHAR(100) NULL
+delivery_state          VARCHAR(100) NULL
+delivery_zip            VARCHAR(20)  NULL
+delivery_country        VARCHAR(100) NULL
+notes                   TEXT         NULL
+profile_photo_url       TEXT         NULL       -- S3 pre-signed URL (upload TBD)
+onboarding_complete     BOOLEAN      NOT NULL DEFAULT false
+deleted_at              TIMESTAMP    NULL       -- soft delete
+created_at              TIMESTAMP    NOT NULL
+updated_at              TIMESTAMP    NOT NULL
+```
+RLS: Standard company isolation (PERMISSIVE) + sub-brand scoping (RESTRICTIVE).
+One profile per user (UNIQUE on `user_id`). Created via `PUT /profiles/me` upsert.
+Composite index on `(company_id, department)` for common query pattern.
+
+
+## Module 3 Table Schemas
+
+### `products` Table (TenantBase)
+# --- ADDED 2026-04-08 during Module 3 Phase 1 ---
+# Reason: Module 3 adds product catalog tables. Documenting them here for
+# implementation consistency and FK references in future modules.
+# Impact: Future modules (Ordering, Invoicing) know the products/catalogs shape.
+```
+id                      UUID        PRIMARY KEY
+company_id              UUID        NOT NULL (FK → companies, indexed)
+sub_brand_id            UUID        NULL (FK → sub_brands, indexed)
+name                    VARCHAR(255) NOT NULL
+description             TEXT         NULL
+sku                     VARCHAR(100) NOT NULL
+unit_price              NUMERIC(10,2) NOT NULL, CHECK >= 0
+sizes                   JSONB        NOT NULL DEFAULT '[]'
+decoration_options      JSONB        NOT NULL DEFAULT '[]'
+image_urls              JSONB        NOT NULL DEFAULT '[]'
+status                  VARCHAR(20)  NOT NULL DEFAULT 'draft'  -- draft|submitted|approved|active|archived
+approved_by             UUID         NULL (FK → users)
+approved_at             TIMESTAMP    NULL
+created_by              UUID         NOT NULL (FK → users)
+deleted_at              TIMESTAMP    NULL       -- soft delete
+created_at              TIMESTAMP    NOT NULL
+updated_at              TIMESTAMP    NOT NULL
+```
+RLS: Standard company isolation (PERMISSIVE) + sub-brand scoping (RESTRICTIVE).
+Partial unique index: `(company_id, sku) WHERE deleted_at IS NULL`.
+Composite index: `(company_id, status)`.
+
+### `catalogs` Table (TenantBase)
+```
+id                      UUID        PRIMARY KEY
+company_id              UUID        NOT NULL (FK → companies, indexed)
+sub_brand_id            UUID        NULL (FK → sub_brands, indexed)
+name                    VARCHAR(255) NOT NULL
+description             TEXT         NULL
+slug                    VARCHAR(100) NOT NULL
+payment_model           VARCHAR(30)  NOT NULL   -- 'self_service' | 'invoice_after_close'
+status                  VARCHAR(20)  NOT NULL DEFAULT 'draft'  -- draft|submitted|approved|active|closed|archived
+buying_window_opens_at  TIMESTAMP    NULL
+buying_window_closes_at TIMESTAMP    NULL
+approved_by             UUID         NULL (FK → users)
+approved_at             TIMESTAMP    NULL
+created_by              UUID         NOT NULL (FK → users)
+deleted_at              TIMESTAMP    NULL       -- soft delete
+created_at              TIMESTAMP    NOT NULL
+updated_at              TIMESTAMP    NOT NULL
+```
+RLS: Standard company isolation (PERMISSIVE) + sub-brand scoping (RESTRICTIVE).
+Partial unique index: `(company_id, slug) WHERE deleted_at IS NULL`.
+Composite index: `(company_id, status)`.
+
+### `catalog_products` Junction Table (TenantBase)
+```
+id                      UUID        PRIMARY KEY
+company_id              UUID        NOT NULL (FK → companies, indexed)
+sub_brand_id            UUID        NULL (FK → sub_brands, indexed)
+catalog_id              UUID        NOT NULL (FK → catalogs)
+product_id              UUID        NOT NULL (FK → products)
+display_order           INTEGER      NOT NULL DEFAULT 0
+price_override          NUMERIC(10,2) NULL     -- overrides products.unit_price for this catalog
+created_at              TIMESTAMP    NOT NULL
+updated_at              TIMESTAMP    NOT NULL
+```
+RLS: Standard company isolation (PERMISSIVE) + sub-brand scoping (RESTRICTIVE).
+UNIQUE constraint on `(catalog_id, product_id)`.
 
 
 ## Error Handling

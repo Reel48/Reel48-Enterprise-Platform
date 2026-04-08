@@ -181,7 +181,8 @@ class TestDeleteUser:
             f"/api/v1/users/{user_a1_employee.id}",
             headers={"Authorization": f"Bearer {user_a1_admin_token}"},
         )
-        assert response.status_code == 204
+        assert response.status_code == 200
+        assert response.json()["data"]["id"] == str(user_a1_employee.id)
 
         # Verify user is excluded from list
         list_response = await client.get(
