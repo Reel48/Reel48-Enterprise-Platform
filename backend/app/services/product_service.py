@@ -121,6 +121,63 @@ class ProductService:
         await self.db.refresh(product)
         return product
 
+    async def list_all_products(
+        self,
+        page: int,
+        per_page: int,
+        status_filter: str | None = None,
+        company_id_filter: UUID | None = None,
+    ) -> tuple[list[Product], int]:
+        """List products across ALL companies. For reel48_admin platform endpoints."""
+        query = select(Product).where(Product.deleted_at.is_(None))
+        if status_filter is not None:
+            query = query.where(Product.status == status_filter)
+        if company_id_filter is not None:
+            query = query.where(Product.company_id == company_id_filter)
+
+        total = await self.db.scalar(
+            select(func.count()).select_from(query.subquery())
+        )
+        query = query.offset((page - 1) * per_page).limit(per_page)
+        result = await self.db.execute(query)
+        return list(result.scalars().all()), total or 0
+
+    async def approve_product(
+        self, product_id: UUID, approved_by: UUID
+    ) -> Product:
+        """submitted → approved. Sets approved_by and approved_at."""
+        product = await self.get_product(product_id)
+        if product.status != "submitted":
+            raise ForbiddenError("Only submitted products can be approved")
+        product.status = "approved"  # type: ignore[assignment]
+        product.approved_by = approved_by  # type: ignore[assignment]
+        product.approved_at = datetime.now(UTC)  # type: ignore[assignment]
+        await self.db.flush()
+        await self.db.refresh(product)
+        return product
+
+    async def reject_product(self, product_id: UUID) -> Product:
+        """submitted → draft. Clears approval fields."""
+        product = await self.get_product(product_id)
+        if product.status != "submitted":
+            raise ForbiddenError("Only submitted products can be rejected")
+        product.status = "draft"  # type: ignore[assignment]
+        product.approved_by = None  # type: ignore[assignment]
+        product.approved_at = None  # type: ignore[assignment]
+        await self.db.flush()
+        await self.db.refresh(product)
+        return product
+
+    async def activate_product(self, product_id: UUID) -> Product:
+        """approved → active. Makes product visible to employees."""
+        product = await self.get_product(product_id)
+        if product.status != "approved":
+            raise ForbiddenError("Only approved products can be activated")
+        product.status = "active"  # type: ignore[assignment]
+        await self.db.flush()
+        await self.db.refresh(product)
+        return product
+
     async def _check_sku_unique(
         self,
         sku: str,

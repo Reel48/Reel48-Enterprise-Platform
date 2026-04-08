@@ -271,6 +271,92 @@ class CatalogService:
         result = await self.db.execute(query)
         return list(result.scalars().all()), total or 0
 
+    async def list_all_catalogs(
+        self,
+        page: int,
+        per_page: int,
+        status_filter: str | None = None,
+        company_id_filter: UUID | None = None,
+    ) -> tuple[list[Catalog], int]:
+        """List catalogs across ALL companies. For reel48_admin platform endpoints."""
+        query = select(Catalog).where(Catalog.deleted_at.is_(None))
+        if status_filter is not None:
+            query = query.where(Catalog.status == status_filter)
+        if company_id_filter is not None:
+            query = query.where(Catalog.company_id == company_id_filter)
+
+        total = await self.db.scalar(
+            select(func.count()).select_from(query.subquery())
+        )
+        query = query.offset((page - 1) * per_page).limit(per_page)
+        result = await self.db.execute(query)
+        return list(result.scalars().all()), total or 0
+
+    async def approve_catalog(
+        self, catalog_id: UUID, approved_by: UUID
+    ) -> Catalog:
+        """submitted → approved. All products in catalog must be approved or active."""
+        catalog = await self.get_catalog(catalog_id)
+        if catalog.status != "submitted":
+            raise ForbiddenError("Only submitted catalogs can be approved")
+
+        # Verify all products in catalog are approved or active
+        cp_rows = await self.db.execute(
+            select(CatalogProduct.product_id).where(
+                CatalogProduct.catalog_id == catalog_id
+            )
+        )
+        product_ids = [row[0] for row in cp_rows.all()]
+        if product_ids:
+            products = await self.db.execute(
+                select(Product.id, Product.status).where(Product.id.in_(product_ids))
+            )
+            for pid, pstatus in products.all():
+                if pstatus not in ("approved", "active"):
+                    raise ValidationError(
+                        f"Product {pid} has status '{pstatus}'. "
+                        "All products must be approved or active before catalog approval."
+                    )
+
+        catalog.status = "approved"  # type: ignore[assignment]
+        catalog.approved_by = approved_by  # type: ignore[assignment]
+        catalog.approved_at = datetime.now(UTC)  # type: ignore[assignment]
+        await self.db.flush()
+        await self.db.refresh(catalog)
+        return catalog
+
+    async def reject_catalog(self, catalog_id: UUID) -> Catalog:
+        """submitted → draft. Clears approval fields."""
+        catalog = await self.get_catalog(catalog_id)
+        if catalog.status != "submitted":
+            raise ForbiddenError("Only submitted catalogs can be rejected")
+        catalog.status = "draft"  # type: ignore[assignment]
+        catalog.approved_by = None  # type: ignore[assignment]
+        catalog.approved_at = None  # type: ignore[assignment]
+        await self.db.flush()
+        await self.db.refresh(catalog)
+        return catalog
+
+    async def activate_catalog(self, catalog_id: UUID) -> Catalog:
+        """approved → active. Makes catalog visible to employees."""
+        catalog = await self.get_catalog(catalog_id)
+        if catalog.status != "approved":
+            raise ForbiddenError("Only approved catalogs can be activated")
+        catalog.status = "active"  # type: ignore[assignment]
+        await self.db.flush()
+        await self.db.refresh(catalog)
+        return catalog
+
+    async def close_catalog(self, catalog_id: UUID) -> Catalog:
+        """active → closed. For buying window catalogs."""
+        catalog = await self.get_catalog(catalog_id)
+        if catalog.status != "active":
+            raise ForbiddenError("Only active catalogs can be closed")
+        catalog.status = "closed"  # type: ignore[assignment]
+        await self.db.flush()
+        await self.db.refresh(catalog)
+        return catalog
+
     async def _unique_slug(
         self, name: str, company_id: UUID, exclude_id: UUID | None = None
     ) -> str:

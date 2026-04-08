@@ -1437,3 +1437,71 @@ connecting them to AWS Cognito for real user provisioning.
 - 116 tests pass (93 existing + 23 new)
 - ruff: All checks passed
 - mypy: No issues found in 46 source files
+
+---
+
+## 2026-04-08 — Module 3 Phase 4: Platform Admin Endpoints & Post-Module Harness Review
+
+### Session Type: End-of-Module (Module 3 complete)
+
+### What Was Built
+- Platform admin endpoints under `/api/v1/platform/products/` and `/api/v1/platform/catalogs/`
+- Product approval workflow: `submitted → approved → active` (with reject → draft)
+- Catalog approval workflow: `submitted → approved → active → closed → archived` (with reject → draft)
+- Catalog approval validates all products are approved/active before allowing catalog approval
+- Cross-company list endpoints with optional `?status=` and `?company_id=` filters
+- 18 new platform admin tests (all passing)
+
+### End-of-Session Self-Audit
+
+**1. New pattern introduced? YES**
+- **Platform admin endpoint pattern:** `require_reel48_admin` + `resolve_current_user_id`
+  for `approved_by` FK, no `_require_company_id` guard, cross-company service methods.
+  → Added to `backend/CLAUDE.md` under "Platform Admin Endpoint Pattern".
+
+**2. Existing pattern violated? NO**
+- All platform endpoints follow the established conventions (ApiResponse wrapper,
+  status codes, role checking via dependencies).
+
+**3. New decision made? YES**
+- **reel48_admin User records:** Platform admins need a User record in the database
+  for `resolve_current_user_id` to work (setting `approved_by` FKs). The User model
+  requires `company_id NOT NULL`, so reel48_admin users are associated with an internal
+  "Reel48 Operations" company. The JWT still has no `company_id` claim (RLS bypass).
+  This is not an ADR-level decision — it follows naturally from the existing model.
+
+**4. Missing guidance discovered? YES**
+- No guidance existed for testing platform admin endpoints that need `resolve_current_user_id`.
+  → Added "Platform Admin (reel48_admin) Test Fixtures" section to `.claude/rules/testing.md`.
+
+**5. Prompt template needed? NO**
+- The platform endpoint pattern is documented in backend/CLAUDE.md. Future platform
+  endpoints (invoicing, analytics) follow the same shape.
+
+### Post-Module Review (Module 3 Complete)
+
+**Pattern consistency:** All 4 phases (database, products CRUD, catalogs CRUD, platform admin)
+follow consistent patterns: ApiResponse/ApiListResponse wrappers, PaginationMeta, service
+layer for business logic, route layer for HTTP concerns.
+
+**Rule effectiveness:** The `database-migrations.md` rule correctly guided RLS creation.
+The `api-endpoints.md` rule prevented tenant ID acceptance as parameters. The `testing.md`
+rule ensured isolation tests were written alongside functional tests.
+
+**ADR currency:** All existing ADRs remain accurate. No informal reversals during Module 3.
+
+**Cross-module alignment:** Module 3 endpoints match Module 1 and Module 2 patterns.
+The `_require_company_id` guard is consistent across products.py, catalogs.py, and all
+tenant-scoped route files. The `_create_user` / `_create_product` test helpers follow
+the same factory pattern established in Module 1 tests.
+
+**Gap analysis:** The platform admin endpoint pattern was the main gap. Now documented.
+
+### Harness Files Updated
+- **`backend/CLAUDE.md`:** Added "Platform Admin Endpoint Pattern" subsection
+- **`.claude/rules/testing.md`:** Added "Platform Admin (reel48_admin) Test Fixtures" section
+- **`docs/harness-changelog.md`:** This entry
+
+### Test Results
+- 211 tests pass (193 existing + 18 new)
+- All Module 3 phases complete: database, products CRUD, catalogs CRUD, platform admin
