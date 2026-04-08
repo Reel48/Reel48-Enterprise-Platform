@@ -1119,7 +1119,7 @@ sub_brand_id            UUID        NULL (FK → sub_brands, indexed)
 user_id                 UUID        NOT NULL (FK → users)     -- employee who placed the order
 catalog_id              UUID        NOT NULL (FK → catalogs)  -- catalog the order was placed against
 order_number            VARCHAR(30)  NOT NULL UNIQUE           -- ORD-YYYYMMDD-XXXX format
-status                  VARCHAR(20)  NOT NULL DEFAULT 'pending' -- pending|approved|fulfilled|shipped|delivered|cancelled
+status                  VARCHAR(20)  NOT NULL DEFAULT 'pending' -- pending|approved|processing|shipped|delivered|cancelled
 shipping_address_line1  VARCHAR(255) NULL
 shipping_address_line2  VARCHAR(255) NULL
 shipping_city           VARCHAR(100) NULL
@@ -1193,6 +1193,50 @@ information leakage about other orders' existence).
 | `sub_brand_admin` | All sub-brand orders | Own orders only | Any sub-brand order |
 | `regional_manager` | All sub-brand orders | Own orders only | Any sub-brand order |
 | `employee` | Own orders only | Own orders only | Own orders only |
+
+
+## Order Status Lifecycle & Transitions
+
+# --- ADDED 2026-04-08 during Module 4 Phase 4 ---
+# Reason: Order status transitions have strict rules about which statuses can
+# transition to which, and who is authorized to perform each transition.
+# Impact: Future modules (Bulk Ordering, Invoicing) know the order lifecycle and
+# authorization model.
+
+### Status Transitions
+```
+pending → approved → processing → shipped → delivered
+pending → cancelled        (owner or manager_or_above)
+approved → cancelled       (manager_or_above only)
+```
+- **pending:** Initial status after order placement. Can be cancelled by the order
+  owner (employee) or any manager_or_above.
+- **approved:** Manager has approved the order. Only manager_or_above can cancel.
+  Employees CANNOT cancel their own order after approval.
+- **processing:** Order is being processed/fulfilled. No cancellation allowed.
+- **shipped:** Order has been shipped. No cancellation allowed.
+- **delivered:** Terminal state. Order complete.
+- **cancelled:** Terminal state. Records `cancelled_at` timestamp and `cancelled_by` user ID.
+
+### Authorization Rules
+| Transition | Who Can Perform |
+|-----------|----------------|
+| pending → approved | `manager_or_above` (`regional_manager`, `sub_brand_admin`, `corporate_admin`, `reel48_admin`) |
+| pending → cancelled | Order owner (any role) OR `manager_or_above` |
+| approved → cancelled | `manager_or_above` only |
+| approved → processing | `manager_or_above` |
+| processing → shipped | `manager_or_above` |
+| shipped → delivered | `manager_or_above` |
+
+### Endpoint Pattern
+Status transitions use `POST /api/v1/orders/{order_id}/{action}` (not PATCH).
+The cancel endpoint uses `get_tenant_context` (any role can attempt); all others
+use `require_manager` dependency. Authorization for cancel is checked in the
+service layer based on ownership and role.
+
+### Invalid Transitions
+Any transition not listed above returns 403 (ForbiddenError). Cancelled and
+delivered orders cannot transition to any other status.
 
 
 ## Product Status Lifecycle & Visibility

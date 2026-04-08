@@ -1370,3 +1370,381 @@ class TestListOrdersIsolation:
             headers={"Authorization": f"Bearer {token_b}"},
         )
         assert response.status_code == 404
+
+
+# ===========================================================================
+# Phase 4: Order Status Transitions
+# ===========================================================================
+
+
+# ---------------------------------------------------------------------------
+# Functional Tests — Status Transitions
+# ---------------------------------------------------------------------------
+
+
+class TestStatusTransitionsFunctional:
+    async def test_cancel_pending_order_as_employee(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_employee,
+        user_a1_employee_token: str,
+        company_a,
+    ):
+        """Employee cancels own pending order → 200, status=cancelled."""
+        company, brand_a1, _a2 = company_a
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_employee.id
+        )
+        order_data = await _place_test_order(
+            client, user_a1_employee_token, catalog.id, products[0].id
+        )
+
+        response = await client.post(
+            f"/api/v1/orders/{order_data['id']}/cancel",
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+        assert response.status_code == 200
+        assert response.json()["data"]["status"] == "cancelled"
+
+    async def test_cancel_sets_cancelled_at_and_cancelled_by(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_employee,
+        user_a1_employee_token: str,
+        company_a,
+    ):
+        """Cancelling sets cancelled_at and cancelled_by fields."""
+        company, brand_a1, _a2 = company_a
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_employee.id
+        )
+        order_data = await _place_test_order(
+            client, user_a1_employee_token, catalog.id, products[0].id
+        )
+
+        response = await client.post(
+            f"/api/v1/orders/{order_data['id']}/cancel",
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["cancelled_at"] is not None
+        assert data["cancelled_by"] == str(user_a1_employee.id)
+
+    async def test_approve_pending_order_as_manager(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_employee,
+        user_a1_employee_token: str,
+        user_a1_manager,
+        user_a1_manager_token: str,
+        company_a,
+    ):
+        """Manager approves pending order → 200, status=approved."""
+        company, brand_a1, _a2 = company_a
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_employee.id
+        )
+        order_data = await _place_test_order(
+            client, user_a1_employee_token, catalog.id, products[0].id
+        )
+
+        response = await client.post(
+            f"/api/v1/orders/{order_data['id']}/approve",
+            headers={"Authorization": f"Bearer {user_a1_manager_token}"},
+        )
+        assert response.status_code == 200
+        assert response.json()["data"]["status"] == "approved"
+
+    async def test_full_lifecycle_pending_to_delivered(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_employee,
+        user_a1_employee_token: str,
+        user_a1_manager,
+        user_a1_manager_token: str,
+        company_a,
+    ):
+        """Full lifecycle: pending → approved → processing → shipped → delivered."""
+        company, brand_a1, _a2 = company_a
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_employee.id
+        )
+        order_data = await _place_test_order(
+            client, user_a1_employee_token, catalog.id, products[0].id
+        )
+        oid = order_data["id"]
+        headers = {"Authorization": f"Bearer {user_a1_manager_token}"}
+
+        # pending → approved
+        r = await client.post(f"/api/v1/orders/{oid}/approve", headers=headers)
+        assert r.status_code == 200
+        assert r.json()["data"]["status"] == "approved"
+
+        # approved → processing
+        r = await client.post(f"/api/v1/orders/{oid}/process", headers=headers)
+        assert r.status_code == 200
+        assert r.json()["data"]["status"] == "processing"
+
+        # processing → shipped
+        r = await client.post(f"/api/v1/orders/{oid}/ship", headers=headers)
+        assert r.status_code == 200
+        assert r.json()["data"]["status"] == "shipped"
+
+        # shipped → delivered
+        r = await client.post(f"/api/v1/orders/{oid}/deliver", headers=headers)
+        assert r.status_code == 200
+        assert r.json()["data"]["status"] == "delivered"
+
+
+# ---------------------------------------------------------------------------
+# Authorization Tests — Status Transitions
+# ---------------------------------------------------------------------------
+
+
+class TestStatusTransitionsAuthorization:
+    async def test_employee_cannot_cancel_others_order(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_employee,
+        user_a1_employee_token: str,
+        company_a,
+    ):
+        """Employee tries to cancel another employee's pending order → 404."""
+        company, brand_a1, _a2 = company_a
+
+        # Create a second employee who places the order
+        employee2 = await _create_user(
+            admin_db_session, company.id, brand_a1.id, role="employee"
+        )
+        token_emp2 = create_test_token(
+            user_id=employee2.cognito_sub,
+            company_id=str(company.id),
+            sub_brand_id=str(brand_a1.id),
+            role="employee",
+        )
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_employee.id
+        )
+        order_data = await _place_test_order(
+            client, token_emp2, catalog.id, products[0].id
+        )
+
+        # Employee 1 tries to cancel Employee 2's order → 404
+        response = await client.post(
+            f"/api/v1/orders/{order_data['id']}/cancel",
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+        assert response.status_code == 404
+
+    async def test_employee_cannot_cancel_approved_order(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_employee,
+        user_a1_employee_token: str,
+        user_a1_manager,
+        user_a1_manager_token: str,
+        company_a,
+    ):
+        """Employee's own order, but already approved → 403."""
+        company, brand_a1, _a2 = company_a
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_employee.id
+        )
+        order_data = await _place_test_order(
+            client, user_a1_employee_token, catalog.id, products[0].id
+        )
+
+        # Manager approves
+        await client.post(
+            f"/api/v1/orders/{order_data['id']}/approve",
+            headers={"Authorization": f"Bearer {user_a1_manager_token}"},
+        )
+
+        # Employee tries to cancel approved order → 403
+        response = await client.post(
+            f"/api/v1/orders/{order_data['id']}/cancel",
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+        assert response.status_code == 403
+
+    async def test_employee_cannot_approve_order(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_employee,
+        user_a1_employee_token: str,
+        company_a,
+    ):
+        """Employee calls /approve → 403 (require_manager dependency)."""
+        company, brand_a1, _a2 = company_a
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_employee.id
+        )
+        order_data = await _place_test_order(
+            client, user_a1_employee_token, catalog.id, products[0].id
+        )
+
+        response = await client.post(
+            f"/api/v1/orders/{order_data['id']}/approve",
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+        assert response.status_code == 403
+
+    async def test_employee_cannot_process_ship_deliver(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_employee,
+        user_a1_employee_token: str,
+        company_a,
+    ):
+        """Employee calls /process, /ship, /deliver → 403 each."""
+        company, brand_a1, _a2 = company_a
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_employee.id
+        )
+        order_data = await _place_test_order(
+            client, user_a1_employee_token, catalog.id, products[0].id
+        )
+        oid = order_data["id"]
+        headers = {"Authorization": f"Bearer {user_a1_employee_token}"}
+
+        for action in ["process", "ship", "deliver"]:
+            response = await client.post(
+                f"/api/v1/orders/{oid}/{action}", headers=headers
+            )
+            assert response.status_code == 403, f"/{action} should return 403 for employee"
+
+    async def test_manager_can_cancel_approved_order(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_employee,
+        user_a1_employee_token: str,
+        user_a1_manager,
+        user_a1_manager_token: str,
+        company_a,
+    ):
+        """Manager cancels an approved order → 200."""
+        company, brand_a1, _a2 = company_a
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_employee.id
+        )
+        order_data = await _place_test_order(
+            client, user_a1_employee_token, catalog.id, products[0].id
+        )
+
+        # Approve first
+        await client.post(
+            f"/api/v1/orders/{order_data['id']}/approve",
+            headers={"Authorization": f"Bearer {user_a1_manager_token}"},
+        )
+
+        # Cancel approved order
+        response = await client.post(
+            f"/api/v1/orders/{order_data['id']}/cancel",
+            headers={"Authorization": f"Bearer {user_a1_manager_token}"},
+        )
+        assert response.status_code == 200
+        assert response.json()["data"]["status"] == "cancelled"
+
+
+# ---------------------------------------------------------------------------
+# Invalid Transition Tests
+# ---------------------------------------------------------------------------
+
+
+class TestStatusTransitionsInvalid:
+    async def test_cannot_approve_already_approved_order(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_employee,
+        user_a1_employee_token: str,
+        user_a1_manager,
+        user_a1_manager_token: str,
+        company_a,
+    ):
+        """approved → approved is invalid → 403."""
+        company, brand_a1, _a2 = company_a
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_employee.id
+        )
+        order_data = await _place_test_order(
+            client, user_a1_employee_token, catalog.id, products[0].id
+        )
+        headers = {"Authorization": f"Bearer {user_a1_manager_token}"}
+
+        # Approve once
+        await client.post(f"/api/v1/orders/{order_data['id']}/approve", headers=headers)
+
+        # Approve again → 403
+        response = await client.post(
+            f"/api/v1/orders/{order_data['id']}/approve", headers=headers
+        )
+        assert response.status_code == 403
+
+    async def test_cannot_ship_pending_order(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_employee,
+        user_a1_employee_token: str,
+        user_a1_manager,
+        user_a1_manager_token: str,
+        company_a,
+    ):
+        """pending → shipped is invalid (must go through approved → processing first) → 403."""
+        company, brand_a1, _a2 = company_a
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_employee.id
+        )
+        order_data = await _place_test_order(
+            client, user_a1_employee_token, catalog.id, products[0].id
+        )
+
+        response = await client.post(
+            f"/api/v1/orders/{order_data['id']}/ship",
+            headers={"Authorization": f"Bearer {user_a1_manager_token}"},
+        )
+        assert response.status_code == 403
+
+    async def test_cannot_transition_cancelled_order(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_employee,
+        user_a1_employee_token: str,
+        user_a1_manager,
+        user_a1_manager_token: str,
+        company_a,
+    ):
+        """cancelled → any transition is invalid → 403."""
+        company, brand_a1, _a2 = company_a
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_employee.id
+        )
+        order_data = await _place_test_order(
+            client, user_a1_employee_token, catalog.id, products[0].id
+        )
+        oid = order_data["id"]
+        mgr_headers = {"Authorization": f"Bearer {user_a1_manager_token}"}
+
+        # Cancel the order
+        await client.post(f"/api/v1/orders/{oid}/cancel", headers=mgr_headers)
+
+        # Try all transitions on cancelled order
+        for action in ["approve", "process", "ship", "deliver", "cancel"]:
+            response = await client.post(
+                f"/api/v1/orders/{oid}/{action}", headers=mgr_headers
+            )
+            assert response.status_code == 403, (
+                f"/{action} on cancelled order should return 403"
+            )
