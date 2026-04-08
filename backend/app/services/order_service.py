@@ -181,6 +181,35 @@ class OrderService:
         return order
 
     # ------------------------------------------------------------------
+    # Platform admin methods (Phase 5)
+    # ------------------------------------------------------------------
+
+    async def list_all_orders(
+        self,
+        page: int,
+        per_page: int,
+        status_filter: str | None = None,
+        company_id_filter: UUID | None = None,
+        catalog_id_filter: UUID | None = None,
+    ) -> tuple[list[Order], int]:
+        """List orders across ALL companies. For reel48_admin platform endpoints."""
+        query = select(Order)
+        if status_filter is not None:
+            query = query.where(Order.status == status_filter)
+        if company_id_filter is not None:
+            query = query.where(Order.company_id == company_id_filter)
+        if catalog_id_filter is not None:
+            query = query.where(Order.catalog_id == catalog_id_filter)
+
+        total = await self.db.scalar(
+            select(func.count()).select_from(query.subquery())
+        )
+        query = query.order_by(Order.created_at.desc())
+        query = query.offset((page - 1) * per_page).limit(per_page)
+        result = await self.db.execute(query)
+        return list(result.scalars().all()), total or 0
+
+    # ------------------------------------------------------------------
     # Read methods (Phase 3)
     # ------------------------------------------------------------------
 

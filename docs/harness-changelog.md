@@ -30,6 +30,24 @@
 
 ---
 
+## 2026-04-08 — Module 4 Phase 5 End-of-Session Self-Audit
+
+**Type:** End-of-session self-audit
+**Module:** Module 4 — Ordering Flow (Phase 5: Platform Admin Order Endpoints)
+
+### Self-Audit Checklist
+- [x] **New pattern?** No — followed existing platform admin endpoint pattern from `platform/products.py` and `platform/catalogs.py` exactly.
+- [x] **Pattern violated?** No.
+- [x] **New decision?** No.
+- [x] **Missing guidance?** No.
+- [x] **Reusable task?** No.
+- [x] **Changelog updated?** This entry.
+
+### Summary
+Added `GET /api/v1/platform/orders/` (list with filters) and `GET /api/v1/platform/orders/{id}` (detail with line items) for reel48_admin cross-company visibility. Added `list_all_orders()` to OrderService. 6 new tests covering cross-company listing, company/status filters, detail retrieval, and authorization rejection for corporate_admin and employee roles. All 265 tests passing. No harness updates needed — existing patterns applied cleanly.
+
+---
+
 ## 2026-04-08 — Module 4 Phase 4 End-of-Session Self-Audit
 
 **Type:** End-of-session self-audit
