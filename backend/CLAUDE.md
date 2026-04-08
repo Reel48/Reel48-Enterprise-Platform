@@ -1068,6 +1068,39 @@ RLS: Standard company isolation (PERMISSIVE) + sub-brand scoping (RESTRICTIVE).
 UNIQUE constraint on `(catalog_id, product_id)`.
 
 
+## Product Status Lifecycle & Visibility
+
+# --- ADDED 2026-04-08 during Module 3 Phase 2 ---
+# Reason: The status transition rules (which statuses allow edits/deletes) and
+# role-based visibility rules (employees see only active) were implemented in code
+# but not documented in the harness.
+# Impact: Future modules (Ordering, Approval Workflows) know the product lifecycle.
+
+### Status Transitions
+```
+draft → submitted → approved → active → archived
+```
+- **draft:** Initial status. Editable, deletable (soft-delete), submittable.
+- **submitted:** Awaiting Reel48 admin approval. No edits or deletes allowed.
+- **approved:** Approved by `reel48_admin`. No edits. (Module 6 builds approval endpoints.)
+- **active:** Live in catalog, purchasable by employees. No edits.
+- **archived:** Removed from active catalog. No edits.
+
+### Edit/Delete Restrictions
+- Only products in `draft` status can be updated (`PATCH`), deleted (`DELETE`), or
+  submitted (`POST .../submit`). All other statuses return 403.
+- This prevents changes to products that are in-review, approved, or live in catalogs.
+
+### Role-Based Visibility
+- **Admins** (`sub_brand_admin`, `corporate_admin`, `reel48_admin`): See products in
+  ALL statuses for management purposes. Can filter by `?status=` query parameter.
+- **Non-admins** (`regional_manager`, `employee`): See ONLY `active` products. Draft,
+  submitted, approved, and archived products are hidden. This applies to both list and
+  get-by-ID endpoints (get returns 404 for non-active products when called by non-admins).
+- **Sub-brand scoping:** Sub-brand-scoped admins see only their sub-brand's products.
+  Corporate admins see all sub-brands' products within their company.
+
+
 ## Error Handling
 
 # --- WHY THIS SECTION EXISTS ---
