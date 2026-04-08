@@ -1,5 +1,6 @@
 from app.models.base import Base, CompanyBase, GlobalBase, TenantBase
 from app.models.company import Company
+from app.models.employee_profile import EmployeeProfile
 from app.models.invite import Invite
 from app.models.org_code import OrgCode
 from app.models.sub_brand import SubBrand
@@ -15,4 +16,5 @@ __all__ = [
     "User",
     "Invite",
     "OrgCode",
+    "EmployeeProfile",
 ]

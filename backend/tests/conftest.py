@@ -189,8 +189,12 @@ async def setup_database() -> AsyncGenerator[dict, None]:
         if result.scalar() is None:
             await conn.execute(text("CREATE ROLE reel48_app WITH LOGIN PASSWORD 'reel48_app'"))
 
-        # Grant permissions on all Module 1 tables
-        for table in ["companies", "sub_brands", "users", "invites", "org_codes"]:
+        # Grant permissions on all module tables
+        tables = [
+            "companies", "sub_brands", "users", "invites",
+            "org_codes", "employee_profiles",
+        ]
+        for table in tables:
             await conn.execute(
                 text(f"GRANT SELECT, INSERT, UPDATE, DELETE ON {table} TO reel48_app")  # noqa: S608
             )
