@@ -7,6 +7,8 @@ from app.api.v1.invites import router as invites_router
 from app.api.v1.catalogs import router as catalogs_router
 from app.api.v1.products import router as products_router
 from app.api.v1.org_codes import router as org_codes_router
+from app.api.v1.platform.catalogs import router as platform_catalogs_router
+from app.api.v1.platform.products import router as platform_products_router
 from app.api.v1.sub_brands import router as sub_brands_router
 from app.api.v1.users import router as users_router
 
@@ -21,6 +23,5 @@ v1_router.include_router(invites_router)
 v1_router.include_router(employee_profiles_router)
 v1_router.include_router(products_router)
 v1_router.include_router(catalogs_router)
-
-# Future sub-routers:
-# v1_router.include_router(platform_router)
+v1_router.include_router(platform_products_router)
+v1_router.include_router(platform_catalogs_router)

@@ -412,6 +412,46 @@ def company_a_brand_a1_manager_token(company_a) -> str:
 
 
 @pytest.fixture
+async def reel48_company(admin_db_session: AsyncSession):
+    """Internal 'Reel48 Operations' company for platform admin users."""
+    company = Company(name="Reel48 Operations", slug="reel48-ops", is_active=True)
+    admin_db_session.add(company)
+    await admin_db_session.flush()
+    brand = SubBrand(
+        company_id=company.id, name="Platform", slug="platform", is_default=True, is_active=True
+    )
+    admin_db_session.add(brand)
+    await admin_db_session.flush()
+    return company, brand
+
+
+@pytest.fixture
+async def reel48_admin_user(admin_db_session: AsyncSession, reel48_company):
+    """A reel48_admin user with a real User record (for resolve_current_user_id)."""
+    company, brand = reel48_company
+    user = User(
+        company_id=company.id,
+        sub_brand_id=brand.id,
+        cognito_sub=str(uuid4()),
+        email=f"platform-admin-{uuid4().hex[:6]}@reel48.com",
+        full_name="Platform Admin",
+        role="reel48_admin",
+    )
+    admin_db_session.add(user)
+    await admin_db_session.flush()
+    return user
+
+
+@pytest.fixture
+def reel48_admin_user_token(reel48_admin_user) -> str:
+    """JWT for the reel48_admin_user fixture (cognito_sub matches, no company_id in JWT)."""
+    return create_test_token(
+        user_id=reel48_admin_user.cognito_sub,
+        role="reel48_admin",
+    )
+
+
+@pytest.fixture
 async def user_a1_admin(admin_db_session: AsyncSession, company_a):
     """A sub_brand_admin user in Company A, Brand A1."""
     company, brand_a1, _brand_a2 = company_a

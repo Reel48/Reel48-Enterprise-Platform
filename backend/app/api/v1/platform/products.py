@@ -1,0 +1,82 @@
+"""Platform admin endpoints for product approval workflow.
+
+All endpoints require reel48_admin role. These operate cross-company —
+the reel48_admin has no company_id, so RLS is bypassed via empty string.
+"""
+
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.dependencies import get_db_session, require_reel48_admin
+from app.core.tenant import TenantContext
+from app.schemas.common import ApiListResponse, ApiResponse, PaginationMeta
+from app.schemas.product import ProductResponse
+from app.services.helpers import resolve_current_user_id
+from app.services.product_service import ProductService
+
+router = APIRouter(prefix="/platform/products", tags=["platform-products"])
+
+
+class RejectRequest(BaseModel):
+    rejection_reason: str | None = None
+
+
+@router.get("/", response_model=ApiListResponse[ProductResponse])
+async def list_all_products(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    status: str | None = Query(None),
+    company_id: UUID | None = Query(None),
+    context: TenantContext = Depends(require_reel48_admin),
+    db: AsyncSession = Depends(get_db_session),
+) -> ApiListResponse[ProductResponse]:
+    """List ALL products across all companies. Supports status and company_id filters."""
+    service = ProductService(db)
+    products, total = await service.list_all_products(
+        page, per_page, status_filter=status, company_id_filter=company_id
+    )
+    return ApiListResponse(
+        data=[ProductResponse.model_validate(p) for p in products],
+        meta=PaginationMeta(page=page, per_page=per_page, total=total),
+    )
+
+
+@router.post("/{product_id}/approve", response_model=ApiResponse[ProductResponse])
+async def approve_product(
+    product_id: UUID,
+    context: TenantContext = Depends(require_reel48_admin),
+    db: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[ProductResponse]:
+    """Approve a submitted product. Transitions: submitted -> approved."""
+    approved_by = await resolve_current_user_id(db, context.user_id)
+    service = ProductService(db)
+    product = await service.approve_product(product_id, approved_by)
+    return ApiResponse(data=ProductResponse.model_validate(product))
+
+
+@router.post("/{product_id}/reject", response_model=ApiResponse[ProductResponse])
+async def reject_product(
+    product_id: UUID,
+    body: RejectRequest | None = None,
+    context: TenantContext = Depends(require_reel48_admin),
+    db: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[ProductResponse]:
+    """Reject a submitted product back to draft. Transitions: submitted -> draft."""
+    service = ProductService(db)
+    product = await service.reject_product(product_id)
+    return ApiResponse(data=ProductResponse.model_validate(product))
+
+
+@router.post("/{product_id}/activate", response_model=ApiResponse[ProductResponse])
+async def activate_product(
+    product_id: UUID,
+    context: TenantContext = Depends(require_reel48_admin),
+    db: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[ProductResponse]:
+    """Activate an approved product. Transitions: approved -> active."""
+    service = ProductService(db)
+    product = await service.activate_product(product_id)
+    return ApiResponse(data=ProductResponse.model_validate(product))

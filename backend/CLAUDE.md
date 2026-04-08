@@ -486,6 +486,41 @@ def _require_company_id(context: TenantContext) -> UUID:
 This is a **route-level** helper (defined at the top of each route module), not a
 FastAPI dependency. It is called inside route handlers after `get_tenant_context`.
 
+### Platform Admin Endpoint Pattern
+
+# --- ADDED 2026-04-08 after Module 3 Phase 4 ---
+# Reason: Module 3 introduced the first platform admin endpoints for approval workflow.
+# Impact: Future modules (Invoicing, Analytics) follow the same pattern for reel48_admin
+# cross-company endpoints.
+
+Platform admin endpoints live under `/api/v1/platform/{resource}/` and use
+`require_reel48_admin` as their auth dependency. Key differences from tenant endpoints:
+
+1. **No `_require_company_id` guard** — reel48_admin has no company_id (that's the point).
+2. **Cross-company queries** — Service methods like `list_all_products()` skip the
+   `company_id` filter. Optional `?company_id=` query param for narrowing results.
+3. **`resolve_current_user_id`** — Platform endpoints that set `approved_by` must resolve
+   the admin's local User ID from their cognito_sub. This requires a reel48_admin User
+   record to exist in the database (associated with an internal "Reel48 Operations" company).
+4. **Status transition actions** — Endpoints like `/approve`, `/reject`, `/activate` are
+   POST actions on individual resources, not PATCH updates.
+
+```python
+# Platform endpoint pattern:
+router = APIRouter(prefix="/platform/products", tags=["platform-products"])
+
+@router.post("/{product_id}/approve", response_model=ApiResponse[ProductResponse])
+async def approve_product(
+    product_id: UUID,
+    context: TenantContext = Depends(require_reel48_admin),
+    db: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[ProductResponse]:
+    approved_by = await resolve_current_user_id(db, context.user_id)
+    service = ProductService(db)
+    product = await service.approve_product(product_id, approved_by)
+    return ApiResponse(data=ProductResponse.model_validate(product))
+```
+
 ### Delete Endpoint Return Conventions
 
 # --- ADDED 2026-04-08 after Module 1 post-module review ---

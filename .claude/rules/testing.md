@@ -88,6 +88,26 @@ Every test file that tests tenant-scoped data should use this setup:
 4. Create test data in specific company/sub-brand combinations
 5. Verify access from different tenant contexts
 
+### Platform Admin (reel48_admin) Test Fixtures
+
+# --- ADDED 2026-04-08 after Module 3 Phase 4 ---
+# Reason: Platform admin endpoints need `resolve_current_user_id` to set `approved_by`
+# FKs. The reel48_admin_token fixture has no matching User record. New fixtures solve this.
+# Impact: Future modules testing platform admin endpoints use the correct fixtures.
+
+The `reel48_admin_token` fixture generates a JWT with no `company_id` and a random
+`cognito_sub` that does NOT map to any User record. This is fine for testing auth
+rejection (403 checks) but **not** for endpoints that call `resolve_current_user_id`.
+
+For platform admin endpoints that need a real User record (e.g., to set `approved_by`):
+- **`reel48_company`** — Creates an internal "Reel48 Operations" company + sub-brand
+- **`reel48_admin_user`** — Creates a User with `role=reel48_admin` in that company
+- **`reel48_admin_user_token`** — JWT with the user's `cognito_sub` but NO `company_id`
+  claim (matching real behavior where reel48_admin JWTs have no company)
+
+Use `reel48_admin_user_token` (not `reel48_admin_token`) when the endpoint needs to
+resolve the admin's local User ID.
+
 ## Backend Test Conventions (pytest)
 
 - **Naming:** `test_{action}_{condition}_{expected_result}`
