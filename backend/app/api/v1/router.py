@@ -9,6 +9,7 @@ from app.api.v1.orders import router as orders_router
 from app.api.v1.products import router as products_router
 from app.api.v1.org_codes import router as org_codes_router
 from app.api.v1.platform.catalogs import router as platform_catalogs_router
+from app.api.v1.platform.orders import router as platform_orders_router
 from app.api.v1.platform.products import router as platform_products_router
 from app.api.v1.sub_brands import router as sub_brands_router
 from app.api.v1.users import router as users_router
@@ -27,3 +28,4 @@ v1_router.include_router(catalogs_router)
 v1_router.include_router(orders_router)
 v1_router.include_router(platform_products_router)
 v1_router.include_router(platform_catalogs_router)
+v1_router.include_router(platform_orders_router)
