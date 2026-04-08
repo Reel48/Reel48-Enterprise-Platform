@@ -5,6 +5,7 @@ from app.api.v1.companies import router as companies_router
 from app.api.v1.employee_profiles import router as employee_profiles_router
 from app.api.v1.invites import router as invites_router
 from app.api.v1.catalogs import router as catalogs_router
+from app.api.v1.orders import router as orders_router
 from app.api.v1.products import router as products_router
 from app.api.v1.org_codes import router as org_codes_router
 from app.api.v1.platform.catalogs import router as platform_catalogs_router
@@ -23,5 +24,6 @@ v1_router.include_router(invites_router)
 v1_router.include_router(employee_profiles_router)
 v1_router.include_router(products_router)
 v1_router.include_router(catalogs_router)
+v1_router.include_router(orders_router)
 v1_router.include_router(platform_products_router)
 v1_router.include_router(platform_catalogs_router)
