@@ -109,6 +109,78 @@ class OrderService:
         return order, line_items
 
     # ------------------------------------------------------------------
+    # Status transition methods (Phase 4)
+    # ------------------------------------------------------------------
+
+    async def cancel_order(
+        self,
+        order_id: UUID,
+        company_id: UUID,
+        cancelled_by_user_id: UUID,
+        is_manager_or_above: bool,
+    ) -> Order:
+        """Cancel a pending or approved order with authorization checks."""
+        order = await self.get_order(order_id, company_id)
+
+        if order.status == "pending":
+            # Both owner and manager can cancel pending orders
+            if not is_manager_or_above and order.user_id != cancelled_by_user_id:
+                raise NotFoundError("Order", str(order_id))
+        elif order.status == "approved":
+            # Only manager can cancel approved orders
+            if not is_manager_or_above:
+                raise ForbiddenError("Only managers can cancel approved orders")
+        else:
+            raise ForbiddenError(f"Cannot cancel an order with status '{order.status}'")
+
+        order.status = "cancelled"
+        order.cancelled_at = datetime.now(UTC)
+        order.cancelled_by = cancelled_by_user_id
+        await self.db.flush()
+        await self.db.refresh(order)
+        return order
+
+    async def approve_order(self, order_id: UUID, company_id: UUID) -> Order:
+        """Approve a pending order (manager_or_above only)."""
+        order = await self.get_order(order_id, company_id)
+        if order.status != "pending":
+            raise ForbiddenError("Only pending orders can be approved")
+        order.status = "approved"
+        await self.db.flush()
+        await self.db.refresh(order)
+        return order
+
+    async def process_order(self, order_id: UUID, company_id: UUID) -> Order:
+        """Mark an approved order as processing (manager_or_above only)."""
+        order = await self.get_order(order_id, company_id)
+        if order.status != "approved":
+            raise ForbiddenError("Only approved orders can be marked as processing")
+        order.status = "processing"
+        await self.db.flush()
+        await self.db.refresh(order)
+        return order
+
+    async def ship_order(self, order_id: UUID, company_id: UUID) -> Order:
+        """Mark a processing order as shipped (manager_or_above only)."""
+        order = await self.get_order(order_id, company_id)
+        if order.status != "processing":
+            raise ForbiddenError("Only processing orders can be shipped")
+        order.status = "shipped"
+        await self.db.flush()
+        await self.db.refresh(order)
+        return order
+
+    async def deliver_order(self, order_id: UUID, company_id: UUID) -> Order:
+        """Mark a shipped order as delivered (manager_or_above only)."""
+        order = await self.get_order(order_id, company_id)
+        if order.status != "shipped":
+            raise ForbiddenError("Only shipped orders can be delivered")
+        order.status = "delivered"
+        await self.db.flush()
+        await self.db.refresh(order)
+        return order
+
+    # ------------------------------------------------------------------
     # Read methods (Phase 3)
     # ------------------------------------------------------------------
 

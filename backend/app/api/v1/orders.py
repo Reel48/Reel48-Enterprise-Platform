@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_db_session, get_tenant_context
+from app.core.dependencies import get_db_session, get_tenant_context, require_manager
 from app.core.exceptions import ForbiddenError, NotFoundError
 from app.core.tenant import TenantContext
 from app.schemas.common import ApiListResponse, ApiResponse, PaginationMeta
@@ -126,3 +126,76 @@ async def get_order(
     response = OrderWithItemsResponse.model_validate(order)
     response.line_items = [OrderLineItemResponse.model_validate(li) for li in line_items]
     return ApiResponse(data=response)
+
+
+# ---------------------------------------------------------------------------
+# Status Transition Endpoints (Phase 4)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/{order_id}/cancel", response_model=ApiResponse[OrderResponse])
+async def cancel_order(
+    order_id: UUID,
+    context: TenantContext = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[OrderResponse]:
+    """Cancel a pending order. Employees can cancel their own; managers can cancel any."""
+    company_id = _require_company_id(context)
+    user_id = await resolve_current_user_id(db, context.user_id)
+    service = OrderService(db)
+    order = await service.cancel_order(
+        order_id, company_id, user_id, context.is_manager_or_above,
+    )
+    return ApiResponse(data=OrderResponse.model_validate(order))
+
+
+@router.post("/{order_id}/approve", response_model=ApiResponse[OrderResponse])
+async def approve_order(
+    order_id: UUID,
+    context: TenantContext = Depends(require_manager),
+    db: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[OrderResponse]:
+    """Approve a pending order. Requires manager_or_above."""
+    company_id = _require_company_id(context)
+    service = OrderService(db)
+    order = await service.approve_order(order_id, company_id)
+    return ApiResponse(data=OrderResponse.model_validate(order))
+
+
+@router.post("/{order_id}/process", response_model=ApiResponse[OrderResponse])
+async def process_order(
+    order_id: UUID,
+    context: TenantContext = Depends(require_manager),
+    db: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[OrderResponse]:
+    """Mark an approved order as processing. Requires manager_or_above."""
+    company_id = _require_company_id(context)
+    service = OrderService(db)
+    order = await service.process_order(order_id, company_id)
+    return ApiResponse(data=OrderResponse.model_validate(order))
+
+
+@router.post("/{order_id}/ship", response_model=ApiResponse[OrderResponse])
+async def ship_order(
+    order_id: UUID,
+    context: TenantContext = Depends(require_manager),
+    db: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[OrderResponse]:
+    """Mark a processing order as shipped. Requires manager_or_above."""
+    company_id = _require_company_id(context)
+    service = OrderService(db)
+    order = await service.ship_order(order_id, company_id)
+    return ApiResponse(data=OrderResponse.model_validate(order))
+
+
+@router.post("/{order_id}/deliver", response_model=ApiResponse[OrderResponse])
+async def deliver_order(
+    order_id: UUID,
+    context: TenantContext = Depends(require_manager),
+    db: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[OrderResponse]:
+    """Mark a shipped order as delivered. Requires manager_or_above."""
+    company_id = _require_company_id(context)
+    service = OrderService(db)
+    order = await service.deliver_order(order_id, company_id)
+    return ApiResponse(data=OrderResponse.model_validate(order))

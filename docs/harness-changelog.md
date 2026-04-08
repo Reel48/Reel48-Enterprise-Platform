@@ -30,6 +30,30 @@
 
 ---
 
+## 2026-04-08 — Module 4 Phase 4 End-of-Session Self-Audit
+
+**Type:** End-of-session self-audit
+**Module:** Module 4 — Ordering Flow (Phase 4: Order Status Transitions)
+
+### Self-Audit Checklist
+- [x] **New pattern?** Yes — order status transition endpoints using `POST /{id}/{action}` pattern with role-based authorization. Cancel uses `get_tenant_context` with service-layer ownership check; all others use `require_manager` dependency. Documented in `backend/CLAUDE.md`.
+- [x] **Pattern violated?** Yes — the Module 4 table schema listed `fulfilled` as a status but implementation uses `processing`. Fixed in `backend/CLAUDE.md`.
+- [ ] **New decision?** No — transition rules and authorization were specified in the prompt.
+- [ ] **Missing guidance?** No — existing harness patterns for service methods, endpoints, and testing were sufficient.
+- [ ] **Reusable task?** No — status transition pattern is documented inline.
+- [x] **Changelog updated?** This entry.
+
+### Harness Files Updated
+- **`backend/CLAUDE.md`** — Fixed order status list (`fulfilled` → `processing`). Added "Order Status Lifecycle & Transitions" section documenting the state machine, authorization rules per transition, endpoint pattern, and invalid transition handling.
+
+### Session Metrics
+- **Tests written:** 12 new (4 functional, 5 authorization, 3 invalid transitions)
+- **Total order tests:** 48 passed (36 Phases 2-3 + 12 Phase 4)
+- **Mistakes caught by harness:** 0
+- **Gaps found:** 1 (incorrect status name `fulfilled` vs `processing` in table schema — fixed)
+
+---
+
 ## 2026-04-08 — Module 4 Phase 3 End-of-Session Self-Audit
 
 **Type:** End-of-session self-audit
