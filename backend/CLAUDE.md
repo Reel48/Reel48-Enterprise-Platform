@@ -500,6 +500,61 @@ FastAPI dependency. It is called inside route handlers after `get_tenant_context
   The resource no longer exists, so there is nothing to return.
 
 
+### PUT /me Upsert Pattern for Owned Resources
+
+# --- ADDED 2026-04-08 after Module 2 Phase 1 ---
+# Reason: Employee profiles introduced a "one resource per user" pattern where
+# the client shouldn't need to check existence before creating/updating.
+# Impact: Future modules with per-user resources (preferences, settings) follow
+# the same upsert pattern.
+
+When a resource has a 1:1 relationship with the authenticated user (e.g., employee
+profile, user preferences), use a `PUT /me` upsert endpoint instead of separate
+POST + PUT:
+
+```python
+@router.put("/me", response_model=ApiResponse[ResourceResponse])
+async def upsert_my_resource(
+    data: ResourceCreate,  # NOT ResourceUpdate — employees cannot set admin-only fields
+    context: TenantContext = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db_session),
+):
+    user_id = await resolve_current_user_id(db, context.user_id)
+    service = ResourceService(db)
+    resource = await service.upsert(user_id, context.company_id, context.sub_brand_id, data)
+    return ApiResponse(data=ResourceResponse.model_validate(resource))
+```
+
+**Key rules:**
+- Use `ResourceCreate` schema (not `Update`) so employees cannot set admin-only fields
+  (e.g., `onboarding_complete`). Admin-only updates go through `PATCH /{id}`.
+- The service checks for an existing record by `user_id`; creates if not found, updates
+  if found. Always `flush()` + `refresh()` before returning.
+- Returns 200 in both create and update cases (upsert is idempotent).
+
+### Trailing Slash Behavior in Tests
+
+# --- ADDED 2026-04-08 after Module 2 Phase 1 ---
+# Reason: FastAPI redirects `/profiles` to `/profiles/` with a 307, causing tests
+# that omit the trailing slash to fail with unexpected 307 responses.
+# Impact: All future tests use trailing slashes on list endpoint URLs.
+
+FastAPI's default `redirect_slashes=True` causes `GET /api/v1/profiles` to return
+a **307 Temporary Redirect** to `/api/v1/profiles/`. In tests, always include the
+trailing slash for list endpoints:
+
+```python
+# ✅ CORRECT — trailing slash for list endpoints
+await client.get("/api/v1/profiles/", headers=...)
+
+# ❌ WRONG — causes 307 redirect in tests
+await client.get("/api/v1/profiles", headers=...)
+```
+
+This applies to all `router.get("/")` list endpoints. Individual resource endpoints
+(`/profiles/me`, `/profiles/{id}`) are not affected.
+
+
 ## Service Layer Pattern
 
 # --- WHY THIS SECTION EXISTS ---
@@ -735,6 +790,7 @@ class TenantBase(Base):
 | `org_codes` | `CompanyBase` | Company-level codes, no sub-brand scoping |
 | `invites` | `CompanyBase` | Invite targets a sub-brand, but the FK is explicit (`target_sub_brand_id`), not the TenantBase `sub_brand_id` |
 | `users` | `TenantBase` | Scoped to company + sub-brand |
+| `employee_profiles` | `TenantBase` | Scoped to company + sub-brand (one per user) |
 | `products` | `TenantBase` | Scoped to company + sub-brand |
 | `orders` | `TenantBase` | Scoped to company + sub-brand |
 | `invoices` | `TenantBase` | Scoped to company + sub-brand |
@@ -905,6 +961,42 @@ RLS: Company isolation only (no `sub_brand_id` — org codes are per-company).
 Only one active code per company at a time. Generating a new code deactivates the previous.
 Public lookup (unauthenticated `POST /api/v1/auth/register`) queries this table via direct
 `WHERE code = :code` outside the RLS-scoped session. See ADR-007.
+
+
+## Module 2 Table Schema
+
+### `employee_profiles` Table (TenantBase)
+# --- ADDED 2026-04-08 during Module 2 Phase 1 ---
+# Reason: Module 2 adds the employee_profiles table. Documenting it here for
+# implementation consistency with Module 1 table schemas.
+# Impact: Future modules know the employee_profiles shape for FK references.
+```
+id                      UUID        PRIMARY KEY
+company_id              UUID        NOT NULL (FK → companies, indexed)
+sub_brand_id            UUID        NULL (FK → sub_brands, indexed)
+user_id                 UUID        NOT NULL UNIQUE (FK → users)
+department              VARCHAR(255) NULL
+job_title               VARCHAR(255) NULL
+location                VARCHAR(255) NULL       -- office/site name
+shirt_size              VARCHAR(10)  NULL       -- XS, S, M, L, XL, 2XL, 3XL
+pant_size               VARCHAR(20)  NULL
+shoe_size               VARCHAR(20)  NULL
+delivery_address_line1  VARCHAR(255) NULL
+delivery_address_line2  VARCHAR(255) NULL
+delivery_city           VARCHAR(100) NULL
+delivery_state          VARCHAR(100) NULL
+delivery_zip            VARCHAR(20)  NULL
+delivery_country        VARCHAR(100) NULL
+notes                   TEXT         NULL
+profile_photo_url       TEXT         NULL       -- S3 pre-signed URL (upload TBD)
+onboarding_complete     BOOLEAN      NOT NULL DEFAULT false
+deleted_at              TIMESTAMP    NULL       -- soft delete
+created_at              TIMESTAMP    NOT NULL
+updated_at              TIMESTAMP    NOT NULL
+```
+RLS: Standard company isolation (PERMISSIVE) + sub-brand scoping (RESTRICTIVE).
+One profile per user (UNIQUE on `user_id`). Created via `PUT /profiles/me` upsert.
+Composite index on `(company_id, department)` for common query pattern.
 
 
 ## Error Handling

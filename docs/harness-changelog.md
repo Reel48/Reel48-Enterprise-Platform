@@ -30,6 +30,58 @@
 
 ---
 
+## 2026-04-08 — Module 2 Phase 1 End-of-Session Self-Audit
+
+**Type:** End-of-session self-audit
+**Author:** Claude Code
+**Scope:** Module 2 Phase 1 — Employee Profiles (backend only: model, migration, endpoints, service, tests)
+
+### Self-Audit Checklist
+
+| Question | Finding | Action |
+|----------|---------|--------|
+| New pattern introduced? | YES — `PUT /me` upsert for 1:1 user-owned resources | Documented in `backend/CLAUDE.md` |
+| Existing pattern violated? | NO — all Module 1 patterns followed correctly | No action |
+| New decision made? | Minor — upsert via PUT instead of separate POST/PUT | Documented as pattern, not significant enough for ADR |
+| Missing guidance discovered? | YES — trailing slash on list endpoint URLs causes 307 in tests | Documented in `backend/CLAUDE.md` and `.claude/rules/testing.md` |
+| Prompt template needed? | NO — standard CRUD module, no reusable pattern to extract | No action |
+
+### Harness Files Updated
+
+| File | Change |
+|------|--------|
+| `backend/CLAUDE.md` | Added `employee_profiles` to "Which Base to Use" table |
+| `backend/CLAUDE.md` | Added "Module 2 Table Schema" section with `employee_profiles` column spec |
+| `backend/CLAUDE.md` | Added "PUT /me Upsert Pattern for Owned Resources" section |
+| `backend/CLAUDE.md` | Added "Trailing Slash Behavior in Tests" section |
+| `.claude/rules/testing.md` | Added trailing slash mistake to "Common Mistakes to Avoid" |
+| `docs/harness-changelog.md` | This entry |
+
+### Module 2 Phase 1 Completeness Summary
+
+| Area | Count | Status |
+|------|-------|--------|
+| Backend model | 1 (EmployeeProfile) | Complete |
+| Alembic migration | 1 (002 — table + RLS) | Complete |
+| Backend endpoints | 6 (GET/PUT /me, GET list, GET/PATCH/DELETE by ID) | Complete |
+| Backend service | 1 (EmployeeProfileService — 7 methods) | Complete |
+| Backend tests | 25 (16 functional, 6 authorization, 3 isolation) | All passing |
+| Total test count | 141 (116 Module 1 + 25 Module 2) | All passing |
+
+### Remaining Module 2 Work
+- **Profile photo upload (S3):** Scoped out of Phase 1. The `profile_photo_url` column exists but upload functionality deferred to a later phase when S3 integration is built.
+
+### Harness Health Metrics
+
+| Metric | Value | Trend |
+|--------|-------|-------|
+| Patterns violated during Module 2 P1 | 0 | Improving (was 4 in Module 1) |
+| Harness gaps found | 2 (upsert pattern, trailing slash) | Decreasing (was 6+6 in Module 1) |
+| New rules/sections added | 4 | Stabilizing (was 14 in Module 1) |
+| Backend test count | 141 | 9 files |
+
+---
+
 ## 2026-04-08 — Module 1 Formal Post-Module Harness Review
 
 **Type:** Post-module harness review (deep audit)

@@ -307,3 +307,4 @@ tests by default (prevents tests from hitting Redis). To test rate limiting beha
 - ❌ Sharing mutable state between tests (each test should be independent)
 - ❌ Testing implementation details instead of behavior
 - ❌ Hardcoding UUIDs instead of generating them (causes conflicts in parallel tests)
+- ❌ Omitting trailing slash on list endpoint URLs (causes 307 redirect — use `/api/v1/profiles/` not `/api/v1/profiles`)
