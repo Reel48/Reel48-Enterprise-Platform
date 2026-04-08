@@ -1101,6 +1101,52 @@ draft → submitted → approved → active → archived
   Corporate admins see all sub-brands' products within their company.
 
 
+## Catalog Status Lifecycle & Visibility
+
+# --- ADDED 2026-04-08 during Module 3 Phase 3 ---
+# Reason: Catalogs follow a similar lifecycle to products but with additional
+# constraints (submit requires products, buying window validation). Documenting
+# here ensures future modules (Ordering, Approval Workflows) know catalog lifecycle.
+# Impact: Future modules handle catalog statuses correctly and know the submit guard.
+
+### Status Transitions
+```
+draft → submitted → approved → active → closed → archived
+```
+- **draft:** Initial status. Editable, deletable (soft-delete), submittable.
+- **submitted:** Awaiting Reel48 admin approval. Submit requires at least one product.
+- **approved:** Approved by `reel48_admin`. (Module 6 builds approval endpoints.)
+- **active:** Live catalog, employees can browse and order. No edits.
+- **closed:** Buying window has closed (for `invoice_after_close` catalogs).
+- **archived:** Removed from active use. No edits.
+
+### Edit/Delete Restrictions
+- Only catalogs in `draft` status can be updated (`PATCH`), deleted (`DELETE`), or
+  submitted (`POST .../submit`). All other statuses return 403.
+- Deleting a draft catalog also hard-deletes its catalog_products junction entries.
+- Products can only be added to or removed from draft catalogs.
+
+### Submit Guard
+- A catalog CANNOT be submitted if it has zero products (returns 422).
+- This prevents empty catalogs from entering the approval workflow.
+
+### Buying Window Validation
+- `payment_model` is set at creation and is NOT updatable.
+- `invoice_after_close`: Both `buying_window_opens_at` and `buying_window_closes_at`
+  are required. `opens_at` must be before `closes_at`.
+- `self_service`: Both window fields must be NULL. Setting them is a 422 error.
+
+### Role-Based Visibility
+- Same pattern as products: admins see all statuses, non-admins see only `active`.
+
+### Slug Auto-Generation
+Catalog slugs are auto-generated from the name at creation time:
+- Lowercase, replace non-alphanumeric characters with hyphens, strip edges
+- Collision handling: append `-2`, `-3`, etc. within the same company
+- Slugs are regenerated on name update (also with collision handling)
+- No third-party slug library — uses a simple `re.sub()` helper in the service
+
+
 ## Error Handling
 
 # --- WHY THIS SECTION EXISTS ---
