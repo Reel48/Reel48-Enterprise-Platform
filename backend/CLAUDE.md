@@ -999,6 +999,75 @@ One profile per user (UNIQUE on `user_id`). Created via `PUT /profiles/me` upser
 Composite index on `(company_id, department)` for common query pattern.
 
 
+## Module 3 Table Schemas
+
+### `products` Table (TenantBase)
+# --- ADDED 2026-04-08 during Module 3 Phase 1 ---
+# Reason: Module 3 adds product catalog tables. Documenting them here for
+# implementation consistency and FK references in future modules.
+# Impact: Future modules (Ordering, Invoicing) know the products/catalogs shape.
+```
+id                      UUID        PRIMARY KEY
+company_id              UUID        NOT NULL (FK → companies, indexed)
+sub_brand_id            UUID        NULL (FK → sub_brands, indexed)
+name                    VARCHAR(255) NOT NULL
+description             TEXT         NULL
+sku                     VARCHAR(100) NOT NULL
+unit_price              NUMERIC(10,2) NOT NULL, CHECK >= 0
+sizes                   JSONB        NOT NULL DEFAULT '[]'
+decoration_options      JSONB        NOT NULL DEFAULT '[]'
+image_urls              JSONB        NOT NULL DEFAULT '[]'
+status                  VARCHAR(20)  NOT NULL DEFAULT 'draft'  -- draft|submitted|approved|active|archived
+approved_by             UUID         NULL (FK → users)
+approved_at             TIMESTAMP    NULL
+created_by              UUID         NOT NULL (FK → users)
+deleted_at              TIMESTAMP    NULL       -- soft delete
+created_at              TIMESTAMP    NOT NULL
+updated_at              TIMESTAMP    NOT NULL
+```
+RLS: Standard company isolation (PERMISSIVE) + sub-brand scoping (RESTRICTIVE).
+Partial unique index: `(company_id, sku) WHERE deleted_at IS NULL`.
+Composite index: `(company_id, status)`.
+
+### `catalogs` Table (TenantBase)
+```
+id                      UUID        PRIMARY KEY
+company_id              UUID        NOT NULL (FK → companies, indexed)
+sub_brand_id            UUID        NULL (FK → sub_brands, indexed)
+name                    VARCHAR(255) NOT NULL
+description             TEXT         NULL
+slug                    VARCHAR(100) NOT NULL
+payment_model           VARCHAR(30)  NOT NULL   -- 'self_service' | 'invoice_after_close'
+status                  VARCHAR(20)  NOT NULL DEFAULT 'draft'  -- draft|submitted|approved|active|closed|archived
+buying_window_opens_at  TIMESTAMP    NULL
+buying_window_closes_at TIMESTAMP    NULL
+approved_by             UUID         NULL (FK → users)
+approved_at             TIMESTAMP    NULL
+created_by              UUID         NOT NULL (FK → users)
+deleted_at              TIMESTAMP    NULL       -- soft delete
+created_at              TIMESTAMP    NOT NULL
+updated_at              TIMESTAMP    NOT NULL
+```
+RLS: Standard company isolation (PERMISSIVE) + sub-brand scoping (RESTRICTIVE).
+Partial unique index: `(company_id, slug) WHERE deleted_at IS NULL`.
+Composite index: `(company_id, status)`.
+
+### `catalog_products` Junction Table (TenantBase)
+```
+id                      UUID        PRIMARY KEY
+company_id              UUID        NOT NULL (FK → companies, indexed)
+sub_brand_id            UUID        NULL (FK → sub_brands, indexed)
+catalog_id              UUID        NOT NULL (FK → catalogs)
+product_id              UUID        NOT NULL (FK → products)
+display_order           INTEGER      NOT NULL DEFAULT 0
+price_override          NUMERIC(10,2) NULL     -- overrides products.unit_price for this catalog
+created_at              TIMESTAMP    NOT NULL
+updated_at              TIMESTAMP    NOT NULL
+```
+RLS: Standard company isolation (PERMISSIVE) + sub-brand scoping (RESTRICTIVE).
+UNIQUE constraint on `(catalog_id, product_id)`.
+
+
 ## Error Handling
 
 # --- WHY THIS SECTION EXISTS ---
