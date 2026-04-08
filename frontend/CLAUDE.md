@@ -314,7 +314,8 @@ src/app/
 ├── (public)/                  # Unauthenticated routes (no layout wrapper)
 │   ├── login/page.tsx
 │   ├── register/page.tsx          # Self-registration via org code (ADR-007)
-│   └── invite/[token]/page.tsx    # Employee invite acceptance
+│   ├── invite/page.tsx            # Invite landing page (manual token entry)
+│   └── invite/[token]/page.tsx    # Employee invite acceptance (token from URL)
 ├── (authenticated)/           # Protected routes (auth layout wrapper)
 │   ├── layout.tsx             # Wraps all auth routes with ProtectedRoute + Sidebar
 │   ├── dashboard/page.tsx     # Role-aware dashboard (shows different content per role)
@@ -421,12 +422,43 @@ Create a centralized API client in `src/lib/api/client.ts` that:
 // and error handling happen in exactly one place. If we need to change
 // how tokens are sent (e.g., from header to cookie), we change one file.
 export const api = {
-  get: <T>(url: string, params?: Record<string, string>) => fetchWithAuth<T>('GET', url, { params }),
-  post: <T>(url: string, body: unknown) => fetchWithAuth<T>('POST', url, { body }),
-  put: <T>(url: string, body: unknown) => fetchWithAuth<T>('PUT', url, { body }),
-  patch: <T>(url: string, body: unknown) => fetchWithAuth<T>('PATCH', url, { body }),
-  delete: <T>(url: string) => fetchWithAuth<T>('DELETE', url),
+  get: <T>(url: string, params?: Record<string, string>, options?: { skipAuth?: boolean }) =>
+    fetchWithAuth<T>('GET', url, { params, ...options }),
+  post: <T>(url: string, body?: unknown, options?: { skipAuth?: boolean }) =>
+    fetchWithAuth<T>('POST', url, { body, ...options }),
+  put: <T>(url: string, body?: unknown, options?: { skipAuth?: boolean }) =>
+    fetchWithAuth<T>('PUT', url, { body, ...options }),
+  patch: <T>(url: string, body?: unknown, options?: { skipAuth?: boolean }) =>
+    fetchWithAuth<T>('PATCH', url, { body, ...options }),
+  delete: <T>(url: string, options?: { skipAuth?: boolean }) =>
+    fetchWithAuth<T>('DELETE', url, options),
 };
+```
+
+### Unauthenticated API Calls (`skipAuth`)
+
+# --- ADDED 2026-04-08 after Module 1 Phase 7 ---
+# Reason: Registration endpoints (validate-org-code, register, register-from-invite)
+#   are unauthenticated. The default fetchWithAuth calls fetchAuthSession() which
+#   fails when no Amplify session exists (e.g., on the registration page).
+# Impact: Claude Code knows to pass `{ skipAuth: true }` for unauthenticated endpoints.
+
+The API client supports a `skipAuth: true` option for **unauthenticated endpoints**
+(registration, org code validation, Stripe webhooks). When `skipAuth` is true:
+1. The client skips `fetchAuthSession()` — no Bearer token is attached
+2. The 401 retry-with-refresh logic is also skipped
+3. All other behavior (snake/camelCase transforms, error handling) works normally
+
+```typescript
+// ✅ CORRECT — unauthenticated endpoint
+const response = await api.post<ValidateOrgCodeData>(
+  '/api/v1/auth/validate-org-code',
+  { code },
+  { skipAuth: true },
+);
+
+// ✅ CORRECT — authenticated endpoint (default behavior)
+const response = await api.get<UserProfile>('/api/v1/users/me');
 ```
 
 

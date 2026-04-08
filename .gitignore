@@ -33,3 +33,4 @@ backend/.env
 node_modules/
 .next/
 frontend/.env.local
+*.tsbuildinfo
