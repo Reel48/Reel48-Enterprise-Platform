@@ -1103,6 +1103,98 @@ RLS: Standard company isolation (PERMISSIVE) + sub-brand scoping (RESTRICTIVE).
 UNIQUE constraint on `(catalog_id, product_id)`.
 
 
+## Module 4 Table Schemas
+
+# --- ADDED 2026-04-08 during Module 4 Phase 3 ---
+# Reason: Module 4 adds orders and order_line_items tables. Documenting them here
+# for implementation consistency and FK references in future modules (Bulk Ordering,
+# Invoicing).
+# Impact: Future modules know the orders/order_line_items shape for FK references.
+
+### `orders` Table (TenantBase)
+```
+id                      UUID        PRIMARY KEY
+company_id              UUID        NOT NULL (FK → companies, indexed)
+sub_brand_id            UUID        NULL (FK → sub_brands, indexed)
+user_id                 UUID        NOT NULL (FK → users)     -- employee who placed the order
+catalog_id              UUID        NOT NULL (FK → catalogs)  -- catalog the order was placed against
+order_number            VARCHAR(30)  NOT NULL UNIQUE           -- ORD-YYYYMMDD-XXXX format
+status                  VARCHAR(20)  NOT NULL DEFAULT 'pending' -- pending|approved|fulfilled|shipped|delivered|cancelled
+shipping_address_line1  VARCHAR(255) NULL
+shipping_address_line2  VARCHAR(255) NULL
+shipping_city           VARCHAR(100) NULL
+shipping_state          VARCHAR(100) NULL
+shipping_zip            VARCHAR(20)  NULL
+shipping_country        VARCHAR(100) NULL
+notes                   TEXT         NULL
+subtotal                NUMERIC(10,2) NOT NULL DEFAULT 0
+total_amount            NUMERIC(10,2) NOT NULL DEFAULT 0
+cancelled_at            TIMESTAMP    NULL
+cancelled_by            UUID         NULL (FK → users)
+created_at              TIMESTAMP    NOT NULL
+updated_at              TIMESTAMP    NOT NULL
+```
+RLS: Standard company isolation (PERMISSIVE) + sub-brand scoping (RESTRICTIVE).
+Shipping address is copied from request body or employee profile at order time.
+
+### `order_line_items` Table (TenantBase)
+```
+id                      UUID        PRIMARY KEY
+company_id              UUID        NOT NULL (FK → companies, indexed)
+sub_brand_id            UUID        NULL (FK → sub_brands, indexed)
+order_id                UUID        NOT NULL (FK → orders)
+product_id              UUID        NOT NULL (FK → products)
+product_name            VARCHAR(255) NOT NULL   -- snapshot at order time
+product_sku             VARCHAR(100) NOT NULL   -- snapshot at order time
+unit_price              NUMERIC(10,2) NOT NULL  -- snapshot (catalog override or product price)
+quantity                INTEGER      NOT NULL DEFAULT 1
+size                    VARCHAR(20)  NULL
+decoration              VARCHAR(255) NULL
+line_total              NUMERIC(10,2) NOT NULL  -- unit_price × quantity
+created_at              TIMESTAMP    NOT NULL
+updated_at              TIMESTAMP    NOT NULL
+```
+RLS: Standard company isolation (PERMISSIVE) + sub-brand scoping (RESTRICTIVE).
+Line items snapshot product details at order time so price/name changes don't affect historical orders.
+
+
+## Order Retrieval: Role-Based Visibility
+
+# --- ADDED 2026-04-08 during Module 4 Phase 3 ---
+# Reason: Orders use a different visibility pattern than products/catalogs. Products
+# use status-based visibility (admins see all statuses, employees see only active).
+# Orders use ownership-based visibility (managers see all in scope, employees see
+# only their own). Documenting prevents confusion in future modules.
+# Impact: Future modules (Bulk Ordering, Invoicing) follow the same ownership-based
+# pattern where applicable.
+
+### List Endpoint Behavior (`GET /api/v1/orders/`)
+- **Managers and admins** (`regional_manager`, `sub_brand_admin`, `corporate_admin`):
+  See all orders within their company/sub-brand scope. Corporate admins (sub_brand_id=None)
+  see orders across all sub-brands in their company.
+- **Employees**: See only orders where `Order.user_id` matches their own local user ID.
+  The service uses `list_my_orders()` which adds a `user_id` filter.
+
+### Explicit "My Orders" Endpoint (`GET /api/v1/orders/my/`)
+Always returns only the authenticated user's own orders, regardless of role. This is
+useful for managers/admins who want to see orders they personally placed (not all orders
+in their scope). Defined BEFORE `/{order_id}` in the router to prevent FastAPI from
+parsing "my" as a UUID path parameter.
+
+### Get Order Detail (`GET /api/v1/orders/{order_id}`)
+Returns the order with nested `line_items`. Employees can only see their own orders —
+if the order's `user_id` doesn't match, a 404 is returned (not 403, to prevent
+information leakage about other orders' existence).
+
+### Pattern Summary
+| Role | `GET /orders/` | `GET /orders/my/` | `GET /orders/{id}` |
+|------|---------------|-------------------|-------------------|
+| `corporate_admin` | All company orders | Own orders only | Any company order |
+| `sub_brand_admin` | All sub-brand orders | Own orders only | Any sub-brand order |
+| `regional_manager` | All sub-brand orders | Own orders only | Any sub-brand order |
+| `employee` | Own orders only | Own orders only | Own orders only |
+
+
 ## Product Status Lifecycle & Visibility
 
 # --- ADDED 2026-04-08 during Module 3 Phase 2 ---

@@ -36,14 +36,15 @@
 **Module:** Module 4 — Ordering Flow (Phase 3: Order List & Get Endpoints)
 
 ### Self-Audit Checklist
-- [x] **New pattern?** No — list/get endpoints with role-based visibility follow the same pattern established in Module 3 (products/catalogs). The `is_manager_or_above` property on TenantContext was already defined.
+- [x] **New pattern?** Yes — ownership-based visibility for orders (managers see all in scope, employees see only own). This differs from the status-based visibility used by products/catalogs. Also introduced the `/my/` explicit endpoint pattern. Both documented in `backend/CLAUDE.md`.
 - [x] **Pattern violated?** No — followed existing patterns for pagination, defense-in-depth filtering, and standard response format.
-- [x] **New decision?** No — the role-based visibility split (managers see all, employees see own) was specified in the prompt and aligns with the auth access matrix.
+- [x] **New decision?** No — the role-based visibility split was specified in the prompt and aligns with the auth access matrix.
 - [ ] **Reusable task?** No — standard CRUD list/get pattern.
 - [x] **Changelog updated?** This entry.
 
 ### Harness Files Updated
-- **No harness file changes needed.** All patterns used in this phase were already documented.
+- **`backend/CLAUDE.md`** — Added "Module 4 Table Schemas" section documenting `orders` and `order_line_items` tables (column definitions, RLS policies, snapshot pattern). Added "Order Retrieval: Role-Based Visibility" section documenting the ownership-based visibility pattern, the `/my/` endpoint pattern, and the role-to-endpoint access matrix.
+- **`.claude/rules/testing.md`** — Added "Role-Specific User + Token Fixtures" section listing all User+Token fixture pairs vs token-only fixtures, explaining when to use each. Documents the new `user_a1_manager` + `user_a1_manager_token` fixtures.
 
 ### New Fixtures Added
 - `user_a1_manager` + `user_a1_manager_token` in `conftest.py` — regional_manager User record with matching JWT. Previously only the token fixture existed without a backing User record.
@@ -52,7 +53,7 @@
 - **Tests written:** 14 new (5 functional, 6 role-visibility, 3 isolation)
 - **Total order tests:** 36 passed (22 Phase 2 + 14 Phase 3)
 - **Mistakes caught by harness:** 0
-- **Gaps found:** 0
+- **Gaps found:** 2 (Module 4 table schemas not documented, role-based list visibility pattern not documented — both now fixed)
 
 ---
 
