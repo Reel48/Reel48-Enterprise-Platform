@@ -384,6 +384,122 @@ class BulkOrderService:
         await self.db.refresh(bulk_order)
 
     # ------------------------------------------------------------------
+    # Status transitions
+    # ------------------------------------------------------------------
+
+    async def submit_bulk_order(
+        self, bulk_order_id: UUID, company_id: UUID,
+    ) -> BulkOrder:
+        """Submit a draft bulk order for approval.
+
+        Guards:
+        1. Must be in 'draft' status
+        2. Must have at least one item
+        3. Records submitted_at timestamp
+        """
+        bulk_order = await self.get_bulk_order(bulk_order_id, company_id)
+        if bulk_order.status != "draft":
+            raise ForbiddenError("Only draft bulk orders can be submitted")
+
+        item_count = await self.db.scalar(
+            select(func.count()).select_from(
+                select(BulkOrderItem.id).where(
+                    BulkOrderItem.bulk_order_id == bulk_order_id
+                ).subquery()
+            )
+        )
+        if item_count == 0:
+            raise ValidationError("Cannot submit a bulk order with no items")
+
+        bulk_order.status = "submitted"
+        bulk_order.submitted_at = datetime.now(UTC)
+        await self.db.flush()
+        await self.db.refresh(bulk_order)
+        return bulk_order
+
+    async def approve_bulk_order(
+        self, bulk_order_id: UUID, company_id: UUID, approved_by: UUID,
+    ) -> BulkOrder:
+        """Approve a submitted bulk order. Records approved_by and approved_at."""
+        bulk_order = await self.get_bulk_order(bulk_order_id, company_id)
+        if bulk_order.status != "submitted":
+            raise ForbiddenError("Only submitted bulk orders can be approved")
+        bulk_order.status = "approved"
+        bulk_order.approved_by = approved_by
+        bulk_order.approved_at = datetime.now(UTC)
+        await self.db.flush()
+        await self.db.refresh(bulk_order)
+        return bulk_order
+
+    async def process_bulk_order(
+        self, bulk_order_id: UUID, company_id: UUID,
+    ) -> BulkOrder:
+        """Mark an approved bulk order as processing."""
+        bulk_order = await self.get_bulk_order(bulk_order_id, company_id)
+        if bulk_order.status != "approved":
+            raise ForbiddenError("Only approved bulk orders can be marked as processing")
+        bulk_order.status = "processing"
+        await self.db.flush()
+        await self.db.refresh(bulk_order)
+        return bulk_order
+
+    async def ship_bulk_order(
+        self, bulk_order_id: UUID, company_id: UUID,
+    ) -> BulkOrder:
+        """Mark a processing bulk order as shipped."""
+        bulk_order = await self.get_bulk_order(bulk_order_id, company_id)
+        if bulk_order.status != "processing":
+            raise ForbiddenError("Only processing bulk orders can be shipped")
+        bulk_order.status = "shipped"
+        await self.db.flush()
+        await self.db.refresh(bulk_order)
+        return bulk_order
+
+    async def deliver_bulk_order(
+        self, bulk_order_id: UUID, company_id: UUID,
+    ) -> BulkOrder:
+        """Mark a shipped bulk order as delivered."""
+        bulk_order = await self.get_bulk_order(bulk_order_id, company_id)
+        if bulk_order.status != "shipped":
+            raise ForbiddenError("Only shipped bulk orders can be delivered")
+        bulk_order.status = "delivered"
+        await self.db.flush()
+        await self.db.refresh(bulk_order)
+        return bulk_order
+
+    async def cancel_bulk_order(
+        self,
+        bulk_order_id: UUID,
+        company_id: UUID,
+        cancelled_by_user_id: UUID,
+        is_manager_or_above: bool,
+    ) -> BulkOrder:
+        """Cancel a draft, submitted, or approved bulk order.
+
+        Authorization:
+        - draft: creator or manager_or_above
+        - submitted/approved: manager_or_above only
+        - processing/shipped/delivered/cancelled: cannot cancel
+        """
+        bulk_order = await self.get_bulk_order(bulk_order_id, company_id)
+
+        if bulk_order.status == "draft":
+            if not is_manager_or_above and bulk_order.created_by != cancelled_by_user_id:
+                raise ForbiddenError("Only the creator or a manager can cancel this bulk order")
+        elif bulk_order.status in ("submitted", "approved"):
+            if not is_manager_or_above:
+                raise ForbiddenError("Only managers can cancel submitted or approved bulk orders")
+        else:
+            raise ForbiddenError(f"Cannot cancel a bulk order with status '{bulk_order.status}'")
+
+        bulk_order.status = "cancelled"
+        bulk_order.cancelled_at = datetime.now(UTC)
+        bulk_order.cancelled_by = cancelled_by_user_id
+        await self.db.flush()
+        await self.db.refresh(bulk_order)
+        return bulk_order
+
+    # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
 

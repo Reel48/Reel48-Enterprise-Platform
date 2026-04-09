@@ -115,6 +115,93 @@ async def delete_bulk_order(
 
 
 # ---------------------------------------------------------------------------
+# Status transition endpoints (Phase 4)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/{bulk_order_id}/submit", response_model=ApiResponse[BulkOrderResponse])
+async def submit_bulk_order(
+    bulk_order_id: UUID,
+    context: TenantContext = Depends(require_manager),
+    db: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[BulkOrderResponse]:
+    """Submit a draft bulk order for approval. Must have at least one item."""
+    company_id = _require_company_id(context)
+    service = BulkOrderService(db)
+    bulk_order = await service.submit_bulk_order(bulk_order_id, company_id)
+    return ApiResponse(data=BulkOrderResponse.model_validate(bulk_order))
+
+
+@router.post("/{bulk_order_id}/approve", response_model=ApiResponse[BulkOrderResponse])
+async def approve_bulk_order(
+    bulk_order_id: UUID,
+    context: TenantContext = Depends(require_manager),
+    db: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[BulkOrderResponse]:
+    """Approve a submitted bulk order. Records approved_by."""
+    company_id = _require_company_id(context)
+    approved_by = await resolve_current_user_id(db, context.user_id)
+    service = BulkOrderService(db)
+    bulk_order = await service.approve_bulk_order(bulk_order_id, company_id, approved_by)
+    return ApiResponse(data=BulkOrderResponse.model_validate(bulk_order))
+
+
+@router.post("/{bulk_order_id}/process", response_model=ApiResponse[BulkOrderResponse])
+async def process_bulk_order(
+    bulk_order_id: UUID,
+    context: TenantContext = Depends(require_manager),
+    db: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[BulkOrderResponse]:
+    """Mark an approved bulk order as processing."""
+    company_id = _require_company_id(context)
+    service = BulkOrderService(db)
+    bulk_order = await service.process_bulk_order(bulk_order_id, company_id)
+    return ApiResponse(data=BulkOrderResponse.model_validate(bulk_order))
+
+
+@router.post("/{bulk_order_id}/ship", response_model=ApiResponse[BulkOrderResponse])
+async def ship_bulk_order(
+    bulk_order_id: UUID,
+    context: TenantContext = Depends(require_manager),
+    db: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[BulkOrderResponse]:
+    """Mark a processing bulk order as shipped."""
+    company_id = _require_company_id(context)
+    service = BulkOrderService(db)
+    bulk_order = await service.ship_bulk_order(bulk_order_id, company_id)
+    return ApiResponse(data=BulkOrderResponse.model_validate(bulk_order))
+
+
+@router.post("/{bulk_order_id}/deliver", response_model=ApiResponse[BulkOrderResponse])
+async def deliver_bulk_order(
+    bulk_order_id: UUID,
+    context: TenantContext = Depends(require_manager),
+    db: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[BulkOrderResponse]:
+    """Mark a shipped bulk order as delivered."""
+    company_id = _require_company_id(context)
+    service = BulkOrderService(db)
+    bulk_order = await service.deliver_bulk_order(bulk_order_id, company_id)
+    return ApiResponse(data=BulkOrderResponse.model_validate(bulk_order))
+
+
+@router.post("/{bulk_order_id}/cancel", response_model=ApiResponse[BulkOrderResponse])
+async def cancel_bulk_order(
+    bulk_order_id: UUID,
+    context: TenantContext = Depends(require_manager),
+    db: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[BulkOrderResponse]:
+    """Cancel a draft, submitted, or approved bulk order."""
+    company_id = _require_company_id(context)
+    cancelled_by = await resolve_current_user_id(db, context.user_id)
+    service = BulkOrderService(db)
+    bulk_order = await service.cancel_bulk_order(
+        bulk_order_id, company_id, cancelled_by, context.is_manager_or_above,
+    )
+    return ApiResponse(data=BulkOrderResponse.model_validate(bulk_order))
+
+
+# ---------------------------------------------------------------------------
 # Item management endpoints
 # ---------------------------------------------------------------------------
 
