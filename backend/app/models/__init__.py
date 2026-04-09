@@ -1,4 +1,6 @@
 from app.models.base import Base, CompanyBase, GlobalBase, TenantBase
+from app.models.bulk_order import BulkOrder
+from app.models.bulk_order_item import BulkOrderItem
 from app.models.catalog import Catalog
 from app.models.catalog_product import CatalogProduct
 from app.models.company import Company
@@ -27,4 +29,6 @@ __all__ = [
     "CatalogProduct",
     "Order",
     "OrderLineItem",
+    "BulkOrder",
+    "BulkOrderItem",
 ]
