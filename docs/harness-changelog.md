@@ -30,6 +30,36 @@
 
 ---
 
+## 2026-04-09 — Module 5 Phase 3 End-of-Session Self-Audit
+
+**Type:** End-of-session self-audit
+**Module:** Module 5 — Bulk Ordering System (Phase 3: Item Management)
+
+### Self-Audit Checklist
+- [ ] **New pattern?** → No new patterns. Phase 3 reuses the exact same product/catalog validation, price snapshotting, size/decoration validation, and Decimal arithmetic patterns established in Module 4's `OrderService._validate_line_items()`. The `_recalculate_totals()` method uses `func.coalesce(func.sum(...), 0)` for denormalized totals — standard SQLAlchemy aggregation.
+- [ ] **Pattern violated?** → No deviations. Item endpoints use `require_manager`, `_require_company_id`, and return standard `ApiResponse`/204 patterns. Employee validation checks `company_id` only (not sub_brand), matching the documented cross-sub-brand bulk order design.
+- [ ] **New decision?** → No ADR-worthy decisions. Product_id is immutable on items (remove + re-add to change product) — consistent with order_line_items being immutable snapshots.
+- [ ] **Missing guidance?** → No gaps discovered. The prompt provided exhaustive implementation details and all validation patterns were covered by existing harness rules.
+- [ ] **Reusable task?** → No new prompt templates needed.
+- [x] **Changelog updated?** → This entry.
+
+### Harness Files Updated
+- None — no new patterns or gaps identified.
+
+### Session Metrics
+- **Tests written:** 14 (8 add-item, 2 update-item, 2 remove-item, 2 state/totals)
+- **Total test suite:** 294 passed, 0 failed
+- **Mistakes caught by harness:** 0
+- **Gaps found:** 0
+
+### Implementation Notes
+- `add_item()` follows the same validation chain as `OrderService._validate_line_items()`: catalog membership → product active → price resolution → size/decoration validation → employee validation
+- `_recalculate_totals()` uses SUM(quantity) for total_items (not COUNT of rows), matching the schema documentation that total_items = sum of all quantities
+- `update_item()` uses lazy product loading — only fetches the product if size or decoration validation is needed
+- Employee validation is company_id-only (no sub_brand_id check) to support corporate admin cross-sub-brand bulk orders
+
+---
+
 ## 2026-04-09 — Module 5 Phase 2 End-of-Session Self-Audit
 
 **Type:** End-of-session self-audit
