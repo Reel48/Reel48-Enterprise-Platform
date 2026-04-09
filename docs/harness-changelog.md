@@ -30,6 +30,40 @@
 
 ---
 
+## 2026-04-09 — Module 7 Phase 4 (Stripe Webhook Handler)
+
+**Type:** End-of-session self-audit (Trigger 1)
+**Module:** Module 7 — Invoicing & Client Billing (Phase 4)
+
+### What was built
+- `backend/app/api/v1/webhooks.py` — Stripe webhook endpoint (`POST /api/v1/webhooks/stripe`).
+  Unauthenticated — security via Stripe signature verification. Sets RLS session variables
+  to empty string for platform-level cross-company invoice lookup. Dispatches to
+  `InvoiceService.handle_webhook_event()` for idempotent status updates.
+- `backend/app/api/v1/router.py` — Registered webhook router.
+
+### Harness review
+1. **New pattern?** Yes — webhook RLS bypass pattern. The webhook endpoint sets
+   `app.current_company_id = ''` and `app.current_sub_brand_id = ''` directly
+   (without JWT/TenantContext) to enable cross-company invoice lookup. This is the
+   same bypass mechanism as `reel48_admin`, but triggered by signature verification
+   instead of JWT role. Documented in backend CLAUDE.md under Unauthenticated Endpoint
+   Exceptions.
+2. **Pattern violated?** No.
+3. **New decision?** No — follows the stripe-invoicing rule for webhook handling.
+4. **Missing guidance?** The webhook entry in Unauthenticated Endpoint Exceptions was
+   missing the RLS bypass detail. Updated to include it.
+5. **Prompt template needed?** No.
+
+### Files changed
+- **`backend/app/api/v1/webhooks.py`** — New file (webhook endpoint)
+- **`backend/app/api/v1/router.py`** — Added webhook router registration
+- **`backend/CLAUDE.md`** — Updated webhook entry in Unauthenticated Endpoint Exceptions
+  with RLS bypass pattern
+- **`docs/harness-changelog.md`** — This entry
+
+---
+
 ## 2026-04-09 — Module 7 Phase 3 (Platform Admin Invoice Endpoints)
 
 **Type:** End-of-session self-audit (Trigger 1)

@@ -303,6 +303,9 @@ never issues them.
 # Impact: All unauthenticated endpoints are documented.
 Four endpoints do NOT use `get_tenant_context` because they receive requests without JWTs:
 1. **`POST /api/v1/webhooks/stripe`** — Stripe webhook. Secured by signature verification.
+   RLS bypass: sets `app.current_company_id = ''` and `app.current_sub_brand_id = ''`
+   (empty strings) to act as a platform-level operation, allowing cross-company invoice
+   lookup by `stripe_invoice_id`. See `backend/app/api/v1/webhooks.py`.
 2. **`POST /api/v1/auth/validate-org-code`** — Validates an org code and returns the
    company name + list of sub-brands. Rate-limited (5 attempts per IP per 15 minutes).
 3. **`POST /api/v1/auth/register`** — Self-registration via org code. Accepts the org
