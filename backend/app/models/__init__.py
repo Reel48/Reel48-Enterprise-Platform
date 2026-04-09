@@ -8,6 +8,7 @@ from app.models.catalog_product import CatalogProduct
 from app.models.company import Company
 from app.models.employee_profile import EmployeeProfile
 from app.models.invite import Invite
+from app.models.invoice import Invoice
 from app.models.order import Order
 from app.models.order_line_item import OrderLineItem
 from app.models.org_code import OrgCode
@@ -35,4 +36,5 @@ __all__ = [
     "OrderLineItem",
     "BulkOrder",
     "BulkOrderItem",
+    "Invoice",
 ]
