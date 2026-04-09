@@ -17,6 +17,7 @@ from app.services.approval_service import ApprovalService
 from app.services.email_service import EmailService, get_email_service
 from app.services.helpers import resolve_current_user_id
 from app.services.order_service import OrderService
+from app.services.stripe_service import StripeService, get_stripe_service
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
@@ -34,11 +35,12 @@ async def create_order(
     context: TenantContext = Depends(get_tenant_context),
     db: AsyncSession = Depends(get_db_session),
     email_service: EmailService = Depends(get_email_service),
+    stripe_service: StripeService = Depends(get_stripe_service),
 ) -> ApiResponse[OrderWithItemsResponse]:
     """Place an order against an active catalog. All authenticated roles can order."""
     company_id = _require_company_id(context)
     user_id = await resolve_current_user_id(db, context.user_id)
-    service = OrderService(db)
+    service = OrderService(db, stripe_service=stripe_service)
     order, line_items = await service.create_order(
         data=data,
         company_id=company_id,

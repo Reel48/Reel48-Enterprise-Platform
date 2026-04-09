@@ -3,8 +3,10 @@ from __future__ import annotations
 import secrets
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 from uuid import UUID
 
+import structlog
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,10 +20,20 @@ from app.models.product import Product
 from app.schemas.order import OrderCreate
 from app.services.helpers import resolve_current_user_id
 
+if TYPE_CHECKING:
+    from app.services.stripe_service import StripeService
+
+logger = structlog.get_logger()
+
 
 class OrderService:
-    def __init__(self, db: AsyncSession):
+    def __init__(
+        self,
+        db: AsyncSession,
+        stripe_service: StripeService | None = None,
+    ):
         self.db = db
+        self._stripe = stripe_service
 
     async def create_order(
         self,
@@ -105,6 +117,22 @@ class OrderService:
         await self.db.flush()
         for li in line_items:
             await self.db.refresh(li)
+
+        # Self-service invoice auto-generation (Flow 2)
+        # If the catalog has payment_model='self_service', auto-create a Stripe invoice.
+        # Non-blocking: if Stripe fails, the order still succeeds.
+        if catalog.payment_model == "self_service" and self._stripe is not None:
+            try:
+                from app.services.invoice_service import InvoiceService
+
+                invoice_service = InvoiceService(self.db, stripe_service=self._stripe)
+                await invoice_service.create_self_service_invoice(order, line_items)
+            except Exception:
+                logger.warning(
+                    "self_service_invoice_creation_failed",
+                    order_id=str(order.id),
+                    exc_info=True,
+                )
 
         return order, line_items
 

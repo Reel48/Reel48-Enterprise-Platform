@@ -30,6 +30,48 @@
 
 ---
 
+## 2026-04-09 — Module 7 Phase 5 (Client-Facing Endpoints & Self-Service Integration)
+
+**Type:** End-of-session self-audit (Trigger 1)
+**Module:** Module 7 — Invoicing & Client Billing (Phase 5)
+
+### What was built
+- `backend/app/api/v1/invoices.py` — Tenant-scoped client-facing invoice endpoints:
+  `GET /invoices/`, `GET /invoices/{id}`, `GET /invoices/{id}/pdf`. Employee role is
+  blocked (403). Corporate admins see all sub-brands; sub_brand_admin and
+  regional_manager see their sub-brand only. PDF endpoint caches Stripe PDF URL locally.
+- `backend/app/api/v1/router.py` — Registered client invoice router.
+- `backend/app/services/order_service.py` — Added optional `stripe_service` parameter
+  to `OrderService.__init__()`. After order creation, if catalog has
+  `payment_model='self_service'`, auto-generates a Stripe invoice via
+  `InvoiceService.create_self_service_invoice()`. Non-blocking (try/except with warning).
+- `backend/app/api/v1/orders.py` — Injects `StripeService` dependency and passes to
+  `OrderService` on the create_order endpoint.
+
+### Harness review
+1. **New pattern?** Yes — non-blocking external service integration in OrderService.
+   This follows the same pattern as email notifications in ApprovalService (try/except
+   with warning log). Already documented in backend CLAUDE.md under
+   "Email Notification Pattern (Non-Blocking SES)". The self-service invoice integration
+   follows the identical pattern, so no new documentation needed beyond this changelog.
+2. **New pattern?** Yes — client-facing invoice endpoints introduce an employee-exclusion
+   guard (`_require_invoice_access`). This is a role-check at the route level, distinct
+   from the `_require_company_id` guard. The pattern aligns with the Role-Based Access
+   Matrix in `.claude/rules/authentication.md` which specifies employees cannot view invoices.
+3. **Pattern violated?** No.
+4. **New decision?** No.
+5. **Missing guidance?** No — all patterns are covered by existing harness documentation.
+6. **Prompt template needed?** No.
+
+### Files changed
+- **`backend/app/api/v1/invoices.py`** — New file (client-facing invoice endpoints)
+- **`backend/app/api/v1/router.py`** — Added invoices_router import and registration
+- **`backend/app/services/order_service.py`** — Added stripe_service param and self-service integration
+- **`backend/app/api/v1/orders.py`** — Added stripe_service injection for create_order
+- **`docs/harness-changelog.md`** — This entry
+
+---
+
 ## 2026-04-09 — Module 7 Phase 4 (Stripe Webhook Handler)
 
 **Type:** End-of-session self-audit (Trigger 1)
