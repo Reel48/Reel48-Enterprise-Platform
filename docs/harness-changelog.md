@@ -30,6 +30,47 @@
 
 ---
 
+## 2026-04-09 — Module 7 Phase 6 (Comprehensive Invoice Tests)
+
+**Type:** End-of-session self-audit (Trigger 1)
+**Module:** Module 7 — Invoicing & Client Billing (Phase 6)
+
+### What was built
+- `backend/tests/conftest.py` — Added `MockStripeService` class and autouse `mock_stripe`
+  fixture following the External Service Mock Pattern. Records created invoices, customers,
+  invoice items, finalized/sent/voided invoices. Provides `construct_webhook_event()` that
+  can be overridden per-test for signature failure testing.
+- `backend/tests/test_invoices.py` — 30 tests across 6 test classes:
+  - `TestAssignedInvoice` (7 tests): create from orders/bulk orders, validation guard, finalize, send, void
+  - `TestPostWindowInvoice` (3 tests): create after window closes, guard before close, payment model guard
+  - `TestClientInvoiceViewing` (3 tests): list, detail, PDF URL
+  - `TestStripeWebhooks` (6 tests): paid, payment_failed, finalized, invalid/missing signature, idempotent processing
+  - `TestInvoiceAuthorization` (6 tests): reel48_admin-only create/finalize, employee denied, role-based viewing
+  - `TestInvoiceIsolation` (4 tests): cross-company, cross-sub-brand, corporate admin visibility, platform admin
+- `backend/tests/test_isolation.py` — Added 3 RLS-level isolation tests for invoices:
+  company isolation, sub-brand scoping, reel48_admin bypass.
+
+### Harness files updated
+- **`.claude/rules/testing.md`** — Updated External Service Mock Pattern to list all
+  three implemented mocks (Cognito, Stripe, Email). Added new "Webhook Endpoint Testing"
+  section documenting signature verification tests, idempotent processing tests, status
+  non-regression tests, and webhook test data setup patterns.
+
+### Metrics
+- Tests added: 33 (30 in test_invoices.py + 3 RLS in test_isolation.py)
+- Total test count: 442 (409 existing + 33 new)
+- Harness gaps found: 1 (no webhook testing guidance — now filled)
+- Patterns violated: 0
+
+### Notes
+- 3 self-service flow tests from the original spec were omitted because self-service
+  invoice auto-generation is triggered during order placement (OrderService.create_order),
+  not via the invoice API endpoints. Testing these requires placing orders against
+  self-service catalogs, which is a Module 4 + Module 7 integration test.
+- `ValidationError` in the app maps to HTTP 422 (not 400). Tests were adjusted accordingly.
+
+---
+
 ## 2026-04-09 — Module 7 Phase 5 (Client-Facing Endpoints & Self-Service Integration)
 
 **Type:** End-of-session self-audit (Trigger 1)

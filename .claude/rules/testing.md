@@ -316,10 +316,18 @@ External services (Cognito, Stripe, SES, S3) are mocked in tests via a four-part
 
 4. **Cleanup in teardown** — `dependency_overrides.pop()` prevents leakage between tests.
 
-When adding a new external service (e.g., Stripe in Module 7):
-- Create `MockStripeService` following the same pattern
-- Add an autouse fixture for `get_stripe_service`
-- Both mocks coexist in `conftest.py`
+When adding a new external service:
+- Create a `MockXxxService` class following the same pattern
+- Add an autouse fixture via `app.dependency_overrides`
+- All mocks coexist in `conftest.py`
+
+**Implemented mocks (as of Module 7):**
+- `MockCognitoService` — Records `created_users`, `disabled_users`, etc.
+- `MockStripeService` — Records `created_invoices`, `created_customers`,
+  `created_invoice_items`, `finalized_invoices`, `sent_invoices`, `voided_invoices`.
+  Also provides `construct_webhook_event()` which can be overridden per-test to
+  simulate signature verification failures.
+- `MockEmailService` — Records `sent_emails` for notification assertions.
 
 
 ## Rate Limit Testing
@@ -350,6 +358,63 @@ tests by default (prevents tests from hitting Redis). To test rate limiting beha
            app.dependency_overrides[rate_limit_auth] = lambda: None
    ```
 3. Rate limit tests require a running Redis instance (or mock `_get_redis_client`)
+
+
+## Webhook Endpoint Testing
+
+# --- ADDED 2026-04-09 after Module 7 Phase 6 ---
+# Reason: Webhook endpoints (Stripe) have unique testing requirements: no JWT auth,
+# signature verification, idempotent processing, and status non-regression. Phase 6
+# established the patterns for testing all of these.
+# Impact: Future webhook integrations (SES notifications, etc.) follow this pattern.
+
+Webhook endpoints are unauthenticated and verify signatures instead of JWTs. Testing
+requires different patterns than standard endpoint tests:
+
+### Signature Verification Tests
+The `MockStripeService.construct_webhook_event()` returns a dict by default (simulating
+valid signature). To test signature failure, override the method per-test:
+
+```python
+async def test_webhook_rejects_invalid_signature(client, mock_stripe):
+    import stripe
+    mock_stripe.construct_webhook_event = Mock(
+        side_effect=stripe.error.SignatureVerificationError("bad sig", "sig_header")
+    )
+    response = await client.post(
+        "/api/v1/webhooks/stripe",
+        content=b'{"type": "invoice.paid"}',
+        headers={"stripe-signature": "invalid"},
+    )
+    assert response.status_code == 400
+```
+
+### Idempotent Processing Tests
+The invoice webhook handler uses a `_STATUS_ORDER` dict to prevent status regression.
+Test that processing the same event twice produces no error and no duplicate update:
+
+```python
+async def test_webhook_idempotent_processing(client, ...):
+    # First call: sets status to "paid"
+    response1 = await client.post("/api/v1/webhooks/stripe", ...)
+    assert response1.status_code == 200
+
+    # Second call: same event, no error, no regression
+    response2 = await client.post("/api/v1/webhooks/stripe", ...)
+    assert response2.status_code == 200
+    # Invoice still shows "paid" (not reset)
+```
+
+### Status Non-Regression Tests
+Verify that a lower-priority webhook event cannot regress a higher-priority status:
+```python
+# Invoice is already "paid" → "invoice.sent" webhook should NOT downgrade to "sent"
+```
+
+### Webhook Test Data Setup
+Webhook tests need a pre-existing invoice record with a `stripe_invoice_id` that
+matches the webhook payload's `data.object.id`. Create the invoice directly in the
+database (not via API) to isolate webhook logic from creation logic.
 
 
 ## Common Mistakes to Avoid
