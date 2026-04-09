@@ -195,6 +195,7 @@ async def setup_database() -> AsyncGenerator[dict, None]:
             "org_codes", "employee_profiles",
             "products", "catalogs", "catalog_products",
             "orders", "order_line_items",
+            "bulk_orders", "bulk_order_items",
         ]
         for table in tables:
             await conn.execute(

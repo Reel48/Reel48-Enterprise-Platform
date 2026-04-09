@@ -828,6 +828,7 @@ class TenantBase(Base):
 | `employee_profiles` | `TenantBase` | Scoped to company + sub-brand (one per user) |
 | `products` | `TenantBase` | Scoped to company + sub-brand |
 | `orders` | `TenantBase` | Scoped to company + sub-brand |
+| `order_line_items` | `TenantBase` | Scoped to company + sub-brand |
 | `invoices` | `TenantBase` | Scoped to company + sub-brand |
 
 
@@ -1156,6 +1157,55 @@ updated_at              TIMESTAMP    NOT NULL
 ```
 RLS: Standard company isolation (PERMISSIVE) + sub-brand scoping (RESTRICTIVE).
 Line items snapshot product details at order time so price/name changes don't affect historical orders.
+
+
+## Order Placement Patterns
+
+# --- ADDED 2026-04-08 during Module 4 end-of-module harness review ---
+# Reason: Order placement involves several non-obvious patterns (price snapshotting,
+# shipping address resolution, order number generation, catalog validation) that
+# future modules (Bulk Ordering, Invoicing) need to understand and follow.
+# Impact: Module 5 (Bulk Ordering) can reuse the same validation and snapshotting logic.
+
+### Price Snapshotting
+Line items snapshot product details at order time so future price/name changes don't
+affect historical orders. Price resolution order:
+1. **`catalog_product.price_override`** — If the catalog has a price override for the
+   product, use it.
+2. **`product.unit_price`** — Fallback to the product's base price.
+
+The resolved price is stored as `order_line_items.unit_price` (immutable after creation).
+Product name and SKU are also snapshotted (`product_name`, `product_sku`).
+
+### Shipping Address Resolution
+Shipping address is resolved at order time with this priority:
+1. **Explicit request body** — If `shipping_address_line1` is provided in the request,
+   use all address fields from the request.
+2. **Employee profile fallback** — If no address in the request, look up the employee's
+   `EmployeeProfile.delivery_address_*` fields. If the profile exists and has an address,
+   copy it to the order.
+3. **NULL** — If neither source has an address, all shipping fields are NULL.
+
+### Order Number Format
+`ORD-YYYYMMDD-XXXX` where XXXX is 4 random hex characters (uppercase). Generated via
+`secrets.token_hex(2).upper()`. Uniqueness enforced by checking against existing orders
+with up to 5 retry attempts. The UNIQUE constraint on `order_number` provides a final
+safety net.
+
+### Catalog Validation at Order Time
+Before an order is placed, the service validates:
+1. **Catalog exists** and belongs to the user's company (`company_id` match).
+2. **Catalog is active** (`status == 'active'`). Draft, submitted, or archived catalogs
+   reject orders with 403.
+3. **Buying window enforcement** (for `invoice_after_close` catalogs only):
+   - If `buying_window_opens_at` is set and in the future → 422 "not open yet"
+   - If `buying_window_closes_at` is set and in the past → 422 "window has closed"
+   - `self_service` catalogs have no buying window constraints.
+4. **Product validation** per line item:
+   - Product must be in the catalog (`catalog_products` junction exists)
+   - Product must be active (`status == 'active'`)
+   - Size must be in `product.sizes` list (if provided and product has sizes)
+   - Decoration must be in `product.decoration_options` list (if provided)
 
 
 ## Order Retrieval: Role-Based Visibility

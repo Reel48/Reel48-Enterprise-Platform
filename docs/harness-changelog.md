@@ -30,6 +30,37 @@
 
 ---
 
+## 2026-04-08 — Module 4 Completion (Ordering Flow)
+
+**Type:** End-of-module self-audit + harness review
+**Module:** Module 4 — Ordering Flow (Phases 1-5)
+
+### Self-Audit Checklist
+- [x] **New pattern?** → Price snapshotting at order time (catalog override → product price fallback), shipping address resolution (explicit → profile → null), order number generation (ORD-YYYYMMDD-XXXX with collision retry), ownership-based list visibility (employees see own vs managers see all), status transition endpoints (POST /{action} not PATCH). All documented in `backend/CLAUDE.md`.
+- [ ] **Pattern violated?** → No deviations from harness patterns. All endpoints use TenantContext from JWT, defense-in-depth filtering, standard response format, and proper role checks.
+- [ ] **New decision?** → No ADR-worthy decisions. Cancelled is a status (not a deletion) — consistent with the soft-delete strategy for user-facing entities. No tax/shipping calculation in initial build (total = subtotal).
+- [x] **Missing guidance?** → Order placement patterns (snapshotting, shipping resolution, catalog validation) were not in the harness before Phase 6. Now documented in `backend/CLAUDE.md`.
+- [ ] **Reusable task?** → Considered `prompts/ordering-pattern.md` but Module 5 (Bulk Ordering) has sufficiently different semantics (admin-initiated, no employee self-service) that a shared template would over-generalize. The patterns documented in `backend/CLAUDE.md` are sufficient.
+- [x] **Changelog updated?** → This entry.
+
+### Harness Files Updated
+- **`backend/CLAUDE.md`** — Added "Order Placement Patterns" section (price snapshotting, shipping address resolution, order number format, catalog validation). Added `order_line_items` to "Which Base to Use" table. (Table schemas, role-based visibility, and status lifecycle sections were already added during Phases 3-4.)
+
+### Post-Module Pattern Consistency Review
+- All 5 order endpoints + 2 platform endpoints follow the established route → service → model pattern.
+- All queries include defense-in-depth `company_id` filtering alongside RLS.
+- Both `orders` and `order_line_items` tables have company isolation (PERMISSIVE) + sub-brand scoping (RESTRICTIVE) RLS policies in the same migration.
+- Naming conventions consistent: snake_case endpoints, plural nouns, standard response wrapper.
+- No RLS gaps: `conftest.py` grants include both new tables.
+
+### Session Metrics
+- **Tests written (Module 4 total):** 54 (22 placement + 14 list/get + 12 transitions + 6 platform)
+- **Total test suite:** 265 passed, 0 failed
+- **Mistakes caught by harness:** 1 (incorrect `fulfilled` status name corrected to `processing` during Phase 4)
+- **Gaps found:** 3 (table schemas, role-based visibility, order placement patterns — all filled)
+
+---
+
 ## 2026-04-08 — Module 4 Phase 5 End-of-Session Self-Audit
 
 **Type:** End-of-session self-audit
