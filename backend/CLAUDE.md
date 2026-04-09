@@ -1349,6 +1349,121 @@ Any transition not listed above returns 403 (ForbiddenError). Cancelled and
 delivered orders cannot transition to any other status.
 
 
+## Bulk Order Status Lifecycle & Transitions
+
+# --- ADDED 2026-04-09 during Module 5 Phase 6 ---
+# Reason: Bulk orders have a distinct lifecycle from individual orders (includes
+# draft stage, submit guard, item locking). Documenting prevents confusion in
+# future modules (Invoicing needs to know when a bulk order is ready for billing).
+# Impact: Module 7 (Invoicing) knows bulk orders in 'delivered' or 'approved' status
+# are eligible for invoice creation.
+
+### Status Transitions
+```
+draft → submitted → approved → processing → shipped → delivered
+draft → cancelled       (creator or manager_or_above)
+submitted → cancelled   (manager_or_above only)
+approved → cancelled    (manager_or_above only)
+```
+
+- **draft:** Initial status. Items can be added/updated/removed. Session metadata
+  (title, description, notes) can be edited. Can be hard-deleted.
+- **submitted:** Locked — no item changes allowed. Requires at least one item to
+  submit. Records `submitted_at` timestamp.
+- **approved:** Records `approved_by` and `approved_at`. Ready for fulfillment.
+- **processing/shipped/delivered:** Fulfillment stages. Cannot be cancelled.
+- **cancelled:** Terminal state. Records `cancelled_at` and `cancelled_by`.
+
+### Authorization
+| Transition | Who Can Perform |
+|-----------|----------------|
+| draft → submitted | `manager_or_above` |
+| submitted → approved | `manager_or_above` |
+| approved → processing | `manager_or_above` |
+| processing → shipped | `manager_or_above` |
+| shipped → delivered | `manager_or_above` |
+| draft → cancelled | Creator or `manager_or_above` |
+| submitted → cancelled | `manager_or_above` only |
+| approved → cancelled | `manager_or_above` only |
+
+### Endpoint Pattern
+Status transitions use `POST /api/v1/bulk_orders/{bulk_order_id}/{action}` (not PATCH).
+All transition endpoints use `require_manager` dependency except cancel, which uses
+`get_tenant_context` (creator can cancel their own draft). Authorization for cancel is
+checked in the service layer based on ownership, role, and current status.
+
+### Invalid Transitions
+Any transition not listed above returns 403 (ForbiddenError). Cancelled and
+delivered bulk orders cannot transition to any other status. Processing and shipped
+bulk orders cannot be cancelled.
+
+### Key Differences from Individual Orders (Module 4)
+- Bulk orders start as `draft` (individual orders start as `pending`)
+- Explicit `draft → submitted` transition with item guard
+- Items are locked after submission (individual orders have no draft editing stage)
+- `approved_by` and `approved_at` tracked on bulk orders (not on individual orders)
+- Created by managers/admins (individual orders created by any authenticated user)
+- Draft bulk orders can be hard-deleted (individual orders cannot be deleted)
+
+
+## Bulk Order Patterns
+
+# --- ADDED 2026-04-09 during Module 5 Phase 6 ---
+# Reason: Bulk ordering introduces several patterns not present in individual ordering:
+# draft workflow, automatic total recalculation, employee assignment, and hard delete.
+# Impact: Future modules (Invoicing, Analytics) understand bulk order mechanics.
+
+### Draft Workflow
+Unlike individual orders (which are submitted immediately), bulk orders follow a
+**draft workflow**: create session → add items → submit. This allows managers to
+build up an order over time before submitting for approval.
+
+### Total Recalculation
+`total_items` and `total_amount` on `bulk_orders` are denormalized aggregates that
+auto-update on every item add/update/remove:
+- `total_items` = SUM of all item quantities (NOT count of rows). A bulk order with
+  3 items of quantities 5, 10, 3 has `total_items = 18`.
+- `total_amount` = SUM of all item `line_total` values.
+- Recalculation uses `func.coalesce(func.sum(...), 0)` to handle empty item lists.
+
+### Employee Assignment
+Items can target specific employees (via `employee_id`) or be unassigned
+(`employee_id = NULL` = general stock). Employee validation checks `company_id`
+only (not `sub_brand_id`) to support corporate admin cross-sub-brand bulk orders.
+
+### Order Number Format
+`BLK-YYYYMMDD-XXXX` where XXXX is 4 random hex characters (uppercase). Same
+collision-retry pattern as individual orders (`ORD-YYYYMMDD-XXXX`).
+
+### Price Snapshotting
+Same pattern as individual orders: catalog `price_override` → product `unit_price`
+fallback. Product name and SKU are snapshotted at item add time.
+
+### Hard Delete for Drafts
+Draft bulk orders are hard-deleted (row removed) rather than soft-deleted. Drafts
+are ephemeral like unsaved documents — same reasoning as draft catalog deletion in
+Module 3. Only `draft` status allows deletion; all other statuses return 403.
+
+### Item Locking After Submission
+Once a bulk order is submitted (`status != 'draft'`), all item management endpoints
+(add, update, remove) return 403. This prevents modifications to orders that are
+already in the approval/fulfillment pipeline.
+
+### Catalog Validation
+BulkOrderService duplicates catalog validation from OrderService (catalog exists,
+belongs to company, is active, buying window enforcement). The duplication keeps
+services self-contained rather than extracting a shared helper.
+
+### Tenant Endpoints (14 total)
+- CRUD: create, list, get (with items), update, delete
+- Status transitions: submit, approve, process, ship, deliver, cancel
+- Item management: add item, update item, remove item
+
+### Platform Endpoints (2)
+- `GET /api/v1/platform/bulk_orders/` — Cross-company list with optional filters
+- `GET /api/v1/platform/bulk_orders/{id}` — Cross-company detail with items
+
+
 ## Product Status Lifecycle & Visibility
 
 # --- ADDED 2026-04-08 during Module 3 Phase 2 ---

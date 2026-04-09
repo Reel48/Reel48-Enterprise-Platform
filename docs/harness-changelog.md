@@ -30,6 +30,58 @@
 
 ---
 
+## 2026-04-09 — Module 5 Completion (Bulk Ordering System)
+
+**Type:** End-of-module self-audit + harness review
+**Module:** Module 5 — Bulk Ordering System (Phases 1-6)
+
+### Self-Audit Checklist
+- [x] **New pattern?** → Draft workflow (create → add items → submit), automatic total
+  recalculation on item changes, item-level employee assignment, submit guard (must have
+  items), post-submit item locking, hard-delete for draft bulk orders. All documented in
+  new "Bulk Order Status Lifecycle & Transitions" and "Bulk Order Patterns" sections of
+  `backend/CLAUDE.md`.
+- [ ] **Pattern violated?** → No violations. All 14 tenant endpoints + 2 platform endpoints
+  follow the established route → service → model pattern, same RLS policies, same response
+  format, same role checks as Modules 1-4.
+- [ ] **New decision?** → No ADR-worthy decisions. All choices (hard delete for drafts,
+  company-only employee validation, duplicated catalog validation, total_items = SUM of
+  quantities) are consistent with established patterns or documented in the new Bulk Order
+  Patterns section.
+- [ ] **Missing guidance?** → No gaps. Bulk order lifecycle and patterns were undocumented
+  before this review — now filled. No shared catalog validation helper was created; the
+  duplication between OrderService and BulkOrderService is acceptable per the "keep services
+  self-contained" principle.
+- [ ] **Reusable task?** → Considered `prompts/draft-workflow.md` but the draft → submit →
+  approve pattern is too domain-specific to bulk ordering. If Module 8 (Employee Engagement)
+  introduces similar workflows, this decision can be revisited.
+- [x] **Changelog updated?** → This entry.
+
+### Harness Files Updated
+- **`backend/CLAUDE.md`** — Added "Bulk Order Status Lifecycle & Transitions" section
+  (status flow, authorization matrix, endpoint pattern, differences from individual orders).
+  Added "Bulk Order Patterns" section (draft workflow, total recalculation, employee
+  assignment, order number format, price snapshotting, hard delete, item locking, catalog
+  validation, endpoint inventory).
+
+### Post-Module Pattern Consistency Review
+- All 14 bulk order endpoints + 2 platform endpoints follow the established
+  route → service → model pattern
+- RLS policies follow the standard two-policy pattern (company isolation PERMISSIVE +
+  sub-brand scoping RESTRICTIVE)
+- All endpoints use TenantContext from JWT with defense-in-depth company_id filtering
+- Status transitions use POST /{action} pattern (consistent with Module 4 orders)
+- Tests cover functional, authorization, isolation, and state transition categories
+
+### Session Metrics
+- Tests before module: 265
+- Tests after module: 316
+- New tests added: 51
+- Harness gaps found: 0 (table schemas documented during Phase 1; lifecycle/patterns
+  documented during this Phase 6 review)
+
+---
+
 ## 2026-04-09 — Module 5 Phase 5 End-of-Session Self-Audit
 
 **Type:** End-of-session self-audit
