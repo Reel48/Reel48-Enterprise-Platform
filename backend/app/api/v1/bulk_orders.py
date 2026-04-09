@@ -8,7 +8,9 @@ from app.core.exceptions import ForbiddenError
 from app.core.tenant import TenantContext
 from app.schemas.bulk_order import (
     BulkOrderCreate,
+    BulkOrderItemCreate,
     BulkOrderItemResponse,
+    BulkOrderItemUpdate,
     BulkOrderResponse,
     BulkOrderUpdate,
     BulkOrderWithItemsResponse,
@@ -110,3 +112,59 @@ async def delete_bulk_order(
     company_id = _require_company_id(context)
     service = BulkOrderService(db)
     await service.delete_bulk_order(bulk_order_id, company_id)
+
+
+# ---------------------------------------------------------------------------
+# Item management endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/{bulk_order_id}/items/",
+    response_model=ApiResponse[BulkOrderItemResponse],
+    status_code=201,
+)
+async def add_item(
+    bulk_order_id: UUID,
+    data: BulkOrderItemCreate,
+    context: TenantContext = Depends(require_manager),
+    db: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[BulkOrderItemResponse]:
+    """Add an item to a draft bulk order."""
+    company_id = _require_company_id(context)
+    service = BulkOrderService(db)
+    item = await service.add_item(
+        bulk_order_id, data, company_id, context.sub_brand_id,
+    )
+    return ApiResponse(data=BulkOrderItemResponse.model_validate(item))
+
+
+@router.patch(
+    "/{bulk_order_id}/items/{item_id}",
+    response_model=ApiResponse[BulkOrderItemResponse],
+)
+async def update_item(
+    bulk_order_id: UUID,
+    item_id: UUID,
+    data: BulkOrderItemUpdate,
+    context: TenantContext = Depends(require_manager),
+    db: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[BulkOrderItemResponse]:
+    """Update an item within a draft bulk order."""
+    company_id = _require_company_id(context)
+    service = BulkOrderService(db)
+    item = await service.update_item(bulk_order_id, item_id, data, company_id)
+    return ApiResponse(data=BulkOrderItemResponse.model_validate(item))
+
+
+@router.delete("/{bulk_order_id}/items/{item_id}", status_code=204)
+async def remove_item(
+    bulk_order_id: UUID,
+    item_id: UUID,
+    context: TenantContext = Depends(require_manager),
+    db: AsyncSession = Depends(get_db_session),
+) -> None:
+    """Remove an item from a draft bulk order (hard delete, returns 204)."""
+    company_id = _require_company_id(context)
+    service = BulkOrderService(db)
+    await service.remove_item(bulk_order_id, item_id, company_id)
