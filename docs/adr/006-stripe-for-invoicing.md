@@ -99,11 +99,23 @@ endpoints, which are the other unauthenticated exceptions.)
 - **Stripe outage affects invoicing:** Mitigated by local invoice records that
   allow viewing existing invoices even if Stripe is temporarily unreachable.
   New invoice creation would be blocked during an outage.
+  _Implementation note (2026-04-09):_ Self-service invoice creation at checkout is
+  wrapped in try/except — if Stripe is unavailable, the order still succeeds and
+  the invoice can be created manually later. This non-blocking pattern prevents
+  Stripe outages from blocking employee order placement.
 - **Webhook delivery failures:** Mitigated by Stripe's automatic retry logic
   (up to 72 hours) and idempotent webhook processing on our end.
+  _Implementation note (2026-04-09):_ Idempotency is enforced via a `_STATUS_ORDER`
+  priority dict that prevents status regression when events arrive out of order or
+  are delivered multiple times.
 - **Data drift between Stripe and local records:** Mitigated by treating Stripe
   as the source of truth for payment status and using webhooks (not polling)
   for all status updates. Periodic reconciliation job recommended post-launch.
+- **Webhook endpoint RLS bypass:** _Discovered during implementation (2026-04-09)._
+  The Stripe webhook endpoint must query tenant-scoped tables (invoices) without JWT
+  context. It sets RLS session variables to empty strings (same bypass as reel48_admin).
+  This is secure because the endpoint verifies the Stripe signature before any DB
+  operations, and the bypass only enables reading — it does not create cross-tenant data.
 
 ## References
 - Stripe Invoicing API: https://stripe.com/docs/invoicing

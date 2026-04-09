@@ -1351,6 +1351,48 @@ UNIQUE constraint: `(company_id, entity_type, rule_type)` — one rule per type 
 Composite index: `(company_id, entity_type)` for rule lookup.
 
 
+## Module 7 Table Schema
+
+### `invoices` Table (TenantBase)
+# --- ADDED 2026-04-09 during Module 7 post-module harness review ---
+# Reason: Module 7 adds the invoices table for Stripe-integrated client billing.
+# Impact: Future modules (Analytics) know the invoices shape for reporting queries.
+```
+id                      UUID        PRIMARY KEY
+company_id              UUID        NOT NULL (FK → companies, indexed)
+sub_brand_id            UUID        NULL (FK → sub_brands, indexed)
+order_id                UUID        NULL (FK → orders)             -- for individual order invoices
+bulk_order_id           UUID        NULL (FK → bulk_orders)        -- for bulk order invoices
+catalog_id              UUID        NULL (FK → catalogs)           -- for self-service/post-window flows
+stripe_invoice_id       TEXT        NOT NULL UNIQUE                -- Stripe's invoice ID (e.g., "in_xxx")
+stripe_invoice_url      TEXT        NULL                           -- Stripe hosted invoice page URL
+stripe_pdf_url          TEXT        NULL                           -- Stripe invoice PDF download URL
+invoice_number          TEXT        NULL                           -- assigned by Stripe on finalization
+billing_flow            VARCHAR(20) NOT NULL                       -- 'assigned', 'self_service', 'post_window'
+status                  VARCHAR(20) NOT NULL DEFAULT 'draft'       -- draft|finalized|sent|paid|payment_failed|voided
+total_amount            NUMERIC(10,2) NOT NULL, CHECK >= 0        -- in dollars (convert to cents for Stripe)
+currency                VARCHAR(3)  NOT NULL DEFAULT 'usd'
+due_date                DATE        NULL
+buying_window_closes_at TIMESTAMP   NULL                           -- for post_window flow only
+created_by              UUID        NOT NULL (FK → users)          -- reel48_admin or order owner (self-service)
+paid_at                 TIMESTAMP   NULL
+created_at              TIMESTAMP   NOT NULL
+updated_at              TIMESTAMP   NOT NULL
+```
+RLS: Standard company isolation (PERMISSIVE) + sub-brand scoping (RESTRICTIVE).
+CHECK constraints: billing_flow IN valid values, status IN valid values, total_amount >= 0.
+Composite index: `(company_id, status)`.
+Index on `stripe_invoice_id` for webhook lookups, `billing_flow` for filtered queries.
+
+**FK relationships:**
+- `order_id` and `bulk_order_id` are mutually optional — an assigned invoice may reference
+  one order, one bulk order, or (for consolidated invoices) neither (multiple orders tracked
+  externally). Only one is set when a single order/bulk order maps 1:1 to the invoice.
+- `catalog_id` is set for self-service and post-window invoices (tied to a catalog).
+- `created_by` references the reel48_admin who created the invoice, or the order owner
+  for auto-generated self-service invoices.
+
+
 ## Approval Workflow Patterns
 
 # --- ADDED 2026-04-09 during Module 6 Phase 2 ---
@@ -1630,6 +1672,85 @@ services self-contained rather than extracting a shared helper.
 ### Platform Endpoints (2)
 - `GET /api/v1/platform/bulk_orders/` — Cross-company list with optional filters
 - `GET /api/v1/platform/bulk_orders/{id}` — Cross-company detail with items
+
+
+## Invoice Status Lifecycle
+
+# --- ADDED 2026-04-09 during Module 7 post-module harness review ---
+# Reason: Invoices have a unique status lifecycle driven by both API actions
+# (reel48_admin) and Stripe webhook events. The _STATUS_ORDER mechanism for
+# idempotent webhook processing is a new pattern. Module 8 (Analytics) needs
+# to understand which statuses represent revenue.
+# Impact: Future modules know invoice lifecycle, which statuses are terminal,
+# and how webhook-driven updates interact with API-driven transitions.
+
+### Status Transitions
+```
+draft → finalized → sent → paid
+                         → payment_failed (can occur after sent)
+draft → voided
+finalized → voided
+sent → voided
+```
+
+- **draft:** Initial status after invoice creation. Can be finalized or voided.
+- **finalized:** Stripe assigns an invoice number. Can be sent or voided.
+- **sent:** Invoice emailed to the client company. Awaiting payment.
+- **paid:** Terminal state. Payment received. Records `paid_at` timestamp.
+- **payment_failed:** Payment attempt failed. Can retry (returns to sent on success).
+- **voided:** Terminal state. Invoice cancelled. Can happen from draft, finalized, or sent.
+
+### API-Driven Transitions (reel48_admin only)
+| Action | From Status | To Status | Endpoint |
+|--------|-----------|----------|----------|
+| Finalize | draft | finalized | `POST /platform/invoices/{id}/finalize` |
+| Send | finalized | sent | `POST /platform/invoices/{id}/send` |
+| Void | draft, finalized, sent | voided | `POST /platform/invoices/{id}/void` |
+
+### Webhook-Driven Transitions (Stripe events)
+| Stripe Event | To Status | Additional Updates |
+|-------------|----------|-------------------|
+| `invoice.finalized` | finalized | `invoice_number`, `stripe_invoice_url`, `stripe_pdf_url` |
+| `invoice.sent` | sent | — |
+| `invoice.paid` | paid | `paid_at` timestamp |
+| `invoice.payment_failed` | payment_failed | — |
+| `invoice.voided` | voided | — |
+
+### Idempotent Webhook Processing (_STATUS_ORDER)
+Webhooks may arrive out of order or be delivered multiple times. The `_STATUS_ORDER`
+dict assigns a numeric priority to each status. A webhook event only updates the
+local status if the new status has a **higher** priority than the current status.
+This prevents status regression (e.g., `invoice.sent` arriving after `invoice.paid`
+would not downgrade the status back to "sent").
+
+```python
+_STATUS_ORDER = {
+    "draft": 0,
+    "finalized": 1,
+    "sent": 2,
+    "paid": 3,
+    "payment_failed": 2,  # Same level as sent
+    "voided": 4,          # Terminal — highest priority
+}
+```
+
+Special cases:
+- `payment_failed` does not overwrite `paid` (paid is terminal for payment purposes)
+- `voided` has the highest priority (can override any non-voided status)
+
+### Self-Service Invoice Auto-Generation (Non-Blocking)
+When an employee places an order against a `self_service` catalog, `OrderService`
+auto-generates a Stripe invoice via `InvoiceService.create_self_service_invoice()`.
+This is wrapped in try/except — if Stripe is unavailable, the order still succeeds
+(the invoice can be created manually later by a reel48_admin). Uses
+`auto_advance=True` (unlike admin-created invoices which use `auto_advance=False`).
+
+### Revenue-Relevant Statuses (for Analytics, Module 8)
+- **paid:** Confirmed revenue.
+- **sent:** Outstanding receivable.
+- **payment_failed:** At-risk receivable.
+- **voided:** Not revenue (excluded from totals).
+- **draft / finalized:** Not yet billed (pre-revenue).
 
 
 ## Product Status Lifecycle & Visibility
