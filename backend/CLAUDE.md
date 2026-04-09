@@ -832,6 +832,8 @@ class TenantBase(Base):
 | `order_line_items` | `TenantBase` | Scoped to company + sub-brand |
 | `bulk_orders` | `TenantBase` | Scoped to company + sub-brand |
 | `bulk_order_items` | `TenantBase` | Scoped to company + sub-brand |
+| `approval_requests` | `TenantBase` | Scoped to company + sub-brand |
+| `approval_rules` | `CompanyBase` | Company-level rules, no sub-brand scoping |
 | `invoices` | `TenantBase` | Scoped to company + sub-brand |
 
 
@@ -1217,6 +1219,55 @@ updated_at              TIMESTAMP    NOT NULL
 RLS: Standard company isolation (PERMISSIVE) + sub-brand scoping (RESTRICTIVE).
 CHECK constraints: quantity > 0, unit_price >= 0, line_total >= 0.
 Items snapshot product details at add time (same pattern as order_line_items).
+
+
+## Module 6 Table Schemas
+
+# --- ADDED 2026-04-09 during Module 6 Phase 1 ---
+# Reason: Module 6 adds approval workflow tables. Documenting them here for
+# implementation consistency and FK references in future modules (Invoicing).
+# Impact: Future modules know the approval_requests/approval_rules shape.
+
+### `approval_requests` Table (TenantBase)
+```
+id                      UUID        PRIMARY KEY
+company_id              UUID        NOT NULL (FK → companies, indexed)
+sub_brand_id            UUID        NULL (FK → sub_brands, indexed)
+entity_type             VARCHAR(30)  NOT NULL         -- 'product', 'catalog', 'order', 'bulk_order'
+entity_id               UUID         NOT NULL         -- polymorphic FK (no DB-level FK constraint)
+requested_by            UUID         NOT NULL (FK → users)
+decided_by              UUID         NULL (FK → users)
+status                  VARCHAR(20)  NOT NULL DEFAULT 'pending'  -- pending|approved|rejected
+decision_notes          TEXT         NULL
+requested_at            TIMESTAMP    NOT NULL DEFAULT now()
+decided_at              TIMESTAMP    NULL
+created_at              TIMESTAMP    NOT NULL
+updated_at              TIMESTAMP    NOT NULL
+```
+RLS: Standard company isolation (PERMISSIVE) + sub-brand scoping (RESTRICTIVE).
+CHECK constraints: entity_type IN valid values, status IN valid values.
+Composite index: `(entity_type, entity_id)` for polymorphic lookups,
+`(company_id, status)` for approval queue queries.
+Approval records are permanent audit trail — never soft-deleted.
+
+### `approval_rules` Table (CompanyBase)
+```
+id                      UUID        PRIMARY KEY
+company_id              UUID        NOT NULL (FK → companies, indexed)
+entity_type             VARCHAR(30)  NOT NULL         -- 'order', 'bulk_order'
+rule_type               VARCHAR(30)  NOT NULL         -- 'amount_threshold'
+threshold_amount        NUMERIC(10,2) NULL            -- e.g., 500.00 means orders over $500 need higher approval
+required_role           VARCHAR(50)  NOT NULL         -- 'corporate_admin', 'sub_brand_admin', 'regional_manager'
+is_active               BOOLEAN      NOT NULL DEFAULT true
+created_by              UUID         NOT NULL (FK → users)
+created_at              TIMESTAMP    NOT NULL
+updated_at              TIMESTAMP    NOT NULL
+```
+RLS: Company isolation only (no sub-brand scoping — rules are company-wide).
+CHECK constraints: entity_type IN ('order', 'bulk_order'), rule_type IN ('amount_threshold'),
+required_role IN valid values, threshold_amount >= 0.
+UNIQUE constraint: `(company_id, entity_type, rule_type)` — one rule per type per company.
+Composite index: `(company_id, entity_type)` for rule lookup.
 
 
 ## Order Placement Patterns

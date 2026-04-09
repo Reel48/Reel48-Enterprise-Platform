@@ -30,6 +30,34 @@
 
 ---
 
+## 2026-04-09 — Module 6 Phase 1 (Approval Tables)
+
+**Type:** End-of-session self-audit
+**Module:** Module 6 — Approval Workflows (Phase 1: Database Migration)
+
+### Self-Audit Checklist
+- [x] **New pattern?** → Polymorphic entity reference pattern: `approval_requests` uses
+  `entity_type` + `entity_id` columns instead of direct FK to allow referencing products,
+  catalogs, orders, and bulk orders from a single table. No DB-level FK constraint on
+  `entity_id`. Documented in `backend/CLAUDE.md` Module 6 Table Schemas.
+- [ ] **Pattern violated?** → No violations. Migration follows the same pattern as 004/005.
+  TenantBase model for approval_requests, CompanyBase model for approval_rules. Standard
+  RLS policies applied.
+- [ ] **New decision?** → No ADR-worthy decisions. Polymorphic entity reference is a standard
+  pattern; approval_rules as CompanyBase (company-wide, not per-sub-brand) follows the same
+  reasoning as org_codes.
+- [ ] **Missing guidance?** → No gaps discovered. The migration, model, and test
+  infrastructure patterns are well-established from Modules 1-5.
+- [ ] **Reusable task?** → No new prompt template needed.
+- [x] **Changelog updated?** → This entry.
+
+### Files Changed
+- **`backend/CLAUDE.md`** — Added Module 6 Table Schemas section (approval_requests,
+  approval_rules) and updated Model Base Classes table with new models.
+- **`docs/harness-changelog.md`** — This entry.
+
+---
+
 ## 2026-04-09 — Module 5 Completion (Bulk Ordering System)
 
 **Type:** End-of-module self-audit + harness review
@@ -79,6 +107,45 @@
 - New tests added: 51
 - Harness gaps found: 0 (table schemas documented during Phase 1; lifecycle/patterns
   documented during this Phase 6 review)
+
+### Post-Module Harness Review Addendum (Deep Review)
+
+**Performed:** 2026-04-09 (dedicated review session after module completion)
+
+#### Cross-Module Alignment Verified
+All Module 5 patterns are consistent with Modules 1-4:
+- TenantBase inheritance, RLS (PERMISSIVE + RESTRICTIVE), `_require_company_id` guard,
+  `resolve_current_user_id`, `flush()`+`refresh()`, `ApiResponse`/`ApiListResponse`,
+  status transitions via `POST /{action}`, platform endpoints via `require_reel48_admin`,
+  price snapshotting, catalog validation, order number generation with collision retry.
+- No inconsistencies found. No improvements requiring backport.
+
+#### ADR Currency Check
+All 8 ADRs (001-008) verified as current. ADR-006 (Stripe) will be exercised
+when bulk orders enter the "assigned" billing flow in Module 7.
+
+#### Rule File Effectiveness
+All 8 rule files assessed. `database-migrations.md`, `api-endpoints.md`,
+`authentication.md`, `testing.md`, and `harness-maintenance.md` actively guided
+Module 5 development. No rule modifications needed.
+
+#### Test Gap Noted
+No explicit cross-sub-brand isolation test for bulk orders (Brand A2 can't see
+Brand A1's bulk orders). The same RLS policy pattern is validated in Modules 1-4,
+so this is low risk. Consider adding in a future session if time permits.
+
+#### Forward-Looking: Module 7 (Invoicing) Preparation
+The `invoices` table schema in `stripe-invoicing.md` references `bulk_order_id` FK,
+but no guidance exists for which bulk order statuses are eligible for invoice creation.
+Recommend adding this guidance during Module 7 Phase 1.
+
+#### Harness Health Metrics (Module 5)
+| Metric | Value | Trend |
+|--------|-------|-------|
+| Mistakes per module | 0 | Stable (0 in Module 4 too) |
+| Harness gaps per module | 0 new (1 filled during Phase 1) | Decreasing |
+| Rules added per module | 0 new rule files | Stabilizing |
+| First-attempt acceptance rate | ~100% | Stable |
 
 ---
 

@@ -1,3 +1,5 @@
+from app.models.approval_request import ApprovalRequest
+from app.models.approval_rule import ApprovalRule
 from app.models.base import Base, CompanyBase, GlobalBase, TenantBase
 from app.models.bulk_order import BulkOrder
 from app.models.bulk_order_item import BulkOrderItem
@@ -18,6 +20,8 @@ __all__ = [
     "GlobalBase",
     "CompanyBase",
     "TenantBase",
+    "ApprovalRequest",
+    "ApprovalRule",
     "Company",
     "SubBrand",
     "User",
