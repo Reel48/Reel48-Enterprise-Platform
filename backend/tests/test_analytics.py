@@ -754,3 +754,329 @@ class TestPlatformOverviewIsolation:
         # Should see all companies from analytics_data
         assert result["total_companies"] >= 2
         assert result["total_orders"] >= 6
+
+
+# ===========================================================================
+# API ENDPOINT TESTS — Module 8 Phase 2
+#
+# These tests verify the HTTP layer: routing, authorization guards,
+# query parameters, response shapes, and tenant isolation via the API.
+# ===========================================================================
+
+# All analytics endpoints (for parametrized auth tests)
+_ANALYTICS_ENDPOINTS = [
+    "/api/v1/analytics/spend/summary",
+    "/api/v1/analytics/spend/by-sub-brand",
+    "/api/v1/analytics/spend/over-time",
+    "/api/v1/analytics/orders/status-breakdown",
+    "/api/v1/analytics/orders/top-products",
+    "/api/v1/analytics/orders/size-distribution",
+    "/api/v1/analytics/invoices/summary",
+    "/api/v1/analytics/approvals/metrics",
+]
+
+# Endpoints accessible to regional_manager (excludes by-sub-brand, invoice summary)
+_MANAGER_ENDPOINTS = [
+    "/api/v1/analytics/spend/summary",
+    "/api/v1/analytics/spend/over-time",
+    "/api/v1/analytics/orders/status-breakdown",
+    "/api/v1/analytics/orders/top-products",
+    "/api/v1/analytics/orders/size-distribution",
+    "/api/v1/analytics/approvals/metrics",
+]
+
+# Endpoints requiring corporate_admin
+_CORPORATE_ONLY_ENDPOINTS = [
+    "/api/v1/analytics/spend/by-sub-brand",
+    "/api/v1/analytics/invoices/summary",
+]
+
+
+class TestAnalyticsAPIFunctional:
+    """Functional tests for analytics API endpoints."""
+
+    async def test_spend_summary_endpoint_returns_200(
+        self, client, analytics_data, company_a_corporate_admin_token
+    ):
+        """Corporate admin gets a valid spend summary response."""
+        response = await client.get(
+            "/api/v1/analytics/spend/summary",
+            headers={"Authorization": f"Bearer {company_a_corporate_admin_token}"},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert "data" in body
+        data = body["data"]
+        assert "total_spend" in data
+        assert "order_count" in data
+        assert "average_order_value" in data
+        assert "individual_order_spend" in data
+        assert "bulk_order_spend" in data
+
+    async def test_spend_over_time_with_granularity_param(
+        self, client, analytics_data, company_a_corporate_admin_token
+    ):
+        """Granularity query param is accepted and works."""
+        response = await client.get(
+            "/api/v1/analytics/spend/over-time?granularity=week",
+            headers={"Authorization": f"Bearer {company_a_corporate_admin_token}"},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert isinstance(body["data"], list)
+
+    async def test_top_products_with_limit_param(
+        self, client, analytics_data, company_a_corporate_admin_token
+    ):
+        """Limit query param constrains result count."""
+        response = await client.get(
+            "/api/v1/analytics/orders/top-products?limit=5",
+            headers={"Authorization": f"Bearer {company_a_corporate_admin_token}"},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert isinstance(body["data"], list)
+        assert len(body["data"]) <= 5
+
+    async def test_date_range_filtering_via_query_params(
+        self, client, analytics_data, company_a_corporate_admin_token
+    ):
+        """Date range params filter results. Future dates yield zero."""
+        response = await client.get(
+            "/api/v1/analytics/spend/summary?start_date=2099-01-01&end_date=2099-12-31",
+            headers={"Authorization": f"Bearer {company_a_corporate_admin_token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["total_spend"] == 0
+        assert data["order_count"] == 0
+
+    async def test_invoice_summary_endpoint(
+        self, client, analytics_data, company_a_corporate_admin_token
+    ):
+        """Invoice summary returns correct structure."""
+        response = await client.get(
+            "/api/v1/analytics/invoices/summary",
+            headers={"Authorization": f"Bearer {company_a_corporate_admin_token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert "total_invoiced" in data
+        assert "total_paid" in data
+        assert "total_outstanding" in data
+        assert "invoice_count" in data
+        assert "by_status" in data
+        assert "by_billing_flow" in data
+
+    async def test_order_status_breakdown_endpoint(
+        self, client, analytics_data, company_a_corporate_admin_token
+    ):
+        """Order status breakdown returns list with correct structure."""
+        response = await client.get(
+            "/api/v1/analytics/orders/status-breakdown",
+            headers={"Authorization": f"Bearer {company_a_corporate_admin_token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert isinstance(data, list)
+        if data:
+            assert "status" in data[0]
+            assert "count" in data[0]
+            assert "order_type" in data[0]
+
+    async def test_size_distribution_endpoint(
+        self, client, analytics_data, company_a_corporate_admin_token
+    ):
+        """Size distribution returns list with correct structure."""
+        response = await client.get(
+            "/api/v1/analytics/orders/size-distribution",
+            headers={"Authorization": f"Bearer {company_a_corporate_admin_token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert isinstance(data, list)
+        if data:
+            assert "size" in data[0]
+            assert "count" in data[0]
+            assert "percentage" in data[0]
+
+    async def test_approval_metrics_endpoint(
+        self, client, analytics_data, company_a_corporate_admin_token
+    ):
+        """Approval metrics returns correct structure."""
+        response = await client.get(
+            "/api/v1/analytics/approvals/metrics",
+            headers={"Authorization": f"Bearer {company_a_corporate_admin_token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert "pending_count" in data
+        assert "approved_count" in data
+        assert "rejected_count" in data
+        assert "approval_rate" in data
+        assert "avg_approval_time_hours" in data
+
+    async def test_spend_by_sub_brand_endpoint(
+        self, client, analytics_data, company_a_corporate_admin_token
+    ):
+        """Spend by sub-brand returns list with correct structure."""
+        response = await client.get(
+            "/api/v1/analytics/spend/by-sub-brand",
+            headers={"Authorization": f"Bearer {company_a_corporate_admin_token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert isinstance(data, list)
+        if data:
+            assert "sub_brand_id" in data[0]
+            assert "sub_brand_name" in data[0]
+            assert "total_spend" in data[0]
+            assert "order_count" in data[0]
+
+
+class TestAnalyticsAPIAuthorization:
+    """Authorization tests — verify role restrictions on all endpoints."""
+
+    @pytest.mark.parametrize("endpoint", _ANALYTICS_ENDPOINTS)
+    async def test_employee_gets_403_on_all_analytics(
+        self, client, company_a, company_a_brand_a1_employee_token, endpoint
+    ):
+        """Employee token gets 403 on every analytics endpoint."""
+        response = await client.get(
+            endpoint,
+            headers={"Authorization": f"Bearer {company_a_brand_a1_employee_token}"},
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.parametrize("endpoint", _ANALYTICS_ENDPOINTS)
+    async def test_unauthenticated_gets_401(self, client, endpoint):
+        """No token returns 401 on every analytics endpoint."""
+        response = await client.get(endpoint)
+        assert response.status_code in (401, 403)  # HTTPBearer returns 403 for missing token
+
+    async def test_sub_brand_admin_cannot_see_spend_by_sub_brand(
+        self, client, company_a, company_a_brand_a1_admin_token
+    ):
+        """sub_brand_admin gets 403 on spend/by-sub-brand (corporate_admin only)."""
+        response = await client.get(
+            "/api/v1/analytics/spend/by-sub-brand",
+            headers={"Authorization": f"Bearer {company_a_brand_a1_admin_token}"},
+        )
+        assert response.status_code == 403
+
+    async def test_sub_brand_admin_cannot_see_invoice_summary(
+        self, client, company_a, company_a_brand_a1_admin_token
+    ):
+        """sub_brand_admin gets 403 on invoices/summary (corporate_admin only)."""
+        response = await client.get(
+            "/api/v1/analytics/invoices/summary",
+            headers={"Authorization": f"Bearer {company_a_brand_a1_admin_token}"},
+        )
+        assert response.status_code == 403
+
+    async def test_regional_manager_cannot_see_spend_by_sub_brand(
+        self, client, company_a, company_a_brand_a1_manager_token
+    ):
+        """regional_manager gets 403 on spend/by-sub-brand."""
+        response = await client.get(
+            "/api/v1/analytics/spend/by-sub-brand",
+            headers={"Authorization": f"Bearer {company_a_brand_a1_manager_token}"},
+        )
+        assert response.status_code == 403
+
+    async def test_regional_manager_cannot_see_invoice_summary(
+        self, client, company_a, company_a_brand_a1_manager_token
+    ):
+        """regional_manager gets 403 on invoices/summary."""
+        response = await client.get(
+            "/api/v1/analytics/invoices/summary",
+            headers={"Authorization": f"Bearer {company_a_brand_a1_manager_token}"},
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.parametrize("endpoint", _MANAGER_ENDPOINTS)
+    async def test_regional_manager_can_see_manager_endpoints(
+        self, client, company_a, company_a_brand_a1_manager_token, endpoint
+    ):
+        """regional_manager gets 200 on non-corporate-only endpoints."""
+        response = await client.get(
+            endpoint,
+            headers={"Authorization": f"Bearer {company_a_brand_a1_manager_token}"},
+        )
+        assert response.status_code == 200
+
+    @pytest.mark.parametrize("endpoint", _ANALYTICS_ENDPOINTS)
+    async def test_corporate_admin_can_see_all_endpoints(
+        self, client, analytics_data, company_a_corporate_admin_token, endpoint
+    ):
+        """corporate_admin gets 200 on every analytics endpoint."""
+        response = await client.get(
+            endpoint,
+            headers={"Authorization": f"Bearer {company_a_corporate_admin_token}"},
+        )
+        assert response.status_code == 200
+
+    @pytest.mark.parametrize("endpoint", _MANAGER_ENDPOINTS)
+    async def test_sub_brand_admin_can_see_manager_endpoints(
+        self, client, company_a, company_a_brand_a1_admin_token, endpoint
+    ):
+        """sub_brand_admin gets 200 on non-corporate-only endpoints."""
+        response = await client.get(
+            endpoint,
+            headers={"Authorization": f"Bearer {company_a_brand_a1_admin_token}"},
+        )
+        assert response.status_code == 200
+
+
+class TestAnalyticsAPIIsolation:
+    """Isolation tests — verify tenant boundaries via API.
+
+    NOTE: The `client` fixture uses admin_db_session (superuser), which
+    bypasses RLS. True data isolation is already verified at the service
+    level in TestSpendSummaryIsolation and TestInvoiceSummaryIsolation above
+    (using reel48_app role with RLS enforced). These API-level tests verify
+    that different-company tokens are accepted and return valid responses,
+    confirming the auth layer allows cross-company access without errors.
+    """
+
+    async def test_company_b_admin_sees_valid_spend_summary(
+        self, client, analytics_data, company_b_corporate_admin_token
+    ):
+        """Company B corporate admin can access spend summary endpoint."""
+        response = await client.get(
+            "/api/v1/analytics/spend/summary",
+            headers={"Authorization": f"Bearer {company_b_corporate_admin_token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert "total_spend" in data
+        assert "order_count" in data
+        # Data isolation is verified at the service level (TestSpendSummaryIsolation)
+
+    async def test_sub_brand_a1_admin_can_access_spend_summary(
+        self, client, analytics_data, company_a_brand_a1_admin_token
+    ):
+        """Brand A1 admin can access spend summary (scoped by RLS in prod)."""
+        response = await client.get(
+            "/api/v1/analytics/spend/summary",
+            headers={"Authorization": f"Bearer {company_a_brand_a1_admin_token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert "individual_order_spend" in data
+        assert "bulk_order_spend" in data
+        # Sub-brand isolation is verified at the service level (TestSpendSummaryIsolation)
+
+    async def test_company_b_admin_can_access_invoice_summary(
+        self, client, analytics_data, company_b_corporate_admin_token
+    ):
+        """Company B corporate admin can access invoice summary."""
+        response = await client.get(
+            "/api/v1/analytics/invoices/summary",
+            headers={"Authorization": f"Bearer {company_b_corporate_admin_token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert "total_paid" in data
+        assert "invoice_count" in data
+        # Company isolation is verified at the service level (TestInvoiceSummaryIsolation)

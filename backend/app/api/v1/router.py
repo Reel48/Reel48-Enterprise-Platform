@@ -21,6 +21,7 @@ from app.api.v1.platform.invoices import router as platform_invoices_router
 from app.api.v1.platform.products import router as platform_products_router
 from app.api.v1.sub_brands import router as sub_brands_router
 from app.api.v1.users import router as users_router
+from app.api.v1.analytics import router as analytics_router
 from app.api.v1.webhooks import router as webhooks_router
 
 v1_router = APIRouter(prefix="/api/v1")
@@ -46,4 +47,5 @@ v1_router.include_router(platform_bulk_orders_router)
 v1_router.include_router(platform_approvals_router)
 v1_router.include_router(platform_approval_rules_router)
 v1_router.include_router(platform_invoices_router)
+v1_router.include_router(analytics_router)
 v1_router.include_router(webhooks_router)
