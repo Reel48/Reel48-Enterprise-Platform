@@ -348,6 +348,40 @@ interface NavItem {
 The Carbon `<Header>` component does **not** accept a `style` prop. To set the
 brand background color, use a Tailwind class: `className="bg-charcoal-900"`.
 
+## Carbon DataTable `getHeaderProps` / `getRowProps` Key Destructuring
+
+# --- ADDED 2026-04-09 after Module 8 Phase 4 ---
+# Reason: Carbon's `getHeaderProps({ header })` and `getRowProps({ row })` return objects
+#   that include a `key` property. Spreading these onto a JSX element while also providing
+#   an explicit `key` causes a TS error: "'key' is specified more than once". Removing the
+#   explicit `key` then causes an ESLint `react/jsx-key` error.
+# Impact: All future DataTable usage avoids the duplicate-key TS/ESLint conflict.
+
+When using Carbon's `DataTable` render props, **destructure `key` out of the spread**
+to satisfy both TypeScript and ESLint:
+
+```typescript
+{tableHeaders.map((header) => {
+  const { key, ...headerProps } = getHeaderProps({ header, isSortable: false });
+  return (
+    <TableHeader key={String(key)} {...headerProps}>
+      {header.header}
+    </TableHeader>
+  );
+})}
+
+{tableRows.map((row) => {
+  const { key: rowKey, ...rowProps } = getRowProps({ row });
+  return (
+    <TableRow key={String(rowKey)} {...rowProps}>
+      {row.cells.map((cell) => (
+        <TableCell key={cell.id}>{cell.value}</TableCell>
+      ))}
+    </TableRow>
+  );
+})}
+```
+
 ## Common Mistakes to Avoid
 - ❌ Creating `Button.tsx`, `Input.tsx`, `Modal.tsx`, `DataTable.tsx` wrappers in `src/components/ui/`
 - ❌ Using `cva` or `clsx` for component variants (use Carbon props: `kind`, `size`, `type`)
