@@ -829,6 +829,8 @@ class TenantBase(Base):
 | `products` | `TenantBase` | Scoped to company + sub-brand |
 | `orders` | `TenantBase` | Scoped to company + sub-brand |
 | `order_line_items` | `TenantBase` | Scoped to company + sub-brand |
+| `bulk_orders` | `TenantBase` | Scoped to company + sub-brand |
+| `bulk_order_items` | `TenantBase` | Scoped to company + sub-brand |
 | `invoices` | `TenantBase` | Scoped to company + sub-brand |
 
 
@@ -1157,6 +1159,63 @@ updated_at              TIMESTAMP    NOT NULL
 ```
 RLS: Standard company isolation (PERMISSIVE) + sub-brand scoping (RESTRICTIVE).
 Line items snapshot product details at order time so price/name changes don't affect historical orders.
+
+
+## Module 5 Table Schemas
+
+# --- ADDED 2026-04-09 during Module 5 Phase 1 ---
+# Reason: Module 5 adds bulk_orders and bulk_order_items tables. Documenting them here
+# for implementation consistency and FK references in future modules (Invoicing).
+# Impact: Future modules know the bulk order shape for FK references and status lifecycle.
+
+### `bulk_orders` Table (TenantBase)
+```
+id                      UUID        PRIMARY KEY
+company_id              UUID        NOT NULL (FK → companies, indexed)
+sub_brand_id            UUID        NULL (FK → sub_brands, indexed)
+catalog_id              UUID        NOT NULL (FK → catalogs)  -- which catalog items are from
+created_by              UUID        NOT NULL (FK → users)     -- manager/admin who created it
+title                   VARCHAR(255) NOT NULL                  -- descriptive name
+description             TEXT         NULL
+order_number            VARCHAR(30)  NOT NULL UNIQUE           -- BLK-YYYYMMDD-XXXX format
+status                  VARCHAR(20)  NOT NULL DEFAULT 'draft'  -- draft|submitted|approved|processing|shipped|delivered|cancelled
+total_items             INTEGER      NOT NULL DEFAULT 0        -- denormalized count of bulk_order_items
+total_amount            NUMERIC(10,2) NOT NULL DEFAULT 0       -- denormalized sum of item line totals
+submitted_at            TIMESTAMP    NULL
+approved_by             UUID         NULL (FK → users)
+approved_at             TIMESTAMP    NULL
+cancelled_at            TIMESTAMP    NULL
+cancelled_by            UUID         NULL (FK → users)
+notes                   TEXT         NULL
+created_at              TIMESTAMP    NOT NULL
+updated_at              TIMESTAMP    NOT NULL
+```
+RLS: Standard company isolation (PERMISSIVE) + sub-brand scoping (RESTRICTIVE).
+CHECK constraints: status IN valid values, total_items >= 0, total_amount >= 0.
+Composite index: `(company_id, status)`.
+
+### `bulk_order_items` Table (TenantBase)
+```
+id                      UUID        PRIMARY KEY
+company_id              UUID        NOT NULL (FK → companies, indexed)
+sub_brand_id            UUID        NULL (FK → sub_brands, indexed)
+bulk_order_id           UUID        NOT NULL (FK → bulk_orders)
+employee_id             UUID        NULL (FK → users)         -- target employee (NULL = unassigned/general stock)
+product_id              UUID        NOT NULL (FK → products)
+product_name            VARCHAR(255) NOT NULL                  -- snapshot at add time
+product_sku             VARCHAR(100) NOT NULL                  -- snapshot at add time
+unit_price              NUMERIC(10,2) NOT NULL                 -- snapshot (catalog override or product price)
+quantity                INTEGER      NOT NULL DEFAULT 1
+size                    VARCHAR(20)  NULL
+decoration              VARCHAR(255) NULL
+line_total              NUMERIC(10,2) NOT NULL                 -- unit_price × quantity
+notes                   TEXT         NULL                      -- per-item notes
+created_at              TIMESTAMP    NOT NULL
+updated_at              TIMESTAMP    NOT NULL
+```
+RLS: Standard company isolation (PERMISSIVE) + sub-brand scoping (RESTRICTIVE).
+CHECK constraints: quantity > 0, unit_price >= 0, line_total >= 0.
+Items snapshot product details at add time (same pattern as order_line_items).
 
 
 ## Order Placement Patterns

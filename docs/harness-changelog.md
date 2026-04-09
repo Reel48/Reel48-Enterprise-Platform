@@ -30,6 +30,30 @@
 
 ---
 
+## 2026-04-09 — Module 5 Phase 1 End-of-Session Self-Audit
+
+**Type:** End-of-session self-audit
+**Module:** Module 5 — Bulk Ordering System (Phase 1: Database Migration)
+
+### Self-Audit Checklist
+- [x] **New pattern?** → No new patterns. Phase 1 follows the exact migration and model patterns established in Module 4 (migration 004). Bulk order items use the same product snapshotting pattern as order_line_items.
+- [ ] **Pattern violated?** → No deviations. Migration uses same style as 004 (sa.Column, UUID(as_uuid=True), sa.ForeignKey(name=...), sa.text("now()"), op.execute() for RLS).
+- [ ] **New decision?** → No ADR-worthy decisions. Bulk orders use same status set as individual orders plus 'submitted' (for manager submission to admin approval).
+- [x] **Missing guidance?** → Module 5 table schemas were not in backend/CLAUDE.md. Now documented. `bulk_orders` and `bulk_order_items` added to "Which Base to Use" table.
+- [ ] **Reusable task?** → No new prompt templates needed — migration pattern is well-established.
+- [x] **Changelog updated?** → This entry.
+
+### Harness Files Updated
+- **`backend/CLAUDE.md`** — Added "Module 5 Table Schemas" section with `bulk_orders` and `bulk_order_items` schemas. Added both tables to "Which Base to Use" table.
+
+### Session Metrics
+- **Tests written:** 0 (Phase 1 is migration + models only; verified all 265 existing tests pass)
+- **Total test suite:** 265 passed, 0 failed
+- **Mistakes caught by harness:** 0
+- **Gaps found:** 1 (table schemas not documented — filled)
+
+---
+
 ## 2026-04-08 — Module 4 Completion (Ordering Flow)
 
 **Type:** End-of-module self-audit + harness review
