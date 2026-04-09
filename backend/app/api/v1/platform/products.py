@@ -15,6 +15,7 @@ from app.core.tenant import TenantContext
 from app.schemas.common import ApiListResponse, ApiResponse, PaginationMeta
 from app.schemas.product import ProductResponse
 from app.services.approval_service import ApprovalService
+from app.services.email_service import EmailService, get_email_service
 from app.services.helpers import resolve_current_user_id
 from app.services.product_service import ProductService
 
@@ -50,6 +51,7 @@ async def approve_product(
     product_id: UUID,
     context: TenantContext = Depends(require_reel48_admin),
     db: AsyncSession = Depends(get_db_session),
+    email_service: EmailService = Depends(get_email_service),
 ) -> ApiResponse[ProductResponse]:
     """Approve a submitted product. Transitions: submitted -> approved."""
     approved_by = await resolve_current_user_id(db, context.user_id)
@@ -57,7 +59,7 @@ async def approve_product(
     product = await service.approve_product(product_id, approved_by)
 
     # Sync: also update the corresponding approval_request if one exists
-    approval_svc = ApprovalService(db)
+    approval_svc = ApprovalService(db, email_service=email_service)
     ar = await approval_svc.find_by_entity("product", product_id)
     if ar is not None:
         from datetime import UTC, datetime
@@ -66,6 +68,15 @@ async def approve_product(
         ar.decided_at = datetime.now(UTC)  # type: ignore[assignment]
         ar.status = "approved"  # type: ignore[assignment]
         await db.flush()
+
+        await approval_svc._notify_submitter(
+            entity_type="product",
+            entity_id=product_id,
+            requested_by=ar.requested_by,
+            decided_by=approved_by,
+            decision="approved",
+            decision_notes=None,
+        )
 
     return ApiResponse(data=ProductResponse.model_validate(product))
 
@@ -76,6 +87,7 @@ async def reject_product(
     body: RejectRequest | None = None,
     context: TenantContext = Depends(require_reel48_admin),
     db: AsyncSession = Depends(get_db_session),
+    email_service: EmailService = Depends(get_email_service),
 ) -> ApiResponse[ProductResponse]:
     """Reject a submitted product back to draft. Transitions: submitted -> draft."""
     rejected_by = await resolve_current_user_id(db, context.user_id)
@@ -83,16 +95,26 @@ async def reject_product(
     product = await service.reject_product(product_id)
 
     # Sync: also update the corresponding approval_request if one exists
-    approval_svc = ApprovalService(db)
+    approval_svc = ApprovalService(db, email_service=email_service)
     ar = await approval_svc.find_by_entity("product", product_id)
     if ar is not None:
         from datetime import UTC, datetime
+        rejection_reason = body.rejection_reason if body else None
 
         ar.decided_by = rejected_by  # type: ignore[assignment]
         ar.decided_at = datetime.now(UTC)  # type: ignore[assignment]
         ar.status = "rejected"  # type: ignore[assignment]
-        ar.decision_notes = body.rejection_reason if body else None  # type: ignore[assignment]
+        ar.decision_notes = rejection_reason  # type: ignore[assignment]
         await db.flush()
+
+        await approval_svc._notify_submitter(
+            entity_type="product",
+            entity_id=product_id,
+            requested_by=ar.requested_by,
+            decided_by=rejected_by,
+            decision="rejected",
+            decision_notes=rejection_reason,
+        )
 
     return ApiResponse(data=ProductResponse.model_validate(product))
 

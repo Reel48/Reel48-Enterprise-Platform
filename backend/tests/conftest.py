@@ -606,6 +606,74 @@ def mock_cognito() -> MockCognitoService:
     app.dependency_overrides.pop(get_cognito_service, None)
 
 
+class MockEmailService:
+    """Mock SES email service that records sent emails without hitting AWS."""
+
+    def __init__(self) -> None:
+        self.sent_emails: list[dict] = []
+
+    async def send_email(
+        self, to_email, subject, html_body, text_body
+    ) -> str:
+        message_id = f"mock-{len(self.sent_emails)}"
+        self.sent_emails.append({
+            "to_email": to_email,
+            "subject": subject,
+            "html_body": html_body,
+            "text_body": text_body,
+            "message_id": message_id,
+        })
+        return message_id
+
+    async def send_approval_needed_notification(
+        self, to_email, entity_type, entity_name, submitted_by_name, approval_url
+    ) -> str:
+        message_id = f"mock-needed-{len(self.sent_emails)}"
+        self.sent_emails.append({
+            "type": "approval_needed",
+            "to_email": to_email,
+            "entity_type": entity_type,
+            "entity_name": entity_name,
+            "submitted_by_name": submitted_by_name,
+            "approval_url": approval_url,
+            "message_id": message_id,
+        })
+        return message_id
+
+    async def send_approval_decision_notification(
+        self,
+        to_email,
+        entity_type,
+        entity_name,
+        decision,
+        decided_by_name,
+        decision_notes,
+    ) -> str:
+        message_id = f"mock-decision-{len(self.sent_emails)}"
+        self.sent_emails.append({
+            "type": "approval_decision",
+            "to_email": to_email,
+            "entity_type": entity_type,
+            "entity_name": entity_name,
+            "decision": decision,
+            "decided_by_name": decided_by_name,
+            "decision_notes": decision_notes,
+            "message_id": message_id,
+        })
+        return message_id
+
+
+@pytest.fixture(autouse=True)
+def mock_email() -> MockEmailService:
+    """Auto-mock EmailService for all tests. Override get_email_service."""
+    from app.services.email_service import get_email_service
+
+    mock = MockEmailService()
+    app.dependency_overrides[get_email_service] = lambda: mock
+    yield mock
+    app.dependency_overrides.pop(get_email_service, None)
+
+
 @pytest.fixture(autouse=True)
 def no_rate_limit():
     """Disable rate limiting for all tests by default."""

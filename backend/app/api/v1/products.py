@@ -9,6 +9,7 @@ from app.core.tenant import TenantContext
 from app.schemas.common import ApiListResponse, ApiResponse, PaginationMeta
 from app.schemas.product import ProductCreate, ProductResponse, ProductUpdate
 from app.services.approval_service import ApprovalService
+from app.services.email_service import EmailService, get_email_service
 from app.services.helpers import resolve_current_user_id
 from app.services.product_service import ProductService
 
@@ -151,6 +152,7 @@ async def submit_product(
     product_id: UUID,
     context: TenantContext = Depends(require_admin),
     db: AsyncSession = Depends(get_db_session),
+    email_service: EmailService = Depends(get_email_service),
 ) -> ApiResponse[ProductResponse]:
     """Submit a draft product for approval. Transitions status: draft -> submitted."""
     company_id = _require_company_id(context)
@@ -159,7 +161,7 @@ async def submit_product(
     product = await service.submit_product(product_id, company_id)
 
     # Record in the unified approval queue
-    approval_svc = ApprovalService(db)
+    approval_svc = ApprovalService(db, email_service=email_service)
     await approval_svc.record_submission(
         entity_type="product",
         entity_id=product.id,

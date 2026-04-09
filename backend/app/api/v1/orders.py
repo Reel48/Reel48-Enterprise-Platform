@@ -14,6 +14,7 @@ from app.schemas.order import (
     OrderWithItemsResponse,
 )
 from app.services.approval_service import ApprovalService
+from app.services.email_service import EmailService, get_email_service
 from app.services.helpers import resolve_current_user_id
 from app.services.order_service import OrderService
 
@@ -32,6 +33,7 @@ async def create_order(
     data: OrderCreate,
     context: TenantContext = Depends(get_tenant_context),
     db: AsyncSession = Depends(get_db_session),
+    email_service: EmailService = Depends(get_email_service),
 ) -> ApiResponse[OrderWithItemsResponse]:
     """Place an order against an active catalog. All authenticated roles can order."""
     company_id = _require_company_id(context)
@@ -45,7 +47,7 @@ async def create_order(
     )
 
     # Orders are submitted for approval at creation time (start as 'pending')
-    approval_svc = ApprovalService(db)
+    approval_svc = ApprovalService(db, email_service=email_service)
     await approval_svc.record_submission(
         entity_type="order",
         entity_id=order.id,
@@ -167,6 +169,7 @@ async def approve_order(
     order_id: UUID,
     context: TenantContext = Depends(require_manager),
     db: AsyncSession = Depends(get_db_session),
+    email_service: EmailService = Depends(get_email_service),
 ) -> ApiResponse[OrderResponse]:
     """Approve a pending order. Requires manager_or_above."""
     company_id = _require_company_id(context)
@@ -175,7 +178,7 @@ async def approve_order(
     order = await service.approve_order(order_id, company_id)
 
     # Sync: also update the corresponding approval_request if one exists
-    approval_svc = ApprovalService(db)
+    approval_svc = ApprovalService(db, email_service=email_service)
     ar = await approval_svc.find_by_entity("order", order_id)
     if ar is not None:
         from datetime import UTC, datetime
@@ -184,6 +187,16 @@ async def approve_order(
         ar.decided_at = datetime.now(UTC)  # type: ignore[assignment]
         ar.status = "approved"  # type: ignore[assignment]
         await db.flush()
+
+        # Send decision notification to the order submitter
+        await approval_svc._notify_submitter(
+            entity_type="order",
+            entity_id=order_id,
+            requested_by=ar.requested_by,
+            decided_by=approved_by,
+            decision="approved",
+            decision_notes=None,
+        )
 
     return ApiResponse(data=OrderResponse.model_validate(order))
 

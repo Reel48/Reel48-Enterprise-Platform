@@ -16,6 +16,13 @@ class Settings(BaseSettings):
     COGNITO_CLIENT_ID: str = ""
     COGNITO_REGION: str = "us-east-1"
 
+    # Amazon SES (transactional email)
+    SES_REGION: str = "us-east-1"
+    SES_SENDER_EMAIL: str = "noreply@reel48.com"
+
+    # Frontend (for email links)
+    FRONTEND_BASE_URL: str = "https://app.reel48.com"
+
     # CORS
     ALLOWED_ORIGINS: list[str] = ["http://localhost:3000"]
 

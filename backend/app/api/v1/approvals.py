@@ -19,6 +19,7 @@ from app.schemas.approval import (
 )
 from app.schemas.common import ApiListResponse, ApiResponse, PaginationMeta
 from app.services.approval_service import ApprovalService
+from app.services.email_service import EmailService, get_email_service
 from app.services.helpers import resolve_current_user_id
 
 router = APIRouter(prefix="/approvals", tags=["approvals"])
@@ -180,13 +181,14 @@ async def approve_request(
     body: ApprovalDecisionRequest | None = None,
     context: TenantContext = Depends(get_tenant_context),
     db: AsyncSession = Depends(get_db_session),
+    email_service: EmailService = Depends(get_email_service),
 ) -> ApiResponse[ApprovalRequestResponse]:
     """Approve an approval request. Delegates to the entity-specific service."""
     if context.role == "employee":
         raise ForbiddenError("Employees cannot approve requests")
 
     decided_by = await resolve_current_user_id(db, context.user_id)
-    service = ApprovalService(db)
+    service = ApprovalService(db, email_service=email_service)
 
     # Scope check before processing
     ar = await service.get_approval_request(approval_request_id)
@@ -213,13 +215,14 @@ async def reject_request(
     body: ApprovalDecisionRequest | None = None,
     context: TenantContext = Depends(get_tenant_context),
     db: AsyncSession = Depends(get_db_session),
+    email_service: EmailService = Depends(get_email_service),
 ) -> ApiResponse[ApprovalRequestResponse]:
     """Reject an approval request. Delegates to the entity-specific service."""
     if context.role == "employee":
         raise ForbiddenError("Employees cannot reject requests")
 
     decided_by = await resolve_current_user_id(db, context.user_id)
-    service = ApprovalService(db)
+    service = ApprovalService(db, email_service=email_service)
 
     # Scope check before processing
     ar = await service.get_approval_request(approval_request_id)
