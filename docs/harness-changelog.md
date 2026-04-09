@@ -30,6 +30,41 @@
 
 ---
 
+## 2026-04-09 — Module 7 Phase 3 (Platform Admin Invoice Endpoints)
+
+**Type:** End-of-session self-audit (Trigger 1)
+**Module:** Module 7 — Invoicing & Client Billing (Phase 3)
+
+### What was built
+- `backend/app/api/v1/platform/invoices.py` — Six platform admin endpoints for invoice
+  lifecycle management: create (assigned/post_window), finalize, send, void, list (with
+  filters), and get detail. All use `require_reel48_admin` auth dependency.
+- `backend/app/schemas/invoice.py` — Updated `InvoiceCreate` schema: changed single
+  `order_id`/`bulk_order_id` to list fields (`order_ids`/`bulk_order_ids`), restricted
+  `billing_flow` validator to `assigned`/`post_window` only (self_service is auto-generated,
+  not manually created), removed `buying_window_closes_at` (derived from catalog).
+- `backend/app/api/v1/router.py` — Registered platform invoices router.
+
+### Harness review
+1. **New pattern?** No — follows the established platform endpoint pattern from
+   `platform/products.py` and `platform/catalogs.py` exactly (require_reel48_admin,
+   resolve_current_user_id, StripeService injection via Depends).
+2. **Pattern violated?** No.
+3. **New decision?** No — all decisions follow existing stripe-invoicing rule guidance.
+4. **Missing guidance?** The root CLAUDE.md endpoint list was missing `/send`, `/void`,
+   and `GET /{invoice_id}` for platform invoices. Updated to include the full set of 6
+   platform invoice endpoints.
+5. **Prompt template needed?** No.
+
+### Files changed
+- **`backend/app/api/v1/platform/invoices.py`** — New file (6 endpoints)
+- **`backend/app/schemas/invoice.py`** — Updated InvoiceCreate schema
+- **`backend/app/api/v1/router.py`** — Added platform invoices router registration
+- **`CLAUDE.md`** — Updated API Endpoints for Invoicing section with full platform endpoint list
+- **`docs/harness-changelog.md`** — This entry
+
+---
+
 ## 2026-04-09 — Module 7 Phase 2 (Stripe & Invoice Services)
 
 **Type:** End-of-session self-audit (Trigger 1)
