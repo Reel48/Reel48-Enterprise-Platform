@@ -30,6 +30,35 @@
 
 ---
 
+## 2026-04-09 — Module 5 Phase 2 End-of-Session Self-Audit
+
+**Type:** End-of-session self-audit
+**Module:** Module 5 — Bulk Ordering System (Phase 2: Session CRUD)
+
+### Self-Audit Checklist
+- [ ] **New pattern?** → No new patterns. Phase 2 follows the exact service/endpoint/schema patterns established in Module 4 (OrderService). Draft-only edit/delete guards follow the same pattern as catalog draft restrictions in Module 3.
+- [ ] **Pattern violated?** → No deviations. All endpoints use `require_manager` dependency, `_require_company_id` guard, `resolve_current_user_id` for created_by FK, `flush() + refresh()` pattern, and standard ApiResponse/ApiListResponse wrappers.
+- [ ] **New decision?** → No ADR-worthy decisions. Hard delete for draft bulk orders is consistent with the established pattern (draft catalogs also hard-delete with their junction entries).
+- [ ] **Missing guidance?** → No gaps discovered. The harness provided complete guidance for bulk order CRUD — catalog validation, order number generation, and role-based access were all well-documented from Module 4.
+- [ ] **Reusable task?** → No new prompt templates needed.
+- [x] **Changelog updated?** → This entry.
+
+### Harness Files Updated
+- None — no new patterns or gaps identified.
+
+### Session Metrics
+- **Tests written:** 15 (5 create, 2 list, 1 get, 2 update, 2 delete, 2 auth, 1 isolation)
+- **Total test suite:** 280 passed, 0 failed
+- **Mistakes caught by harness:** 0
+- **Gaps found:** 0
+
+### Implementation Notes
+- BulkOrderService duplicates `_validate_catalog()` from OrderService as specified (keeps services self-contained)
+- Order number format: `BLK-YYYYMMDD-XXXX` (same collision-retry pattern as `ORD-` numbers)
+- Tests for non-draft status guards insert directly via admin_db_session with a real catalog (FK constraint requires it)
+
+---
+
 ## 2026-04-09 — Module 5 Phase 1 End-of-Session Self-Audit
 
 **Type:** End-of-session self-audit
