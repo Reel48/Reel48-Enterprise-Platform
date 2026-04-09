@@ -19,6 +19,7 @@ from app.models.approval_request import ApprovalRequest
 from app.models.approval_rule import ApprovalRule
 from app.models.bulk_order import BulkOrder
 from app.models.catalog import Catalog
+from app.models.company import Company
 from app.models.order import Order
 from app.models.product import Product
 from app.schemas.approval import ApprovalRuleCreate, ApprovalRuleUpdate
@@ -446,6 +447,28 @@ class ApprovalService:
         await self.db.refresh(rule)
         return rule
 
+    async def list_all_rules(
+        self,
+        company_id_filter: UUID | None = None,
+        entity_type_filter: str | None = None,
+        page: int = 1,
+        per_page: int = 20,
+    ) -> tuple[list[ApprovalRule], int]:
+        """List approval rules across ALL companies. For reel48_admin only."""
+        query = select(ApprovalRule)
+        if company_id_filter is not None:
+            query = query.where(ApprovalRule.company_id == company_id_filter)
+        if entity_type_filter is not None:
+            query = query.where(ApprovalRule.entity_type == entity_type_filter)
+
+        total = await self.db.scalar(
+            select(func.count()).select_from(query.subquery())
+        )
+        query = query.order_by(ApprovalRule.created_at.desc())
+        query = query.offset((page - 1) * per_page).limit(per_page)
+        result = await self.db.execute(query)
+        return list(result.scalars().all()), total or 0
+
     async def _get_rule(self, rule_id: UUID, company_id: UUID) -> ApprovalRule:
         """Fetch a single approval rule scoped to a company."""
         result = await self.db.execute(
@@ -504,3 +527,81 @@ class ApprovalService:
             return "Unknown Bulk Order", None
 
         return "Unknown", None
+
+    # ------------------------------------------------------------------
+    # Platform admin queries (cross-company)
+    # ------------------------------------------------------------------
+
+    async def list_all_approvals(
+        self,
+        status_filter: str | None = None,
+        entity_type_filter: str | None = None,
+        company_id_filter: UUID | None = None,
+        page: int = 1,
+        per_page: int = 20,
+    ) -> tuple[list[ApprovalRequest], int]:
+        """List approval requests across ALL companies. For reel48_admin only."""
+        query = select(ApprovalRequest)
+
+        if status_filter is not None:
+            query = query.where(ApprovalRequest.status == status_filter)
+        if entity_type_filter is not None:
+            query = query.where(ApprovalRequest.entity_type == entity_type_filter)
+        if company_id_filter is not None:
+            query = query.where(ApprovalRequest.company_id == company_id_filter)
+
+        total = await self.db.scalar(
+            select(func.count()).select_from(query.subquery())
+        )
+        query = query.order_by(ApprovalRequest.requested_at.desc())
+        query = query.offset((page - 1) * per_page).limit(per_page)
+        result = await self.db.execute(query)
+        return list(result.scalars().all()), total or 0
+
+    async def get_approval_summary(self) -> dict:
+        """Aggregate pending approval counts by entity_type and company."""
+        # Total pending count
+        pending_count = await self.db.scalar(
+            select(func.count()).where(ApprovalRequest.status == "pending")
+        ) or 0
+
+        # Pending by entity_type
+        type_rows = (
+            await self.db.execute(
+                select(
+                    ApprovalRequest.entity_type,
+                    func.count().label("cnt"),
+                )
+                .where(ApprovalRequest.status == "pending")
+                .group_by(ApprovalRequest.entity_type)
+            )
+        ).all()
+        by_entity_type = {row[0]: row[1] for row in type_rows}
+
+        # Pending by company (join to get company name)
+        company_rows = (
+            await self.db.execute(
+                select(
+                    ApprovalRequest.company_id,
+                    Company.name,
+                    func.count().label("cnt"),
+                )
+                .join(Company, Company.id == ApprovalRequest.company_id)
+                .where(ApprovalRequest.status == "pending")
+                .group_by(ApprovalRequest.company_id, Company.name)
+            )
+        ).all()
+        by_company = [
+            {
+                "company_id": str(row[0]),
+                "company_name": row[1],
+                "pending_count": row[2],
+            }
+            for row in company_rows
+        ]
+
+        return {
+            "pending_count": pending_count,
+            "by_entity_type": by_entity_type,
+            "by_company": by_company,
+        }
