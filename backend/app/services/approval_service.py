@@ -9,11 +9,14 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 from uuid import UUID
 
+import structlog
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.models.approval_request import ApprovalRequest
 from app.models.approval_rule import ApprovalRule
@@ -22,11 +25,17 @@ from app.models.catalog import Catalog
 from app.models.company import Company
 from app.models.order import Order
 from app.models.product import Product
+from app.models.user import User
 from app.schemas.approval import ApprovalRuleCreate, ApprovalRuleUpdate
 from app.services.bulk_order_service import BulkOrderService
 from app.services.catalog_service import CatalogService
 from app.services.order_service import OrderService
 from app.services.product_service import ProductService
+
+if TYPE_CHECKING:
+    from app.services.email_service import EmailService
+
+logger = structlog.get_logger()
 
 # Role hierarchy for threshold checks (higher index = more authority)
 _ROLE_RANK: dict[str, int] = {
@@ -41,8 +50,13 @@ VALID_ENTITY_TYPES = {"product", "catalog", "order", "bulk_order"}
 
 
 class ApprovalService:
-    def __init__(self, db: AsyncSession):
+    def __init__(
+        self,
+        db: AsyncSession,
+        email_service: EmailService | None = None,
+    ):
         self.db = db
+        self._email_service = email_service
 
     # ------------------------------------------------------------------
     # Submission recording
@@ -74,6 +88,16 @@ class ApprovalService:
         self.db.add(approval_request)
         await self.db.flush()
         await self.db.refresh(approval_request)
+
+        # Send notification to potential approvers (non-blocking)
+        await self._notify_approvers(
+            entity_type=entity_type,
+            entity_id=entity_id,
+            company_id=company_id,
+            sub_brand_id=sub_brand_id,
+            requested_by=requested_by,
+        )
+
         return approval_request
 
     # ------------------------------------------------------------------
@@ -136,6 +160,17 @@ class ApprovalService:
         ar.decision_notes = decision_notes  # type: ignore[assignment]
         await self.db.flush()
         await self.db.refresh(ar)
+
+        # 5. Send decision notification to submitter (non-blocking)
+        await self._notify_submitter(
+            entity_type=ar.entity_type,
+            entity_id=ar.entity_id,
+            requested_by=ar.requested_by,
+            decided_by=decided_by,
+            decision=decision,
+            decision_notes=decision_notes,
+        )
+
         return ar
 
     async def _delegate_to_entity_service(
@@ -180,6 +215,165 @@ class ApprovalService:
                 await svc_blk.cancel_bulk_order(
                     entity_id, company_id, decided_by, is_manager_or_above=True
                 )
+
+    # ------------------------------------------------------------------
+    # Email notification helpers
+    # ------------------------------------------------------------------
+
+    async def _notify_approvers(
+        self,
+        entity_type: str,
+        entity_id: UUID,
+        company_id: UUID,
+        sub_brand_id: UUID | None,
+        requested_by: UUID,
+    ) -> None:
+        """Send approval-needed notifications to potential approvers.
+
+        For products/catalogs: notify reel48_admin users.
+        For orders/bulk_orders: notify manager_or_above in the same company/sub-brand.
+        Failures are logged but do not block the approval request creation.
+        """
+        if self._email_service is None:
+            return
+
+        try:
+            entity_name, _ = await self.get_entity_summary(entity_type, entity_id)
+
+            # Look up submitter name
+            submitter = await self.db.execute(
+                select(User.full_name).where(User.id == requested_by)
+            )
+            submitter_name = submitter.scalar_one_or_none() or "Unknown"
+
+            # Determine approver recipients
+            approver_emails = await self._get_approver_emails(
+                entity_type, company_id, sub_brand_id
+            )
+
+            approval_url = (
+                f"{settings.FRONTEND_BASE_URL}/approvals"
+            )
+
+            for email in approver_emails:
+                try:
+                    await self._email_service.send_approval_needed_notification(
+                        to_email=email,
+                        entity_type=entity_type,
+                        entity_name=entity_name,
+                        submitted_by_name=submitter_name,
+                        approval_url=approval_url,
+                    )
+                except Exception:
+                    logger.warning(
+                        "approval_needed_email_failed",
+                        to_email=email,
+                        entity_type=entity_type,
+                        entity_id=str(entity_id),
+                        exc_info=True,
+                    )
+        except Exception:
+            logger.warning(
+                "approval_notification_dispatch_failed",
+                entity_type=entity_type,
+                entity_id=str(entity_id),
+                exc_info=True,
+            )
+
+    async def _notify_submitter(
+        self,
+        entity_type: str,
+        entity_id: UUID,
+        requested_by: UUID,
+        decided_by: UUID,
+        decision: str,
+        decision_notes: str | None,
+    ) -> None:
+        """Send a decision notification to the original submitter.
+
+        Failures are logged but do not block the decision processing.
+        """
+        if self._email_service is None:
+            return
+
+        try:
+            entity_name, _ = await self.get_entity_summary(entity_type, entity_id)
+
+            # Look up submitter email
+            submitter_result = await self.db.execute(
+                select(User.email).where(User.id == requested_by)
+            )
+            submitter_email = submitter_result.scalar_one_or_none()
+            if not submitter_email:
+                logger.warning(
+                    "submitter_email_not_found",
+                    requested_by=str(requested_by),
+                )
+                return
+
+            # Look up decider name
+            decider_result = await self.db.execute(
+                select(User.full_name).where(User.id == decided_by)
+            )
+            decider_name = decider_result.scalar_one_or_none() or "Unknown"
+
+            await self._email_service.send_approval_decision_notification(
+                to_email=submitter_email,
+                entity_type=entity_type,
+                entity_name=entity_name,
+                decision=decision,
+                decided_by_name=decider_name,
+                decision_notes=decision_notes,
+            )
+        except Exception:
+            logger.warning(
+                "decision_notification_failed",
+                entity_type=entity_type,
+                entity_id=str(entity_id),
+                decision=decision,
+                exc_info=True,
+            )
+
+    async def _get_approver_emails(
+        self,
+        entity_type: str,
+        company_id: UUID,
+        sub_brand_id: UUID | None,
+    ) -> list[str]:
+        """Determine who should receive approval-needed notifications.
+
+        Products/catalogs: reel48_admin users (platform-level approval).
+        Orders/bulk_orders: manager_or_above in the same company/sub-brand.
+        """
+        if entity_type in ("product", "catalog"):
+            # Platform admins approve products and catalogs
+            result = await self.db.execute(
+                select(User.email).where(
+                    User.role == "reel48_admin",
+                    User.is_active.is_(True),
+                )
+            )
+        else:
+            # Managers and admins in the same company/sub-brand
+            manager_roles = [
+                "regional_manager",
+                "sub_brand_admin",
+                "corporate_admin",
+            ]
+            query = select(User.email).where(
+                User.company_id == company_id,
+                User.role.in_(manager_roles),
+                User.is_active.is_(True),
+            )
+            if sub_brand_id is not None:
+                # Include users in the same sub-brand OR corporate admins (sub_brand_id=NULL)
+                query = query.where(
+                    (User.sub_brand_id == sub_brand_id)
+                    | (User.sub_brand_id.is_(None))
+                )
+            result = await self.db.execute(query)
+
+        return list(result.scalars().all())
 
     # ------------------------------------------------------------------
     # Approval rules evaluation

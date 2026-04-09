@@ -16,6 +16,7 @@ from app.schemas.catalog import (
 from app.schemas.common import ApiListResponse, ApiResponse, PaginationMeta
 from app.services.approval_service import ApprovalService
 from app.services.catalog_service import CatalogService
+from app.services.email_service import EmailService, get_email_service
 from app.services.helpers import resolve_current_user_id
 
 router = APIRouter(prefix="/catalogs", tags=["catalogs"])
@@ -155,6 +156,7 @@ async def submit_catalog(
     catalog_id: UUID,
     context: TenantContext = Depends(require_admin),
     db: AsyncSession = Depends(get_db_session),
+    email_service: EmailService = Depends(get_email_service),
 ) -> ApiResponse[CatalogResponse]:
     """Submit a draft catalog for approval. Catalog must have at least one product."""
     company_id = _require_company_id(context)
@@ -163,7 +165,7 @@ async def submit_catalog(
     catalog = await service.submit_catalog(catalog_id, company_id)
 
     # Record in the unified approval queue
-    approval_svc = ApprovalService(db)
+    approval_svc = ApprovalService(db, email_service=email_service)
     await approval_svc.record_submission(
         entity_type="catalog",
         entity_id=catalog.id,

@@ -30,6 +30,48 @@
 
 ---
 
+## 2026-04-09 — Module 6 Phase 5 (Approval Notifications via SES)
+
+**Type:** End-of-session self-audit
+**Module:** Module 6 — Approval Workflows (Phase 5: Email Notifications)
+
+### Harness files updated
+- **`backend/CLAUDE.md`** — Added "Email Notification Pattern (Non-Blocking SES)" section
+  documenting the EmailService integration, non-blocking dispatch pattern, recipient
+  resolution logic, config settings, and MockEmailService testing pattern.
+
+### Changes made this session
+- **New file:** `backend/app/services/email_service.py` — SES integration following the
+  External Service Integration Pattern (CognitoService precedent). Includes HTML/text
+  email templates for approval_needed and approval_decision notifications.
+- **Updated:** `backend/app/core/config.py` — Added `SES_REGION`, `SES_SENDER_EMAIL`,
+  and `FRONTEND_BASE_URL` settings.
+- **Updated:** `backend/app/services/approval_service.py` — Added optional `email_service`
+  parameter, `_notify_approvers()`, `_notify_submitter()`, and `_get_approver_emails()`
+  methods. Notifications dispatched from `record_submission()` and `process_decision()`.
+- **Updated:** 8 endpoint files to inject `EmailService` via `Depends(get_email_service)`
+  where approval submissions or decisions occur.
+- **Updated:** `backend/tests/conftest.py` — Added `MockEmailService` class and autouse
+  `mock_email` fixture following the established external service mock pattern.
+- **New file:** `backend/tests/test_approval_notifications.py` — 11 tests covering
+  submission notifications, decision notifications, email failure resilience, and
+  full integration flows.
+
+### Self-audit checklist
+- [x] **New pattern?** Yes — non-blocking email dispatch within service methods. Documented
+  in backend CLAUDE.md.
+- [x] **Pattern violated?** No — followed the existing External Service Integration Pattern.
+- [x] **New decision?** No — SES was already the chosen email provider (root CLAUDE.md).
+- [x] **Missing guidance?** Filled — added MockEmailService testing guidance.
+- [x] **Reusable task?** Not yet — email templates are inline. A template system may be
+  needed if email complexity grows.
+- [x] **Changelog updated?** This entry.
+
+### Test results
+- 409 total tests: all passing (0 failures, 0 errors)
+- 11 new notification tests added
+
+
 ## 2026-04-09 — Module 6 Phase 4 (Platform Admin Approval Dashboard)
 
 **Type:** End-of-session self-audit

@@ -702,6 +702,40 @@ app.dependency_overrides[get_cognito_service] = lambda: mock_cognito_service
   for backward compatibility (e.g., `UserService(db, cognito_service=None)`)
 
 
+### Email Notification Pattern (Non-Blocking SES)
+
+# --- ADDED 2026-04-09 during Module 6 Phase 5 ---
+# Reason: Approval notifications introduced the first SES integration and established
+# the pattern for non-blocking email dispatch within service methods.
+# Impact: Future modules adding email notifications follow this pattern.
+
+`EmailService` wraps AWS SES and is injected via `get_email_service()` dependency. It
+follows the same External Service Integration Pattern as CognitoService.
+
+**Non-blocking dispatch:** Email notifications are sent inside service methods
+(`ApprovalService.record_submission`, `process_decision`) but wrapped in try/except.
+If SES fails, the error is logged and the operation continues. Emails never block
+business logic.
+
+```python
+# In the service method:
+try:
+    await self._email_service.send_approval_needed_notification(...)
+except Exception:
+    logger.warning("approval_needed_email_failed", exc_info=True)
+```
+
+**Recipient resolution:**
+- Products/catalogs: reel48_admin users (platform-level approval)
+- Orders/bulk_orders: manager_or_above users in the same company/sub-brand
+
+**Config:** `SES_REGION`, `SES_SENDER_EMAIL`, `FRONTEND_BASE_URL` in settings.
+
+**Testing:** `MockEmailService` in conftest.py (autouse fixture). Records sent emails
+in `mock_email.sent_emails` list for assertions. Filter by `e.get("type")` —
+`"approval_needed"` or `"approval_decision"`.
+
+
 ## Pydantic Schema Conventions
 
 # --- WHY THIS SECTION EXISTS ---

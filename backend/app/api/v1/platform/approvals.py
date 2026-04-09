@@ -19,6 +19,7 @@ from app.schemas.approval import (
 )
 from app.schemas.common import ApiListResponse, ApiResponse, PaginationMeta
 from app.services.approval_service import ApprovalService
+from app.services.email_service import EmailService, get_email_service
 from app.services.helpers import resolve_current_user_id
 
 router = APIRouter(prefix="/platform/approvals", tags=["platform-approvals"])
@@ -84,10 +85,11 @@ async def approve_request(
     body: ApprovalDecisionRequest | None = None,
     context: TenantContext = Depends(require_reel48_admin),
     db: AsyncSession = Depends(get_db_session),
+    email_service: EmailService = Depends(get_email_service),
 ) -> ApiResponse[ApprovalRequestResponse]:
     """Platform-level approve. Works for all entity types including products/catalogs."""
     decided_by = await resolve_current_user_id(db, context.user_id)
-    service = ApprovalService(db)
+    service = ApprovalService(db, email_service=email_service)
     result = await service.process_decision(
         approval_request_id=approval_request_id,
         decided_by=decided_by,
@@ -108,10 +110,11 @@ async def reject_request(
     body: ApprovalDecisionRequest | None = None,
     context: TenantContext = Depends(require_reel48_admin),
     db: AsyncSession = Depends(get_db_session),
+    email_service: EmailService = Depends(get_email_service),
 ) -> ApiResponse[ApprovalRequestResponse]:
     """Platform-level reject. Works for all entity types including products/catalogs."""
     decided_by = await resolve_current_user_id(db, context.user_id)
-    service = ApprovalService(db)
+    service = ApprovalService(db, email_service=email_service)
     result = await service.process_decision(
         approval_request_id=approval_request_id,
         decided_by=decided_by,

@@ -18,6 +18,7 @@ from app.schemas.bulk_order import (
 from app.schemas.common import ApiListResponse, ApiResponse, PaginationMeta
 from app.services.approval_service import ApprovalService
 from app.services.bulk_order_service import BulkOrderService
+from app.services.email_service import EmailService, get_email_service
 from app.services.helpers import resolve_current_user_id
 
 router = APIRouter(prefix="/bulk_orders", tags=["bulk-orders"])
@@ -125,6 +126,7 @@ async def submit_bulk_order(
     bulk_order_id: UUID,
     context: TenantContext = Depends(require_manager),
     db: AsyncSession = Depends(get_db_session),
+    email_service: EmailService = Depends(get_email_service),
 ) -> ApiResponse[BulkOrderResponse]:
     """Submit a draft bulk order for approval. Must have at least one item."""
     company_id = _require_company_id(context)
@@ -133,7 +135,7 @@ async def submit_bulk_order(
     bulk_order = await service.submit_bulk_order(bulk_order_id, company_id)
 
     # Record in the unified approval queue
-    approval_svc = ApprovalService(db)
+    approval_svc = ApprovalService(db, email_service=email_service)
     await approval_svc.record_submission(
         entity_type="bulk_order",
         entity_id=bulk_order.id,
@@ -150,6 +152,7 @@ async def approve_bulk_order(
     bulk_order_id: UUID,
     context: TenantContext = Depends(require_manager),
     db: AsyncSession = Depends(get_db_session),
+    email_service: EmailService = Depends(get_email_service),
 ) -> ApiResponse[BulkOrderResponse]:
     """Approve a submitted bulk order. Records approved_by."""
     company_id = _require_company_id(context)
@@ -158,7 +161,7 @@ async def approve_bulk_order(
     bulk_order = await service.approve_bulk_order(bulk_order_id, company_id, approved_by)
 
     # Sync: also update the corresponding approval_request if one exists
-    approval_svc = ApprovalService(db)
+    approval_svc = ApprovalService(db, email_service=email_service)
     ar = await approval_svc.find_by_entity("bulk_order", bulk_order_id)
     if ar is not None:
         from datetime import UTC, datetime
@@ -167,6 +170,16 @@ async def approve_bulk_order(
         ar.decided_at = datetime.now(UTC)  # type: ignore[assignment]
         ar.status = "approved"  # type: ignore[assignment]
         await db.flush()
+
+        # Send decision notification to the bulk order submitter
+        await approval_svc._notify_submitter(
+            entity_type="bulk_order",
+            entity_id=bulk_order_id,
+            requested_by=ar.requested_by,
+            decided_by=approved_by,
+            decision="approved",
+            decision_notes=None,
+        )
 
     return ApiResponse(data=BulkOrderResponse.model_validate(bulk_order))
 
