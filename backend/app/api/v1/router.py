@@ -6,6 +6,7 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1.companies import router as companies_router
 from app.api.v1.employee_profiles import router as employee_profiles_router
 from app.api.v1.invites import router as invites_router
+from app.api.v1.invoices import router as invoices_router
 from app.api.v1.catalogs import router as catalogs_router
 from app.api.v1.bulk_orders import router as bulk_orders_router
 from app.api.v1.orders import router as orders_router
@@ -37,6 +38,7 @@ v1_router.include_router(orders_router)
 v1_router.include_router(bulk_orders_router)
 v1_router.include_router(approvals_router)
 v1_router.include_router(approval_rules_router)
+v1_router.include_router(invoices_router)
 v1_router.include_router(platform_products_router)
 v1_router.include_router(platform_catalogs_router)
 v1_router.include_router(platform_orders_router)
