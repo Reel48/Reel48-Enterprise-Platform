@@ -1270,6 +1270,42 @@ UNIQUE constraint: `(company_id, entity_type, rule_type)` — one rule per type 
 Composite index: `(company_id, entity_type)` for rule lookup.
 
 
+## Approval Workflow Patterns
+
+# --- ADDED 2026-04-09 during Module 6 Phase 2 ---
+# Reason: Module 6 introduces a unified ApprovalService that orchestrates entity-specific
+# approval methods and evaluates configurable approval rules. This pattern is new to the
+# codebase and needs documentation for future modules (Invoicing may need approvals).
+# Impact: Future modules that add approvable entities know the integration pattern.
+
+### Unified ApprovalService
+The `ApprovalService` in `app/services/approval_service.py` is the central orchestrator
+for all approval workflows. It does NOT replace entity-specific approve/reject methods —
+it wraps them with audit trail recording and rule evaluation.
+
+**Delegation pattern:** The service delegates to entity-specific methods:
+- `product` → `ProductService.approve_product()` / `reject_product()`
+- `catalog` → `CatalogService.approve_catalog()` / `reject_catalog()`
+- `order` → `OrderService.approve_order()` (rejection = `cancel_order()`)
+- `bulk_order` → `BulkOrderService.approve_bulk_order()` (rejection = `cancel_bulk_order()`)
+
+### Role Hierarchy for Approval Rules
+Approval rules use a numeric rank for role comparison:
+```
+employee=0 < regional_manager=1 < sub_brand_admin=2 < corporate_admin=3 < reel48_admin=4
+```
+- Products and catalogs: always require `reel48_admin` (hardcoded, no configurable rules)
+- Orders and bulk_orders: check `approval_rules` table. If an `amount_threshold` rule
+  exists and the entity exceeds it, the user must have `>= required_role` rank.
+- No active rule: default to `regional_manager` or above.
+
+### Service-Level Tests Pattern
+ApprovalService tests use direct model creation (not HTTP endpoints) because the service
+layer is the deliverable for Phase 2. Tests create SQLAlchemy models directly in the
+`admin_db_session`, then call service methods. FK constraints require real referenced
+records (e.g., orders need a real catalog, bulk orders need a real catalog + user).
+
+
 ## Order Placement Patterns
 
 # --- ADDED 2026-04-08 during Module 4 end-of-module harness review ---

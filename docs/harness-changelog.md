@@ -30,6 +30,47 @@
 
 ---
 
+## 2026-04-09 — Module 6 Phase 2 (Approval Service & Schemas)
+
+**Type:** End-of-session self-audit
+**Module:** Module 6 — Approval Workflows (Phase 2: Service Layer)
+
+### Self-Audit Checklist
+- [x] **New pattern?** → Unified orchestrator service pattern: `ApprovalService` wraps
+  existing entity-specific approve/reject methods with audit trail recording and
+  configurable approval rules evaluation. Delegates to `ProductService`, `CatalogService`,
+  `OrderService`, `BulkOrderService` rather than duplicating transition logic. Documented
+  in `backend/CLAUDE.md` Approval Workflow Patterns section.
+- [x] **New pattern?** → Service-level test pattern: Phase 2 tests call service methods
+  directly rather than going through HTTP endpoints. FK constraints require real referenced
+  records (stub catalogs, real users). Documented in backend CLAUDE.md.
+- [ ] **Pattern violated?** → No violations. Schemas follow Pydantic v2 conventions
+  (ConfigDict, from_attributes). Service follows the db-injected constructor pattern.
+- [ ] **New decision?** → No ADR-worthy decisions. Role hierarchy ranking is a
+  straightforward implementation of the documented role model.
+- [ ] **Missing guidance?** → No gaps discovered. The entity service methods were
+  well-documented from Modules 3-5.
+- [ ] **Reusable task?** → No new prompt template needed.
+- [x] **Changelog updated?** → This entry.
+
+### Files Changed
+- **`backend/app/schemas/approval.py`** — New file: Pydantic request/response schemas
+  for approval requests, queue items, and approval rules.
+- **`backend/app/services/approval_service.py`** — New file: Unified ApprovalService
+  with record_submission, process_decision, check_approval_rules, queue queries,
+  and rule CRUD.
+- **`backend/tests/test_approvals.py`** — New file: 32 tests covering functional,
+  rules enforcement, queue queries, entity summaries, and isolation.
+- **`backend/CLAUDE.md`** — Added Approval Workflow Patterns section.
+- **`docs/harness-changelog.md`** — This entry.
+
+### Metrics
+- Existing tests: 316 → still passing (0 regressions)
+- New tests: 32 (all passing)
+- Total: 348
+
+---
+
 ## 2026-04-09 — Module 6 Phase 1 (Approval Tables)
 
 **Type:** End-of-session self-audit
