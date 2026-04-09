@@ -118,6 +118,18 @@ class ApprovalQueueItem(BaseModel):
     entity_amount: float | None
 
 
+class CompanyPendingCount(BaseModel):
+    company_id: str
+    company_name: str
+    pending_count: int
+
+
+class ApprovalSummaryResponse(BaseModel):
+    pending_count: int
+    by_entity_type: dict[str, int]
+    by_company: list[CompanyPendingCount]
+
+
 class ApprovalRuleResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

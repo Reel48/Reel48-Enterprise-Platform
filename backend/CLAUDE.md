@@ -107,6 +107,8 @@ backend/
 │   │       ├── webhooks.py            # Stripe webhook receiver
 │   │       ├── analytics.py
 │   │       └── platform/              # Reel48 admin endpoints (cross-company)
+│   │           ├── approval_rules.py  # Cross-company approval rules visibility
+│   │           ├── approvals.py       # Cross-company approval dashboard & decisions
 │   │           ├── bulk_orders.py     # Cross-company bulk order visibility
 │   │           ├── catalogs.py        # Catalog management, pricing, approval
 │   │           ├── invoices.py        # Invoice creation for client companies
