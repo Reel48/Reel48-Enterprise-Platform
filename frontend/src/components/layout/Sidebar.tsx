@@ -48,13 +48,13 @@ const regionalManagerNav: NavItem[] = [
 const subBrandAdminNav: NavItem[] = [
   ...regionalManagerNav,
   { label: 'Users', href: '/admin/users', icon: UserProfile },
+  { label: 'Analytics', href: '/admin/analytics', icon: Analytics },
   { label: 'Brand Settings', href: '/settings', icon: Settings },
 ];
 
 const corporateAdminNav: NavItem[] = [
   ...subBrandAdminNav,
   { label: 'All Sub-Brands', href: '/admin/brands', icon: Store },
-  { label: 'Analytics', href: '/admin/analytics', icon: Analytics },
   { label: 'Invoices', href: '/invoices', icon: Receipt },
 ];
 
@@ -63,6 +63,7 @@ const platformAdminNav: NavItem[] = [
   { label: 'Companies', href: '/platform/companies', icon: Enterprise },
   { label: 'Catalogs', href: '/platform/catalogs', icon: Catalog },
   { label: 'Invoices', href: '/platform/invoices', icon: Receipt },
+  { label: 'Analytics', href: '/platform/analytics', icon: Analytics },
 ];
 
 const navByRole: Record<UserRole, NavItem[]> = {

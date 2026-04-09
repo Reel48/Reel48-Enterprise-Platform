@@ -30,6 +30,42 @@
 
 ---
 
+## 2026-04-09 — Module 8 Phases 4-5: Analytics Dashboard UI (TRIGGER 1)
+
+**Type:** End-of-session self-audit (Trigger 1)
+**Module:** Module 8 — Analytics Dashboard (Phases 4-5)
+
+### Work Completed
+- Created 18 new frontend files for the analytics dashboard UI:
+  - `frontend/src/types/analytics.ts` — TypeScript interfaces for all analytics API responses
+  - `frontend/src/hooks/useAnalytics.ts` — 8 React Query hooks for client analytics
+  - `frontend/src/hooks/usePlatformAnalytics.ts` — 7 React Query hooks for platform analytics
+  - 11 feature components in `frontend/src/components/features/analytics/`
+  - Client analytics page at `frontend/src/app/(authenticated)/admin/analytics/page.tsx`
+  - Platform analytics page at `frontend/src/app/(platform)/platform/analytics/page.tsx`
+- Updated `frontend/src/components/layout/Sidebar.tsx` — added Analytics link to
+  `subBrandAdminNav` and `platformAdminNav`
+- Installed `@carbon/charts-react` and `d3` for chart rendering
+
+### Harness Review
+- **New pattern?** YES — Carbon DataTable `getHeaderProps`/`getRowProps` return objects
+  with a `key` property. Spreading these onto JSX while also providing an explicit `key`
+  causes a TS duplicate-key error. The fix is to destructure `key` out of the spread.
+  → **Action:** Added pattern to `.claude/rules/carbon-design-system.md`.
+- **Pattern violated?** No.
+- **New decision?** `@carbon/charts-react` chosen for charting (official Carbon library).
+  Loaded via `next/dynamic` with `ssr: false` to avoid D3 SSR issues. Uses `ScaleTypes`
+  enum from `@carbon/charts/interfaces` for type-safe chart configuration.
+- **Missing guidance?** No gaps — existing Carbon, Tailwind, and API client conventions
+  covered all needs.
+- **Prompt template needed?** No.
+
+### Files Updated
+- **`.claude/rules/carbon-design-system.md`** — Added DataTable key destructuring pattern.
+- **`docs/harness-changelog.md`** — This entry.
+
+---
+
 ## 2026-04-09 — Module 8 Phase 3: Platform Analytics API Endpoints (TRIGGER 1)
 
 **Type:** End-of-session self-audit (Trigger 1)
