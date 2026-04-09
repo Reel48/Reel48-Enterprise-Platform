@@ -439,8 +439,11 @@ frontend displays invoice data fetched through our API (never directly from Stri
 ### API Endpoints for Invoicing
 **Platform admin endpoints (reel48_admin only):**
 - `POST /api/v1/platform/invoices` — Create a draft invoice for a client company
-- `POST /api/v1/platform/invoices/{invoice_id}/finalize` — Finalize and send
-- `GET /api/v1/platform/invoices` — List all invoices across all companies
+- `POST /api/v1/platform/invoices/{invoice_id}/finalize` — Finalize a draft invoice
+- `POST /api/v1/platform/invoices/{invoice_id}/send` — Send a finalized invoice
+- `POST /api/v1/platform/invoices/{invoice_id}/void` — Void a draft, finalized, or sent invoice
+- `GET /api/v1/platform/invoices` — List all invoices across all companies (with filters)
+- `GET /api/v1/platform/invoices/{invoice_id}` — Get invoice detail
 - `POST /api/v1/platform/catalogs/{catalog_id}/approve` — Approve a catalog for client use
 
 **Client-facing endpoints (tenant-scoped):**

@@ -16,17 +16,16 @@ class InvoiceCreate(BaseModel):
 
     company_id: UUID
     sub_brand_id: UUID | None = None
-    order_id: UUID | None = None
-    bulk_order_id: UUID | None = None
+    order_ids: list[UUID] | None = None
+    bulk_order_ids: list[UUID] | None = None
     catalog_id: UUID | None = None
     billing_flow: str
     due_date: date | None = None
-    buying_window_closes_at: datetime | None = None
 
     @field_validator("billing_flow")
     @classmethod
     def billing_flow_must_be_valid(cls, v: str) -> str:
-        valid = {"assigned", "self_service", "post_window"}
+        valid = {"assigned", "post_window"}
         if v not in valid:
             raise ValueError(f"billing_flow must be one of: {', '.join(sorted(valid))}")
         return v
