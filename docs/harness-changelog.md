@@ -30,6 +30,54 @@
 
 ---
 
+## 2026-04-09 — Module 6 Phase 3 (Approval Queue & Decision Endpoints)
+
+**Type:** End-of-session self-audit
+**Module:** Module 6 — Approval Workflows (Phase 3: Endpoints & Integration)
+
+### Self-Audit Checklist
+- [x] **New pattern?** → Approval sync pattern: direct platform approve/reject endpoints
+  (e.g., `POST /platform/products/{id}/approve`) now sync the corresponding
+  `approval_requests` record via `ApprovalService.find_by_entity()`. This keeps the
+  unified approval queue consistent even when approvals happen through entity-specific
+  endpoints. Documented inline — no separate harness update needed as it follows the
+  existing delegation pattern.
+- [x] **New pattern?** → Submit endpoints now call `ApprovalService.record_submission()`
+  to create audit trail records. Products, catalogs, bulk orders (on submit) and orders
+  (on create) all record approval requests automatically.
+- [ ] **Pattern violated?** → No violations. All endpoints follow the standard guard
+  pattern (`_require_company_id`), response format (`ApiResponse[T]`), and role checks.
+- [ ] **New decision?** → No ADR-worthy decisions.
+- [ ] **Missing guidance?** → No gaps discovered. The approval queue endpoints follow
+  the same patterns as existing list/detail endpoints.
+- [ ] **Reusable task?** → No new prompt template needed.
+- [x] **Changelog updated?** → This entry.
+
+### Files Changed
+- **`backend/app/api/v1/approvals.py`** — New file: approval queue endpoints (pending,
+  history, detail, approve, reject).
+- **`backend/app/api/v1/approval_rules.py`** — New file: approval rules CRUD endpoints
+  (create, list, update, deactivate).
+- **`backend/app/api/v1/router.py`** — Added approval and approval_rules routers.
+- **`backend/app/api/v1/products.py`** — Submit now records approval_request.
+- **`backend/app/api/v1/catalogs.py`** — Submit now records approval_request.
+- **`backend/app/api/v1/orders.py`** — Create now records approval_request; approve syncs.
+- **`backend/app/api/v1/bulk_orders.py`** — Submit now records approval_request; approve syncs.
+- **`backend/app/api/v1/platform/products.py`** — Approve/reject now sync approval_requests.
+- **`backend/app/api/v1/platform/catalogs.py`** — Approve/reject now sync approval_requests.
+- **`backend/app/services/approval_service.py`** — Added `find_by_entity()` method and
+  `status_filter` parameter to `list_history()`.
+- **`backend/tests/test_approval_endpoints.py`** — New file: 29 tests covering pending
+  queue, history, decisions, integration, rules endpoints, rules enforcement, and isolation.
+- **`docs/harness-changelog.md`** — This entry.
+
+### Metrics
+- Existing tests: 348 → still passing (0 regressions)
+- New tests: 29 (all passing)
+- Total: 377 tests passing
+
+---
+
 ## 2026-04-09 — Module 6 Phase 2 (Approval Service & Schemas)
 
 **Type:** End-of-session self-audit

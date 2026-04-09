@@ -14,6 +14,7 @@ from app.schemas.catalog import (
     CatalogUpdate,
 )
 from app.schemas.common import ApiListResponse, ApiResponse, PaginationMeta
+from app.services.approval_service import ApprovalService
 from app.services.catalog_service import CatalogService
 from app.services.helpers import resolve_current_user_id
 
@@ -157,8 +158,20 @@ async def submit_catalog(
 ) -> ApiResponse[CatalogResponse]:
     """Submit a draft catalog for approval. Catalog must have at least one product."""
     company_id = _require_company_id(context)
+    submitted_by = await resolve_current_user_id(db, context.user_id)
     service = CatalogService(db)
     catalog = await service.submit_catalog(catalog_id, company_id)
+
+    # Record in the unified approval queue
+    approval_svc = ApprovalService(db)
+    await approval_svc.record_submission(
+        entity_type="catalog",
+        entity_id=catalog.id,
+        company_id=company_id,
+        sub_brand_id=context.sub_brand_id,
+        requested_by=submitted_by,
+    )
+
     return ApiResponse(data=CatalogResponse.model_validate(catalog))
 
 

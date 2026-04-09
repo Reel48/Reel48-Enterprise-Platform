@@ -306,14 +306,20 @@ class ApprovalService:
         company_id: UUID | None,
         sub_brand_id: UUID | None,
         entity_type_filter: str | None = None,
+        status_filter: str | None = None,
         page: int = 1,
         per_page: int = 20,
     ) -> tuple[list[ApprovalRequest], int]:
         """List decided (approved/rejected) approval requests.
         Same visibility rules as list_pending (minus the role-based entity filter)."""
-        query = select(ApprovalRequest).where(
-            ApprovalRequest.status.in_(["approved", "rejected"])
-        )
+        if status_filter and status_filter in ("approved", "rejected"):
+            query = select(ApprovalRequest).where(
+                ApprovalRequest.status == status_filter
+            )
+        else:
+            query = select(ApprovalRequest).where(
+                ApprovalRequest.status.in_(["approved", "rejected"])
+            )
 
         if company_id is not None:
             query = query.where(ApprovalRequest.company_id == company_id)
@@ -341,6 +347,23 @@ class ApprovalService:
         if ar is None:
             raise NotFoundError("ApprovalRequest", str(approval_request_id))
         return ar
+
+    async def find_by_entity(
+        self, entity_type: str, entity_id: UUID
+    ) -> ApprovalRequest | None:
+        """Find a pending approval request by entity_type + entity_id.
+
+        Used to sync direct platform approve/reject endpoints with the
+        approval_requests audit trail. Returns None if no pending request exists.
+        """
+        result = await self.db.execute(
+            select(ApprovalRequest).where(
+                ApprovalRequest.entity_type == entity_type,
+                ApprovalRequest.entity_id == entity_id,
+                ApprovalRequest.status == "pending",
+            )
+        )
+        return result.scalar_one_or_none()
 
     # ------------------------------------------------------------------
     # Approval rules management

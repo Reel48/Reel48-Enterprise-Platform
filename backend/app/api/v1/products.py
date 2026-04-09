@@ -8,6 +8,7 @@ from app.core.exceptions import ForbiddenError, NotFoundError
 from app.core.tenant import TenantContext
 from app.schemas.common import ApiListResponse, ApiResponse, PaginationMeta
 from app.schemas.product import ProductCreate, ProductResponse, ProductUpdate
+from app.services.approval_service import ApprovalService
 from app.services.helpers import resolve_current_user_id
 from app.services.product_service import ProductService
 
@@ -153,6 +154,18 @@ async def submit_product(
 ) -> ApiResponse[ProductResponse]:
     """Submit a draft product for approval. Transitions status: draft -> submitted."""
     company_id = _require_company_id(context)
+    submitted_by = await resolve_current_user_id(db, context.user_id)
     service = ProductService(db)
     product = await service.submit_product(product_id, company_id)
+
+    # Record in the unified approval queue
+    approval_svc = ApprovalService(db)
+    await approval_svc.record_submission(
+        entity_type="product",
+        entity_id=product.id,
+        company_id=company_id,
+        sub_brand_id=context.sub_brand_id,
+        requested_by=submitted_by,
+    )
+
     return ApiResponse(data=ProductResponse.model_validate(product))

@@ -1,5 +1,7 @@
 from fastapi import APIRouter
 
+from app.api.v1.approval_rules import router as approval_rules_router
+from app.api.v1.approvals import router as approvals_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.companies import router as companies_router
 from app.api.v1.employee_profiles import router as employee_profiles_router
@@ -29,6 +31,8 @@ v1_router.include_router(products_router)
 v1_router.include_router(catalogs_router)
 v1_router.include_router(orders_router)
 v1_router.include_router(bulk_orders_router)
+v1_router.include_router(approvals_router)
+v1_router.include_router(approval_rules_router)
 v1_router.include_router(platform_products_router)
 v1_router.include_router(platform_catalogs_router)
 v1_router.include_router(platform_orders_router)
