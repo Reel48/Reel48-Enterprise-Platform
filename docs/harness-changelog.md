@@ -30,6 +30,47 @@
 
 ---
 
+## 2026-04-09 — Module 8 Phase 1: AnalyticsService Core Aggregation Queries (TRIGGER 1)
+
+**Type:** End-of-session self-audit (Trigger 1)
+**Module:** Module 8 — Analytics Dashboard (Phase 1)
+
+### Work Completed
+- Created `backend/app/services/analytics_service.py` — 10 aggregation methods querying
+  existing Module 1–7 tables (no new migrations needed)
+- Created `backend/app/schemas/analytics.py` — 12 Pydantic response schemas
+- Created `backend/tests/test_analytics.py` — 21 tests (15 functional, 4 isolation, 2 platform)
+- All 463 tests passing (442 existing + 21 new, zero regressions)
+
+### Harness Updates
+- **File changed:** `.claude/rules/testing.md`
+- **Change:** Added "CRITICAL: RLS Isolation Tests Must Use Real UUIDs (Not Empty Strings)"
+  section. Updated `_set_tenant_context` example to require both real UUID values.
+- **Reason:** PostgreSQL does NOT guarantee short-circuit evaluation of OR expressions in
+  RLS policies. `SET LOCAL app.current_sub_brand_id = ''` causes `::uuid` cast to fail at
+  the database level even when the empty-string check (`= ''`) appears earlier in the OR
+  chain. This caused 4 isolation test failures.
+- **Impact:** Future isolation tests avoid the empty-string UUID cast trap by always using
+  real UUID values from the test tenant fixtures.
+
+### New Patterns Introduced
+- **Python-side aggregation of individual + bulk orders:** Analytics methods merge data from
+  `orders`/`order_line_items` and `bulk_orders`/`bulk_order_items` in Python (dict merging)
+  rather than SQL UNION, because the table schemas differ.
+- **`_apply_date_range` helper:** Reusable date filtering across all analytics methods.
+- **Committed data pattern for isolation tests:** Seed data via `admin_factory()` with
+  explicit commit, query via `app_factory()` (RLS-enforced), cleanup in `finally` block.
+
+### Self-Audit Checklist
+- [x] New pattern? → Python-side aggregation documented above
+- [x] Pattern violated? → RLS empty-string UUID cast issue documented in testing.md
+- [x] New decision? → No new ADR needed (analytics queries are straightforward)
+- [x] Missing guidance? → Added RLS UUID guidance to testing.md
+- [x] Reusable task? → No new prompt template needed
+- [x] Changelog updated? → This entry
+
+---
+
 ## 2026-04-09 — Module 7 Post-Module Harness Review (TRIGGER 2)
 
 **Type:** Post-module harness review (Trigger 2)
