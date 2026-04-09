@@ -80,6 +80,8 @@ backend/
 │   │   ├── product.py
 │   │   ├── order.py
 │   │   ├── bulk_order.py
+│   │   ├── approval_request.py
+│   │   ├── approval_rule.py
 │   │   └── invoice.py
 │   ├── schemas/                   # Pydantic models for API request/response
 │   │   ├── common.py              # Shared schemas (pagination, error response)
@@ -88,6 +90,7 @@ backend/
 │   │   ├── product.py
 │   │   ├── order.py
 │   │   ├── invoice.py
+│   │   ├── approval.py
 │   │   ├── org_code.py
 │   │   └── user.py
 │   ├── api/
@@ -100,7 +103,8 @@ backend/
 │   │       ├── products.py
 │   │       ├── orders.py
 │   │       ├── bulk_orders.py
-│   │       ├── approvals.py
+│   │       ├── approvals.py            # Unified approval queue & decisions
+│   │       ├── approval_rules.py      # Company-level approval rules (corporate_admin)
 │   │       ├── invites.py              # Invite creation and management (admin)
 │   │       ├── org_codes.py            # Org code management (corporate_admin)
 │   │       ├── invoices.py

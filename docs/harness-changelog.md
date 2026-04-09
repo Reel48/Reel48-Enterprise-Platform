@@ -30,6 +30,88 @@
 
 ---
 
+## 2026-04-09 — Module 6 Completion (Approval Workflows — Post-Module Harness Review)
+
+**Type:** Post-module harness review (MANDATORY — Trigger 2)
+**Module:** Module 6 — Approval Workflows (Phases 1-5 complete)
+
+### Pattern Consistency Scan
+All Module 6 code reviewed for consistency with established patterns:
+- **Endpoints:** All 6 tenant endpoints + 6 platform endpoints follow the standard
+  route → service → model pattern. `_require_company_id` guard used consistently.
+  Response format uses `ApiResponse[T]` / `ApiListResponse[T]`. Pagination on all
+  list endpoints.
+- **Models:** `ApprovalRequest` uses `TenantBase`, `ApprovalRule` uses `CompanyBase` —
+  correct for their scoping needs. Both documented in backend CLAUDE.md Model Base Classes.
+- **RLS:** Both tables have correct policies in migration 006. `approval_requests` has
+  company isolation (PERMISSIVE) + sub-brand scoping (RESTRICTIVE). `approval_rules`
+  has company isolation only (no sub-brand column).
+- **Service layer:** `ApprovalService` follows the dependency-injected constructor pattern.
+  Email service is optional parameter (backward compatible). Flush+refresh pattern used
+  consistently.
+- **Tests:** 93 new tests across 3 files (test_approvals.py, test_approval_endpoints.py,
+  test_approval_notifications.py). Isolation tests included for cross-company and cross-
+  sub-brand boundaries.
+
+### Rule Effectiveness Review
+- `database-migrations.md`: Activated correctly — RLS policies created in same migration.
+- `api-endpoints.md`: Activated — tenant context from JWT enforced on all protected endpoints.
+- `authentication.md`: Needed update — approval-specific permissions not in access matrix.
+  **Fixed in this review.**
+- `testing.md`: Effective — isolation tests, mock patterns, and fixture patterns all followed.
+
+### ADR Currency Check
+- All existing ADRs (001-007) remain valid. No conflicts or reversals.
+- No new ADR needed: polymorphic entity reference (`entity_type` + `entity_id`) is a standard
+  pattern, not a project-specific architectural decision.
+
+### Cross-Module Alignment
+- Module 6 integrates cleanly with Modules 3-5: submit endpoints in products, catalogs,
+  orders, and bulk_orders now call `ApprovalService.record_submission()`. Platform
+  approve/reject endpoints sync approval_requests via `find_by_entity()`.
+- Consistent patterns: email notifications follow the same External Service Integration
+  Pattern as CognitoService (Module 1). Non-blocking dispatch matches the pattern
+  documented in backend CLAUDE.md.
+
+### Gap Analysis
+- No gaps discovered. All Module 6 scenarios were covered by existing harness guidance
+  or documented in per-phase updates.
+
+### Harness Files Updated (This Review)
+- **`.claude/rules/authentication.md`** — Added 4 approval-related rows to the Role-Based
+  Access Matrix: View approval queue, Approve/reject (products/catalogs), Approve/reject
+  (orders/bulk), Manage approval rules.
+- **`docs/harness-changelog.md`** — This completion entry.
+
+### Harness Health Metrics (Module 6 Overall)
+| Metric | Value | Notes |
+|--------|-------|-------|
+| Mistakes per module | 0 | All patterns followed correctly |
+| Harness gaps per module | 0 | Existing guidance sufficient |
+| Rules added per module | 1 | Authentication access matrix update |
+| New patterns documented | 4 | Polymorphic entity ref, unified approval queue, configurable rules, non-blocking SES notifications |
+| First-attempt acceptance rate | ~95% | Minor iteration on email template testing |
+
+### Test Results
+- Total tests: 409 (316 original + 93 Module 6)
+- All passing (0 failures, 0 errors)
+
+### Module 6 Key Patterns Summary (for Modules 7-8 Reference)
+1. **Polymorphic entity reference:** `entity_type` (VARCHAR) + `entity_id` (UUID) columns
+   on `approval_requests`. No DB-level FK — application layer resolves the entity.
+2. **Unified approval queue:** Single `approval_requests` table tracks all approvals.
+   `ApprovalService` delegates to entity-specific services for state transitions.
+3. **Configurable approval rules:** `approval_rules` table with `amount_threshold` rule
+   type. Products/catalogs always require reel48_admin (hardcoded). Orders/bulk_orders
+   check configurable rules.
+4. **Non-blocking SES notifications:** `EmailService` injected optionally. Failures
+   logged but never block business logic.
+5. **Approval sync pattern:** Direct entity approve/reject endpoints (e.g.,
+   `POST /platform/products/{id}/approve`) sync the `approval_requests` audit trail
+   via `ApprovalService.find_by_entity()`.
+
+---
+
 ## 2026-04-09 — Module 6 Phase 5 (Approval Notifications via SES)
 
 **Type:** End-of-session self-audit

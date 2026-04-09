@@ -63,6 +63,10 @@ reel48_admin                 → PLATFORM OPERATOR. Full access across ALL compa
 | Manage catalog (brand)         | ✅ | ✅ | ✅ | ❌ | ❌ |
 | Create bulk orders             | ✅ | ✅ | ✅ | ✅ | ❌ |
 | Approve orders                 | ✅ | ✅ | ✅ | ✅ | ❌ |
+| View approval queue            | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Approve/reject (products/catalogs) | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Approve/reject (orders/bulk)   | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Manage approval rules          | ✅ | ✅ | ❌ | ❌ | ❌ |
 | Place individual orders        | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Manage own profile             | ✅ | ✅ | ✅ | ✅ | ✅ |
 | View analytics (all companies) | ✅ | ❌ | ❌ | ❌ | ❌ |
