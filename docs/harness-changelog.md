@@ -1688,3 +1688,44 @@ the same factory pattern established in Module 1 tests.
 ### Test Results
 - 211 tests pass (193 existing + 18 new)
 - All Module 3 phases complete: database, products CRUD, catalogs CRUD, platform admin
+
+
+---
+
+## 2026-04-09 — Module 5, Phase 4: Bulk Order Status Transitions
+
+### Session Summary
+Added status transition endpoints for the bulk order lifecycle: submit, approve,
+process, ship, deliver, and cancel. This mirrors the individual order lifecycle
+(Module 4 Phase 4) with key differences: bulk orders start in `draft` (not `pending`),
+require explicit submission with at least one item, and record `approved_by`/`approved_at`
+on approval.
+
+### What Was Built
+- **Service layer:** 6 transition methods on `BulkOrderService` — `submit_bulk_order`,
+  `approve_bulk_order`, `process_bulk_order`, `ship_bulk_order`, `deliver_bulk_order`,
+  `cancel_bulk_order`
+- **Route endpoints:** 6 POST endpoints at `/{bulk_order_id}/{action}` following the
+  same pattern as `orders.py` status transitions
+- **Tests:** 16 new tests covering:
+  - 8 lifecycle happy-path tests (submit, submit-empty-fails, submit-non-draft-fails,
+    approve, approve-non-submitted-fails, process, ship, deliver)
+  - 5 cancel tests (draft, submitted, approved, processing-fails, delivered-fails)
+  - 3 item-locking tests (cannot add/update/remove items after submit)
+
+### End-of-Session Self-Audit
+1. **New pattern?** No — status transition endpoints follow the same pattern established
+   in Module 4 Phase 4. The `cancel_bulk_order` cancel authorization pattern (creator OR
+   manager for draft, manager-only for submitted/approved) is consistent with Module 4.
+2. **Existing pattern violated?** No — all endpoints use `require_manager`, `_require_company_id`,
+   `resolve_current_user_id`, and `ApiResponse` wrapper consistently.
+3. **New decision?** No — all lifecycle transitions follow the spec from the prompt.
+4. **Missing guidance discovered?** No gaps encountered.
+5. **Prompt template needed?** No — the status transition pattern is well-established.
+
+### Harness Files Updated
+- **`docs/harness-changelog.md`:** This entry (no other harness files needed updating)
+
+### Test Results
+- 45 bulk order tests pass (29 from Phases 2–3 + 16 new Phase 4)
+- All Phase 4 tests green on first run

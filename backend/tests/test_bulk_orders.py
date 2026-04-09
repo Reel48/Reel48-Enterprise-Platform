@@ -1129,3 +1129,507 @@ class TestItemStateRestrictions:
         expected_amount = (5 * 10.00) + (10 * 20.00) + (3 * 30.00)  # 340.00
         assert float(bo_data["total_amount"]) == expected_amount
         assert len(bo_data["items"]) == 3
+
+
+# ---------------------------------------------------------------------------
+# Helpers — Status transitions (Phase 4)
+# ---------------------------------------------------------------------------
+
+
+async def _create_bulk_order_with_items(
+    client: AsyncClient,
+    token: str,
+    catalog_id,
+    product_id,
+    title: str = "Bulk Order With Items",
+    num_items: int = 2,
+) -> dict:
+    """Create a bulk order via API, add items, return the bulk order data."""
+    bo_data = await _create_bulk_order_via_api(client, token, catalog_id, title)
+    for i in range(num_items):
+        await _add_item_via_api(
+            client, token, bo_data["id"], str(product_id), quantity=i + 1,
+        )
+    return bo_data
+
+
+async def _submit_bulk_order(client: AsyncClient, token: str, bulk_order_id: str) -> dict:
+    response = await client.post(
+        f"/api/v1/bulk_orders/{bulk_order_id}/submit",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200, response.text
+    return response.json()["data"]
+
+
+async def _approve_bulk_order(client: AsyncClient, token: str, bulk_order_id: str) -> dict:
+    response = await client.post(
+        f"/api/v1/bulk_orders/{bulk_order_id}/approve",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200, response.text
+    return response.json()["data"]
+
+
+async def _process_bulk_order(client: AsyncClient, token: str, bulk_order_id: str) -> dict:
+    response = await client.post(
+        f"/api/v1/bulk_orders/{bulk_order_id}/process",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200, response.text
+    return response.json()["data"]
+
+
+async def _ship_bulk_order(client: AsyncClient, token: str, bulk_order_id: str) -> dict:
+    response = await client.post(
+        f"/api/v1/bulk_orders/{bulk_order_id}/ship",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200, response.text
+    return response.json()["data"]
+
+
+async def _deliver_bulk_order(client: AsyncClient, token: str, bulk_order_id: str) -> dict:
+    response = await client.post(
+        f"/api/v1/bulk_orders/{bulk_order_id}/deliver",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200, response.text
+    return response.json()["data"]
+
+
+# ---------------------------------------------------------------------------
+# Functional Tests — Status Transitions (Phase 4)
+# ---------------------------------------------------------------------------
+
+
+class TestBulkOrderStatusTransitions:
+    """Lifecycle happy-path tests: submit → approve → process → ship → deliver."""
+
+    async def test_submit_draft_bulk_order(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_manager,
+        user_a1_manager_token: str,
+        company_a,
+    ):
+        """Submit a draft bulk order with items → status='submitted', submitted_at set."""
+        company, brand_a1, _a2 = company_a
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_manager.id
+        )
+
+        bo_data = await _create_bulk_order_with_items(
+            client, user_a1_manager_token, catalog.id, products[0].id
+        )
+        data = await _submit_bulk_order(client, user_a1_manager_token, bo_data["id"])
+
+        assert data["status"] == "submitted"
+        assert data["submitted_at"] is not None
+
+    async def test_submit_empty_bulk_order_fails(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_manager,
+        user_a1_manager_token: str,
+        company_a,
+    ):
+        """Submit a bulk order with NO items → 422."""
+        company, brand_a1, _a2 = company_a
+        catalog, _products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_manager.id
+        )
+
+        bo_data = await _create_bulk_order_via_api(
+            client, user_a1_manager_token, catalog.id, "Empty Order"
+        )
+
+        response = await client.post(
+            f"/api/v1/bulk_orders/{bo_data['id']}/submit",
+            headers={"Authorization": f"Bearer {user_a1_manager_token}"},
+        )
+        assert response.status_code == 422
+
+    async def test_submit_non_draft_fails(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_manager,
+        user_a1_manager_token: str,
+        company_a,
+    ):
+        """Submit already-submitted bulk order → 403."""
+        company, brand_a1, _a2 = company_a
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_manager.id
+        )
+
+        bo_data = await _create_bulk_order_with_items(
+            client, user_a1_manager_token, catalog.id, products[0].id
+        )
+        await _submit_bulk_order(client, user_a1_manager_token, bo_data["id"])
+
+        # Try to submit again
+        response = await client.post(
+            f"/api/v1/bulk_orders/{bo_data['id']}/submit",
+            headers={"Authorization": f"Bearer {user_a1_manager_token}"},
+        )
+        assert response.status_code == 403
+
+    async def test_approve_submitted_bulk_order(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_manager,
+        user_a1_manager_token: str,
+        company_a,
+    ):
+        """Approve a submitted bulk order → status='approved', approved_by/approved_at set."""
+        company, brand_a1, _a2 = company_a
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_manager.id
+        )
+
+        bo_data = await _create_bulk_order_with_items(
+            client, user_a1_manager_token, catalog.id, products[0].id
+        )
+        await _submit_bulk_order(client, user_a1_manager_token, bo_data["id"])
+        data = await _approve_bulk_order(client, user_a1_manager_token, bo_data["id"])
+
+        assert data["status"] == "approved"
+        assert data["approved_by"] == str(user_a1_manager.id)
+        assert data["approved_at"] is not None
+
+    async def test_approve_non_submitted_fails(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_manager,
+        user_a1_manager_token: str,
+        company_a,
+    ):
+        """Approve a draft bulk order → 403."""
+        company, brand_a1, _a2 = company_a
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_manager.id
+        )
+
+        bo_data = await _create_bulk_order_with_items(
+            client, user_a1_manager_token, catalog.id, products[0].id
+        )
+
+        response = await client.post(
+            f"/api/v1/bulk_orders/{bo_data['id']}/approve",
+            headers={"Authorization": f"Bearer {user_a1_manager_token}"},
+        )
+        assert response.status_code == 403
+
+    async def test_process_approved_bulk_order(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_manager,
+        user_a1_manager_token: str,
+        company_a,
+    ):
+        """Submit → approve → process → status='processing'."""
+        company, brand_a1, _a2 = company_a
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_manager.id
+        )
+
+        bo_data = await _create_bulk_order_with_items(
+            client, user_a1_manager_token, catalog.id, products[0].id
+        )
+        await _submit_bulk_order(client, user_a1_manager_token, bo_data["id"])
+        await _approve_bulk_order(client, user_a1_manager_token, bo_data["id"])
+        data = await _process_bulk_order(client, user_a1_manager_token, bo_data["id"])
+
+        assert data["status"] == "processing"
+
+    async def test_ship_processing_bulk_order(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_manager,
+        user_a1_manager_token: str,
+        company_a,
+    ):
+        """Submit → approve → process → ship → status='shipped'."""
+        company, brand_a1, _a2 = company_a
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_manager.id
+        )
+
+        bo_data = await _create_bulk_order_with_items(
+            client, user_a1_manager_token, catalog.id, products[0].id
+        )
+        await _submit_bulk_order(client, user_a1_manager_token, bo_data["id"])
+        await _approve_bulk_order(client, user_a1_manager_token, bo_data["id"])
+        await _process_bulk_order(client, user_a1_manager_token, bo_data["id"])
+        data = await _ship_bulk_order(client, user_a1_manager_token, bo_data["id"])
+
+        assert data["status"] == "shipped"
+
+    async def test_deliver_shipped_bulk_order(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_manager,
+        user_a1_manager_token: str,
+        company_a,
+    ):
+        """Full lifecycle: submit → approve → process → ship → deliver → status='delivered'."""
+        company, brand_a1, _a2 = company_a
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_manager.id
+        )
+
+        bo_data = await _create_bulk_order_with_items(
+            client, user_a1_manager_token, catalog.id, products[0].id
+        )
+        await _submit_bulk_order(client, user_a1_manager_token, bo_data["id"])
+        await _approve_bulk_order(client, user_a1_manager_token, bo_data["id"])
+        await _process_bulk_order(client, user_a1_manager_token, bo_data["id"])
+        await _ship_bulk_order(client, user_a1_manager_token, bo_data["id"])
+        data = await _deliver_bulk_order(client, user_a1_manager_token, bo_data["id"])
+
+        assert data["status"] == "delivered"
+
+
+# ---------------------------------------------------------------------------
+# Cancel Tests (Phase 4)
+# ---------------------------------------------------------------------------
+
+
+class TestBulkOrderCancel:
+    async def test_cancel_draft_bulk_order(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_manager,
+        user_a1_manager_token: str,
+        company_a,
+    ):
+        """Cancel a draft bulk order → status='cancelled', cancelled_at/cancelled_by set."""
+        company, brand_a1, _a2 = company_a
+        catalog, _products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_manager.id
+        )
+
+        bo_data = await _create_bulk_order_via_api(
+            client, user_a1_manager_token, catalog.id, "Cancel Me"
+        )
+
+        response = await client.post(
+            f"/api/v1/bulk_orders/{bo_data['id']}/cancel",
+            headers={"Authorization": f"Bearer {user_a1_manager_token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["status"] == "cancelled"
+        assert data["cancelled_at"] is not None
+        assert data["cancelled_by"] == str(user_a1_manager.id)
+
+    async def test_cancel_submitted_bulk_order(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_manager,
+        user_a1_manager_token: str,
+        company_a,
+    ):
+        """Submit then cancel → status='cancelled'."""
+        company, brand_a1, _a2 = company_a
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_manager.id
+        )
+
+        bo_data = await _create_bulk_order_with_items(
+            client, user_a1_manager_token, catalog.id, products[0].id
+        )
+        await _submit_bulk_order(client, user_a1_manager_token, bo_data["id"])
+
+        response = await client.post(
+            f"/api/v1/bulk_orders/{bo_data['id']}/cancel",
+            headers={"Authorization": f"Bearer {user_a1_manager_token}"},
+        )
+        assert response.status_code == 200
+        assert response.json()["data"]["status"] == "cancelled"
+
+    async def test_cancel_approved_bulk_order(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_manager,
+        user_a1_manager_token: str,
+        company_a,
+    ):
+        """Submit → approve → cancel → status='cancelled'."""
+        company, brand_a1, _a2 = company_a
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_manager.id
+        )
+
+        bo_data = await _create_bulk_order_with_items(
+            client, user_a1_manager_token, catalog.id, products[0].id
+        )
+        await _submit_bulk_order(client, user_a1_manager_token, bo_data["id"])
+        await _approve_bulk_order(client, user_a1_manager_token, bo_data["id"])
+
+        response = await client.post(
+            f"/api/v1/bulk_orders/{bo_data['id']}/cancel",
+            headers={"Authorization": f"Bearer {user_a1_manager_token}"},
+        )
+        assert response.status_code == 200
+        assert response.json()["data"]["status"] == "cancelled"
+
+    async def test_cancel_processing_bulk_order_fails(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_manager,
+        user_a1_manager_token: str,
+        company_a,
+    ):
+        """Submit → approve → process → cancel → 403."""
+        company, brand_a1, _a2 = company_a
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_manager.id
+        )
+
+        bo_data = await _create_bulk_order_with_items(
+            client, user_a1_manager_token, catalog.id, products[0].id
+        )
+        await _submit_bulk_order(client, user_a1_manager_token, bo_data["id"])
+        await _approve_bulk_order(client, user_a1_manager_token, bo_data["id"])
+        await _process_bulk_order(client, user_a1_manager_token, bo_data["id"])
+
+        response = await client.post(
+            f"/api/v1/bulk_orders/{bo_data['id']}/cancel",
+            headers={"Authorization": f"Bearer {user_a1_manager_token}"},
+        )
+        assert response.status_code == 403
+
+    async def test_cancel_delivered_bulk_order_fails(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_manager,
+        user_a1_manager_token: str,
+        company_a,
+    ):
+        """Full lifecycle to delivered → cancel → 403."""
+        company, brand_a1, _a2 = company_a
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_manager.id
+        )
+
+        bo_data = await _create_bulk_order_with_items(
+            client, user_a1_manager_token, catalog.id, products[0].id
+        )
+        await _submit_bulk_order(client, user_a1_manager_token, bo_data["id"])
+        await _approve_bulk_order(client, user_a1_manager_token, bo_data["id"])
+        await _process_bulk_order(client, user_a1_manager_token, bo_data["id"])
+        await _ship_bulk_order(client, user_a1_manager_token, bo_data["id"])
+        await _deliver_bulk_order(client, user_a1_manager_token, bo_data["id"])
+
+        response = await client.post(
+            f"/api/v1/bulk_orders/{bo_data['id']}/cancel",
+            headers={"Authorization": f"Bearer {user_a1_manager_token}"},
+        )
+        assert response.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Item Locking After Submit Tests (Phase 4)
+# ---------------------------------------------------------------------------
+
+
+class TestBulkOrderItemLockingAfterSubmit:
+    """After submission, items cannot be added, updated, or removed."""
+
+    async def test_cannot_add_item_after_submit(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_manager,
+        user_a1_manager_token: str,
+        company_a,
+    ):
+        """Submit a bulk order, then try to add an item → 403."""
+        company, brand_a1, _a2 = company_a
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_manager.id
+        )
+
+        bo_data = await _create_bulk_order_with_items(
+            client, user_a1_manager_token, catalog.id, products[0].id
+        )
+        await _submit_bulk_order(client, user_a1_manager_token, bo_data["id"])
+
+        response = await client.post(
+            f"/api/v1/bulk_orders/{bo_data['id']}/items/",
+            headers={"Authorization": f"Bearer {user_a1_manager_token}"},
+            json={"product_id": str(products[1].id), "quantity": 1},
+        )
+        assert response.status_code == 403
+
+    async def test_cannot_update_item_after_submit(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_manager,
+        user_a1_manager_token: str,
+        company_a,
+    ):
+        """Submit a bulk order, then try to update an item → 403."""
+        company, brand_a1, _a2 = company_a
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_manager.id
+        )
+
+        bo_data = await _create_bulk_order_via_api(
+            client, user_a1_manager_token, catalog.id, "Lock Test"
+        )
+        item_data = await _add_item_via_api(
+            client, user_a1_manager_token, bo_data["id"], str(products[0].id), quantity=1
+        )
+        await _submit_bulk_order(client, user_a1_manager_token, bo_data["id"])
+
+        response = await client.patch(
+            f"/api/v1/bulk_orders/{bo_data['id']}/items/{item_data['id']}",
+            headers={"Authorization": f"Bearer {user_a1_manager_token}"},
+            json={"quantity": 99},
+        )
+        assert response.status_code == 403
+
+    async def test_cannot_remove_item_after_submit(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        user_a1_manager,
+        user_a1_manager_token: str,
+        company_a,
+    ):
+        """Submit a bulk order, then try to remove an item → 403."""
+        company, brand_a1, _a2 = company_a
+        catalog, products, _cps = await _create_active_catalog_with_products(
+            admin_db_session, company.id, brand_a1.id, user_a1_manager.id
+        )
+
+        bo_data = await _create_bulk_order_via_api(
+            client, user_a1_manager_token, catalog.id, "Lock Test"
+        )
+        item_data = await _add_item_via_api(
+            client, user_a1_manager_token, bo_data["id"], str(products[0].id), quantity=1
+        )
+        await _submit_bulk_order(client, user_a1_manager_token, bo_data["id"])
+
+        response = await client.delete(
+            f"/api/v1/bulk_orders/{bo_data['id']}/items/{item_data['id']}",
+            headers={"Authorization": f"Bearer {user_a1_manager_token}"},
+        )
+        assert response.status_code == 403
