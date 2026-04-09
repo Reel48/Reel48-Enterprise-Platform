@@ -281,6 +281,53 @@ adds client-side payment collection (e.g., Stripe Checkout for self-service paym
 14. **Idempotency:** Processing the same webhook event twice produces no duplicate updates
 15. **Webhook security:** Requests with invalid signatures are rejected with 400
 
+## Implementation Lessons (Module 7)
+
+# --- ADDED 2026-04-09 during Module 7 post-module harness review ---
+# Reason: Module 7 implementation revealed patterns and edge cases not
+# anticipated by the original rule file.
+# Impact: Future sessions working on invoicing or Stripe code avoid these pitfalls.
+
+### Webhook RLS Bypass Pattern
+The webhook endpoint is unauthenticated (no JWT → no TenantContext). To query the
+`invoices` table (which has RLS), the webhook handler must manually set the PostgreSQL
+session variables to empty strings before querying:
+```python
+await db.execute(text("SET LOCAL app.current_company_id = ''"))
+await db.execute(text("SET LOCAL app.current_sub_brand_id = ''"))
+```
+This triggers the same RLS bypass as `reel48_admin`, enabling cross-company invoice
+lookup by `stripe_invoice_id`. This pattern applies to any future webhook handler that
+needs to query tenant-scoped tables without JWT context.
+
+### Idempotent Webhook Processing with Status Priority
+Stripe may deliver events out of order (e.g., `invoice.sent` arriving after
+`invoice.paid`). The `_STATUS_ORDER` dict in `InvoiceService` assigns numeric
+priority to each status. Webhook handlers only update the local status when the
+incoming status has a **higher** priority than the current status. This prevents
+status regression and makes processing idempotent across duplicate deliveries.
+
+### Self-Service Invoices: Non-Blocking and auto_advance=True
+Self-service invoice creation (during order placement) differs from admin-created
+invoices:
+- Uses `auto_advance=True` (Stripe auto-sends the invoice) vs `auto_advance=False`
+  for admin-created invoices.
+- Wrapped in try/except — if Stripe fails, the order still succeeds. The invoice
+  can be created manually later.
+- `created_by` is the order owner (employee), not a reel48_admin.
+
+### StripeService: Synchronous Webhook Verification
+`construct_webhook_event()` is intentionally **not async**. Stripe signature
+verification is CPU-bound (HMAC computation), not I/O-bound. The method raises
+`stripe.error.SignatureVerificationError` on invalid signatures, which the webhook
+endpoint catches and returns 400.
+
+### Stripe API Version Pinning
+The `StripeService` sets `stripe.api_version` from `settings.STRIPE_API_VERSION`
+(configured in environment variables). Pinning the API version prevents breaking
+changes when Stripe rolls out new versions. The version should only be updated
+deliberately after reviewing Stripe's changelog.
+
 ## Common Mistakes to Avoid
 - ❌ Allowing client admins to create invoices (only `reel48_admin` creates invoices)
 - ❌ Accepting Stripe customer IDs from request parameters (look up from the target company)
@@ -295,3 +342,6 @@ adds client-side payment collection (e.g., Stripe Checkout for self-service paym
 - ❌ Creating post-window invoices before the buying window has closed
 - ❌ Omitting the `billing_flow` field on invoice records
 - ❌ Letting self-service invoices skip Stripe (all payments go through Stripe)
+- ❌ Using `auto_advance=True` for admin-created invoices (only self-service uses auto_advance)
+- ❌ Forgetting to set RLS session variables in the webhook handler (causes empty query results)
+- ❌ Downgrading invoice status on out-of-order webhook events (use `_STATUS_ORDER` priority)

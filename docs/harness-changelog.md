@@ -30,6 +30,91 @@
 
 ---
 
+## 2026-04-09 — Module 7 Post-Module Harness Review (TRIGGER 2)
+
+**Type:** Post-module harness review (Trigger 2)
+**Module:** Module 7 — Invoicing & Client Billing (Complete)
+
+### Pattern Consistency Scan
+All Module 7 code reviewed for consistency with established patterns:
+- **Endpoints:** All follow route → service → model pattern. Platform endpoints
+  (`/platform/invoices`) use `require_reel48_admin`. Client endpoints (`/invoices`)
+  use `get_tenant_context`. Webhook endpoint (`/webhooks/stripe`) is unauthenticated
+  with Stripe signature verification. ✅
+- **Response formats:** All use `ApiResponse[T]` / `ApiListResponse[T]`. ✅
+- **URL conventions:** snake_case, plural nouns, versioned under `/api/v1/`. ✅
+- **RLS policies:** `invoices` table has both `invoices_company_isolation` (PERMISSIVE)
+  and `invoices_sub_brand_scoping` (RESTRICTIVE) in the same migration. ✅
+- **Migration:** Reversible (`upgrade` + `downgrade`), includes CHECK constraints,
+  composite indexes, and RLS in same migration. ✅
+- **Service layer:** `InvoiceService` follows the same pattern as all other services
+  (db + optional external service in constructor). ✅
+- **StripeService:** Follows External Service Integration Pattern (lazy import,
+  dependency injection, AppException mapping). ✅
+- **No inconsistencies found.**
+
+### Rule Effectiveness Review
+| Rule File | Activated? | Effective? | Notes |
+|-----------|-----------|------------|-------|
+| `stripe-invoicing.md` | ✅ | ✅ | Provided sufficient guidance for all three billing flows, Stripe integration, and webhook handling. Missing: webhook RLS bypass, status priority for idempotent webhooks, self-service auto_advance distinction — now added. |
+| `api-endpoints.md` | ✅ | ✅ | Platform endpoint exception (accepting target company_id) worked correctly for invoice creation. |
+| `database-migrations.md` | ✅ | ✅ | Migration followed template exactly. Single-migration pattern appropriate for one table. |
+| `testing.md` | ✅ | ✅ | MockStripeService follows External Service Mock Pattern. Webhook testing guidance was a gap — filled in Phase 6. |
+| `authentication.md` | ✅ | ✅ | Role-Based Access Matrix correctly reflects implementation: employees cannot view invoices, sub_brand_admin/regional_manager can view their brand's invoices. |
+
+### ADR Currency Check
+- **ADR-006 (Stripe for Invoicing):** Updated Risks section with three implementation
+  findings: (1) self-service non-blocking pattern, (2) idempotent webhook processing
+  via `_STATUS_ORDER`, (3) webhook RLS bypass pattern. Core decision remains sound.
+
+### Harness Files Updated
+1. **`backend/CLAUDE.md`** — Added Module 7 invoices table schema documentation and
+   Invoice Status Lifecycle section (status transitions, API-driven vs webhook-driven,
+   `_STATUS_ORDER` priority mechanism, self-service auto-generation pattern, revenue
+   categorization for Module 8 Analytics).
+2. **`.claude/rules/stripe-invoicing.md`** — Added "Implementation Lessons (Module 7)"
+   section with five documented patterns: webhook RLS bypass, idempotent webhook
+   processing, self-service non-blocking/auto_advance, synchronous webhook verification,
+   API version pinning. Added 3 new entries to Common Mistakes.
+3. **`docs/adr/006-stripe-for-invoicing.md`** — Updated Risks section with
+   implementation notes on non-blocking self-service, idempotent webhook processing,
+   and webhook RLS bypass.
+4. **`docs/harness-changelog.md`** — This entry.
+
+### Gap Analysis
+Scenarios the harness didn't fully cover before Module 7:
+1. **Webhook RLS bypass** — How unauthenticated endpoints query tenant-scoped tables.
+   Gap filled: documented in backend CLAUDE.md (Unauthenticated Endpoint Exceptions)
+   during Phase 4, and in stripe-invoicing.md during this review.
+2. **Invoice status priority/idempotency** — The `_STATUS_ORDER` mechanism for
+   preventing status regression on out-of-order webhooks. Gap filled: documented in
+   backend CLAUDE.md (Invoice Status Lifecycle) and stripe-invoicing.md.
+3. **Self-service vs admin auto_advance difference** — Self-service uses
+   `auto_advance=True`; admin invoices use `False`. Gap filled: documented in
+   stripe-invoicing.md and backend CLAUDE.md.
+4. **Revenue categorization** — Which invoice statuses count as revenue for analytics.
+   Gap filled: documented in backend CLAUDE.md (Invoice Status Lifecycle) for Module 8.
+
+### Cross-Module Alignment
+- Module 7 invoice creation follows the same service pattern as Modules 4-6.
+- `StripeService` follows the same External Service Integration Pattern as
+  `CognitoService` (Module 1) and `EmailService` (Module 6).
+- `MockStripeService` follows the same test mock pattern as `MockCognitoService`
+  and `MockEmailService`.
+- Self-service invoice auto-generation follows the same non-blocking pattern as
+  approval email notifications (Module 6).
+- No cross-module inconsistencies found.
+
+### Metrics
+| Metric | Module 7 Value | Trend |
+|--------|---------------|-------|
+| Mistakes per module | 0 | Stable (same as Modules 5-6) |
+| Harness gaps found | 4 (all filled) | Stable |
+| Rules added/updated | 3 files updated, 0 new rules | Decreasing (harness maturing) |
+| First-attempt acceptance rate | ~95% | Stable |
+
+---
+
 ## 2026-04-09 — Module 7 Phase 6 (Comprehensive Invoice Tests)
 
 **Type:** End-of-session self-audit (Trigger 1)
