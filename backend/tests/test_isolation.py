@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.company import Company
 from app.models.invite import Invite
+from app.models.invoice import Invoice
 from app.models.org_code import OrgCode
 from app.models.sub_brand import SubBrand
 from app.models.user import User
@@ -86,6 +87,7 @@ async def _cleanup_companies(session: AsyncSession, company_ids: list):
     """Delete all data for the given companies (reverse FK order)."""
     for cid in company_ids:
         cid_str = str(cid)
+        await session.execute(text(f"DELETE FROM invoices WHERE company_id = '{cid_str}'"))
         await session.execute(text(f"DELETE FROM invites WHERE company_id = '{cid_str}'"))
         await session.execute(text(f"DELETE FROM org_codes WHERE company_id = '{cid_str}'"))
         await session.execute(text(f"DELETE FROM users WHERE company_id = '{cid_str}'"))
@@ -380,6 +382,121 @@ class TestOrgCodesIsolation:
                     rows = (await app_sess.execute(select(OrgCode))).scalars().all()
                     for oc in rows:
                         assert oc.company_id == data["co_b"].id
+        finally:
+            async with admin_factory() as cleanup:
+                await _cleanup_companies(cleanup, [data["co_a"].id, data["co_b"].id])
+
+
+# ---------------------------------------------------------------------------
+# Invoices table isolation
+# ---------------------------------------------------------------------------
+class TestInvoicesIsolation:
+    async def _create_users_and_invoices(self, session, data):
+        """Helper: create a user per company and an invoice per sub-brand."""
+        user_a = User(
+            company_id=data["co_a"].id, sub_brand_id=data["brand_a1"].id,
+            cognito_sub=str(uuid4()), email=f"inv-a-{uuid4().hex[:6]}@a.com",
+            full_name="Inv A", role="employee",
+        )
+        user_b = User(
+            company_id=data["co_b"].id, sub_brand_id=data["brand_b1"].id,
+            cognito_sub=str(uuid4()), email=f"inv-b-{uuid4().hex[:6]}@b.com",
+            full_name="Inv B", role="employee",
+        )
+        session.add_all([user_a, user_b])
+        await session.flush()
+
+        inv_a1 = Invoice(
+            company_id=data["co_a"].id, sub_brand_id=data["brand_a1"].id,
+            stripe_invoice_id=f"in_iso_a1_{uuid4().hex[:8]}",
+            billing_flow="assigned", status="draft",
+            total_amount=100, created_by=user_a.id,
+        )
+        inv_a2 = Invoice(
+            company_id=data["co_a"].id, sub_brand_id=data["brand_a2"].id,
+            stripe_invoice_id=f"in_iso_a2_{uuid4().hex[:8]}",
+            billing_flow="assigned", status="draft",
+            total_amount=200, created_by=user_a.id,
+        )
+        inv_b = Invoice(
+            company_id=data["co_b"].id, sub_brand_id=data["brand_b1"].id,
+            stripe_invoice_id=f"in_iso_b_{uuid4().hex[:8]}",
+            billing_flow="assigned", status="draft",
+            total_amount=300, created_by=user_b.id,
+        )
+        session.add_all([inv_a1, inv_a2, inv_b])
+        await session.flush()
+        return {"inv_a1": inv_a1, "inv_a2": inv_a2, "inv_b": inv_b}
+
+    async def test_invoices_company_isolation_rls(self, setup_database):
+        """Set company_id A, verify no company B invoices visible."""
+        admin_factory = setup_database["admin_factory"]
+        app_factory = setup_database["app_factory"]
+
+        async with admin_factory() as seed:
+            data = await _create_two_companies(seed)
+            invs = await self._create_users_and_invoices(seed, data)
+            await seed.commit()
+
+        try:
+            co_a_id = str(data["co_a"].id)
+            a1_id = str(data["brand_a1"].id)
+            async with app_factory() as app_sess:
+                async with app_sess.begin():
+                    await _set_tenant_context(app_sess, co_a_id, a1_id)
+                    rows = (await app_sess.execute(select(Invoice))).scalars().all()
+                    for inv in rows:
+                        assert inv.company_id == data["co_a"].id
+                    # Company B invoice must not appear
+                    ids = {inv.id for inv in rows}
+                    assert invs["inv_b"].id not in ids
+        finally:
+            async with admin_factory() as cleanup:
+                await _cleanup_companies(cleanup, [data["co_a"].id, data["co_b"].id])
+
+    async def test_invoices_sub_brand_scoping_rls(self, setup_database):
+        """Set sub_brand_id A1, verify no A2 invoices visible."""
+        admin_factory = setup_database["admin_factory"]
+        app_factory = setup_database["app_factory"]
+
+        async with admin_factory() as seed:
+            data = await _create_two_companies(seed)
+            invs = await self._create_users_and_invoices(seed, data)
+            await seed.commit()
+
+        try:
+            co_a_id = str(data["co_a"].id)
+            a1_id = str(data["brand_a1"].id)
+            async with app_factory() as app_sess:
+                async with app_sess.begin():
+                    await _set_tenant_context(app_sess, co_a_id, a1_id)
+                    rows = (await app_sess.execute(select(Invoice))).scalars().all()
+                    for inv in rows:
+                        assert inv.sub_brand_id == data["brand_a1"].id
+                    ids = {inv.id for inv in rows}
+                    assert invs["inv_a2"].id not in ids
+        finally:
+            async with admin_factory() as cleanup:
+                await _cleanup_companies(cleanup, [data["co_a"].id, data["co_b"].id])
+
+    async def test_invoices_reel48_admin_bypass_rls(self, setup_database):
+        """Empty company_id sees invoices across all companies."""
+        admin_factory = setup_database["admin_factory"]
+        app_factory = setup_database["app_factory"]
+
+        async with admin_factory() as seed:
+            data = await _create_two_companies(seed)
+            invs = await self._create_users_and_invoices(seed, data)
+            await seed.commit()
+
+        try:
+            async with app_factory() as app_sess:
+                async with app_sess.begin():
+                    await _set_tenant_context(app_sess, None, None)
+                    rows = (await app_sess.execute(select(Invoice))).scalars().all()
+                    company_ids = {inv.company_id for inv in rows}
+                    assert data["co_a"].id in company_ids
+                    assert data["co_b"].id in company_ids
         finally:
             async with admin_factory() as cleanup:
                 await _cleanup_companies(cleanup, [data["co_a"].id, data["co_b"].id])

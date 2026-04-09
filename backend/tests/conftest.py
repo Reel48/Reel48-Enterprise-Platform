@@ -675,6 +675,109 @@ def mock_email() -> MockEmailService:
     app.dependency_overrides.pop(get_email_service, None)
 
 
+# ---------------------------------------------------------------------------
+# Mock Stripe service
+# ---------------------------------------------------------------------------
+class MockStripeService:
+    """Mock StripeService that records calls without hitting Stripe API."""
+
+    def __init__(self) -> None:
+        self.created_customers: list[dict] = []
+        self.created_invoices: list[dict] = []
+        self.created_invoice_items: list[dict] = []
+        self.finalized_invoices: list[str] = []
+        self.sent_invoices: list[str] = []
+        self.voided_invoices: list[str] = []
+        self._invoice_counter = 0
+
+    async def get_or_create_customer(
+        self, company_id: str, company_name: str, stripe_customer_id: str | None = None
+    ) -> str:
+        customer_id = stripe_customer_id or f"cus_test_{uuid4().hex[:8]}"
+        self.created_customers.append({
+            "company_id": company_id,
+            "customer_id": customer_id,
+        })
+        return customer_id
+
+    async def create_invoice(
+        self, customer_id: str, metadata: dict, auto_advance: bool = False
+    ) -> dict:
+        self._invoice_counter += 1
+        invoice_id = f"in_test_{self._invoice_counter}"
+        invoice = {
+            "id": invoice_id,
+            "customer": customer_id,
+            "metadata": metadata,
+            "auto_advance": auto_advance,
+            "hosted_invoice_url": f"https://invoice.stripe.com/i/{invoice_id}",
+            "invoice_pdf": f"https://invoice.stripe.com/i/{invoice_id}/pdf",
+            "status": "draft",
+        }
+        self.created_invoices.append(invoice)
+        return invoice
+
+    async def create_invoice_item(
+        self,
+        customer_id: str,
+        invoice_id: str,
+        description: str,
+        quantity: int,
+        unit_amount_cents: int,
+        currency: str = "usd",
+    ) -> dict:
+        item = {
+            "invoice": invoice_id,
+            "description": description,
+            "quantity": quantity,
+            "unit_amount": unit_amount_cents,
+            "currency": currency,
+        }
+        self.created_invoice_items.append(item)
+        return item
+
+    async def finalize_invoice(self, stripe_invoice_id: str) -> dict:
+        self.finalized_invoices.append(stripe_invoice_id)
+        return {
+            "id": stripe_invoice_id,
+            "status": "open",
+            "number": f"INV-{len(self.finalized_invoices):04d}",
+            "hosted_invoice_url": f"https://invoice.stripe.com/i/{stripe_invoice_id}",
+            "invoice_pdf": f"https://invoice.stripe.com/i/{stripe_invoice_id}/pdf",
+        }
+
+    async def send_invoice(self, stripe_invoice_id: str) -> dict:
+        self.sent_invoices.append(stripe_invoice_id)
+        return {"id": stripe_invoice_id, "status": "open"}
+
+    async def void_invoice(self, stripe_invoice_id: str) -> dict:
+        self.voided_invoices.append(stripe_invoice_id)
+        return {"id": stripe_invoice_id, "status": "void"}
+
+    async def get_invoice(self, stripe_invoice_id: str) -> dict:
+        return {
+            "id": stripe_invoice_id,
+            "status": "draft",
+            "invoice_pdf": f"https://invoice.stripe.com/i/{stripe_invoice_id}/pdf",
+        }
+
+    def construct_webhook_event(self, payload: bytes, sig_header: str) -> dict:
+        """For webhook tests: return parsed JSON directly (no signature verification)."""
+        import json
+        return json.loads(payload)
+
+
+@pytest.fixture(autouse=True)
+def mock_stripe() -> MockStripeService:
+    """Auto-mock StripeService for all tests. Override get_stripe_service."""
+    from app.services.stripe_service import get_stripe_service
+
+    mock = MockStripeService()
+    app.dependency_overrides[get_stripe_service] = lambda: mock
+    yield mock
+    app.dependency_overrides.pop(get_stripe_service, None)
+
+
 @pytest.fixture(autouse=True)
 def no_rate_limit():
     """Disable rate limiting for all tests by default."""
