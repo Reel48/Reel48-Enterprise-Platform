@@ -13,6 +13,7 @@ from app.schemas.order import (
     OrderResponse,
     OrderWithItemsResponse,
 )
+from app.services.approval_service import ApprovalService
 from app.services.helpers import resolve_current_user_id
 from app.services.order_service import OrderService
 
@@ -34,6 +35,7 @@ async def create_order(
 ) -> ApiResponse[OrderWithItemsResponse]:
     """Place an order against an active catalog. All authenticated roles can order."""
     company_id = _require_company_id(context)
+    user_id = await resolve_current_user_id(db, context.user_id)
     service = OrderService(db)
     order, line_items = await service.create_order(
         data=data,
@@ -41,6 +43,17 @@ async def create_order(
         sub_brand_id=context.sub_brand_id,
         cognito_sub=context.user_id,
     )
+
+    # Orders are submitted for approval at creation time (start as 'pending')
+    approval_svc = ApprovalService(db)
+    await approval_svc.record_submission(
+        entity_type="order",
+        entity_id=order.id,
+        company_id=company_id,
+        sub_brand_id=context.sub_brand_id,
+        requested_by=user_id,
+    )
+
     response = OrderWithItemsResponse.model_validate(order)
     response.line_items = [OrderLineItemResponse.model_validate(li) for li in line_items]
     return ApiResponse(data=response)
@@ -157,8 +170,21 @@ async def approve_order(
 ) -> ApiResponse[OrderResponse]:
     """Approve a pending order. Requires manager_or_above."""
     company_id = _require_company_id(context)
+    approved_by = await resolve_current_user_id(db, context.user_id)
     service = OrderService(db)
     order = await service.approve_order(order_id, company_id)
+
+    # Sync: also update the corresponding approval_request if one exists
+    approval_svc = ApprovalService(db)
+    ar = await approval_svc.find_by_entity("order", order_id)
+    if ar is not None:
+        from datetime import UTC, datetime
+
+        ar.decided_by = approved_by  # type: ignore[assignment]
+        ar.decided_at = datetime.now(UTC)  # type: ignore[assignment]
+        ar.status = "approved"  # type: ignore[assignment]
+        await db.flush()
+
     return ApiResponse(data=OrderResponse.model_validate(order))
 
 

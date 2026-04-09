@@ -14,6 +14,7 @@ from app.core.dependencies import get_db_session, require_reel48_admin
 from app.core.tenant import TenantContext
 from app.schemas.catalog import CatalogResponse
 from app.schemas.common import ApiListResponse, ApiResponse, PaginationMeta
+from app.services.approval_service import ApprovalService
 from app.services.catalog_service import CatalogService
 from app.services.helpers import resolve_current_user_id
 
@@ -54,6 +55,18 @@ async def approve_catalog(
     approved_by = await resolve_current_user_id(db, context.user_id)
     service = CatalogService(db)
     catalog = await service.approve_catalog(catalog_id, approved_by)
+
+    # Sync: also update the corresponding approval_request if one exists
+    approval_svc = ApprovalService(db)
+    ar = await approval_svc.find_by_entity("catalog", catalog_id)
+    if ar is not None:
+        from datetime import UTC, datetime
+
+        ar.decided_by = approved_by  # type: ignore[assignment]
+        ar.decided_at = datetime.now(UTC)  # type: ignore[assignment]
+        ar.status = "approved"  # type: ignore[assignment]
+        await db.flush()
+
     return ApiResponse(data=CatalogResponse.model_validate(catalog))
 
 
@@ -65,8 +78,22 @@ async def reject_catalog(
     db: AsyncSession = Depends(get_db_session),
 ) -> ApiResponse[CatalogResponse]:
     """Reject a submitted catalog back to draft."""
+    rejected_by = await resolve_current_user_id(db, context.user_id)
     service = CatalogService(db)
     catalog = await service.reject_catalog(catalog_id)
+
+    # Sync: also update the corresponding approval_request if one exists
+    approval_svc = ApprovalService(db)
+    ar = await approval_svc.find_by_entity("catalog", catalog_id)
+    if ar is not None:
+        from datetime import UTC, datetime
+
+        ar.decided_by = rejected_by  # type: ignore[assignment]
+        ar.decided_at = datetime.now(UTC)  # type: ignore[assignment]
+        ar.status = "rejected"  # type: ignore[assignment]
+        ar.decision_notes = body.rejection_reason if body else None  # type: ignore[assignment]
+        await db.flush()
+
     return ApiResponse(data=CatalogResponse.model_validate(catalog))
 
 

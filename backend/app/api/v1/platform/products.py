@@ -14,6 +14,7 @@ from app.core.dependencies import get_db_session, require_reel48_admin
 from app.core.tenant import TenantContext
 from app.schemas.common import ApiListResponse, ApiResponse, PaginationMeta
 from app.schemas.product import ProductResponse
+from app.services.approval_service import ApprovalService
 from app.services.helpers import resolve_current_user_id
 from app.services.product_service import ProductService
 
@@ -54,6 +55,18 @@ async def approve_product(
     approved_by = await resolve_current_user_id(db, context.user_id)
     service = ProductService(db)
     product = await service.approve_product(product_id, approved_by)
+
+    # Sync: also update the corresponding approval_request if one exists
+    approval_svc = ApprovalService(db)
+    ar = await approval_svc.find_by_entity("product", product_id)
+    if ar is not None:
+        from datetime import UTC, datetime
+
+        ar.decided_by = approved_by  # type: ignore[assignment]
+        ar.decided_at = datetime.now(UTC)  # type: ignore[assignment]
+        ar.status = "approved"  # type: ignore[assignment]
+        await db.flush()
+
     return ApiResponse(data=ProductResponse.model_validate(product))
 
 
@@ -65,8 +78,22 @@ async def reject_product(
     db: AsyncSession = Depends(get_db_session),
 ) -> ApiResponse[ProductResponse]:
     """Reject a submitted product back to draft. Transitions: submitted -> draft."""
+    rejected_by = await resolve_current_user_id(db, context.user_id)
     service = ProductService(db)
     product = await service.reject_product(product_id)
+
+    # Sync: also update the corresponding approval_request if one exists
+    approval_svc = ApprovalService(db)
+    ar = await approval_svc.find_by_entity("product", product_id)
+    if ar is not None:
+        from datetime import UTC, datetime
+
+        ar.decided_by = rejected_by  # type: ignore[assignment]
+        ar.decided_at = datetime.now(UTC)  # type: ignore[assignment]
+        ar.status = "rejected"  # type: ignore[assignment]
+        ar.decision_notes = body.rejection_reason if body else None  # type: ignore[assignment]
+        await db.flush()
+
     return ApiResponse(data=ProductResponse.model_validate(product))
 
 

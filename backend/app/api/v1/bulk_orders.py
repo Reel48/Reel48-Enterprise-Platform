@@ -16,6 +16,7 @@ from app.schemas.bulk_order import (
     BulkOrderWithItemsResponse,
 )
 from app.schemas.common import ApiListResponse, ApiResponse, PaginationMeta
+from app.services.approval_service import ApprovalService
 from app.services.bulk_order_service import BulkOrderService
 from app.services.helpers import resolve_current_user_id
 
@@ -127,8 +128,20 @@ async def submit_bulk_order(
 ) -> ApiResponse[BulkOrderResponse]:
     """Submit a draft bulk order for approval. Must have at least one item."""
     company_id = _require_company_id(context)
+    submitted_by = await resolve_current_user_id(db, context.user_id)
     service = BulkOrderService(db)
     bulk_order = await service.submit_bulk_order(bulk_order_id, company_id)
+
+    # Record in the unified approval queue
+    approval_svc = ApprovalService(db)
+    await approval_svc.record_submission(
+        entity_type="bulk_order",
+        entity_id=bulk_order.id,
+        company_id=company_id,
+        sub_brand_id=context.sub_brand_id,
+        requested_by=submitted_by,
+    )
+
     return ApiResponse(data=BulkOrderResponse.model_validate(bulk_order))
 
 
@@ -143,6 +156,18 @@ async def approve_bulk_order(
     approved_by = await resolve_current_user_id(db, context.user_id)
     service = BulkOrderService(db)
     bulk_order = await service.approve_bulk_order(bulk_order_id, company_id, approved_by)
+
+    # Sync: also update the corresponding approval_request if one exists
+    approval_svc = ApprovalService(db)
+    ar = await approval_svc.find_by_entity("bulk_order", bulk_order_id)
+    if ar is not None:
+        from datetime import UTC, datetime
+
+        ar.decided_by = approved_by  # type: ignore[assignment]
+        ar.decided_at = datetime.now(UTC)  # type: ignore[assignment]
+        ar.status = "approved"  # type: ignore[assignment]
+        await db.flush()
+
     return ApiResponse(data=BulkOrderResponse.model_validate(bulk_order))
 
 
