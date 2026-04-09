@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     # Frontend (for email links)
     FRONTEND_BASE_URL: str = "https://app.reel48.com"
 
+    # Stripe (invoicing & client billing)
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
+    STRIPE_API_VERSION: str = "2024-06-20"
+
     # CORS
     ALLOWED_ORIGINS: list[str] = ["http://localhost:3000"]
 
