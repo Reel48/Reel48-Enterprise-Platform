@@ -132,6 +132,28 @@ class BulkOrderService:
         )
         return list(result.scalars().all())
 
+    async def list_all_bulk_orders(
+        self,
+        page: int,
+        per_page: int,
+        status_filter: str | None = None,
+        company_id_filter: UUID | None = None,
+    ) -> tuple[list[BulkOrder], int]:
+        """List bulk orders across ALL companies. For reel48_admin platform endpoints."""
+        query = select(BulkOrder)
+        if status_filter is not None:
+            query = query.where(BulkOrder.status == status_filter)
+        if company_id_filter is not None:
+            query = query.where(BulkOrder.company_id == company_id_filter)
+
+        total = await self.db.scalar(
+            select(func.count()).select_from(query.subquery())
+        )
+        query = query.order_by(BulkOrder.created_at.desc())
+        query = query.offset((page - 1) * per_page).limit(per_page)
+        result = await self.db.execute(query)
+        return list(result.scalars().all()), total or 0
+
     async def list_bulk_orders(
         self,
         company_id: UUID,

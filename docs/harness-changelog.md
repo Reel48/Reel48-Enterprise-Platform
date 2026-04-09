@@ -30,6 +30,35 @@
 
 ---
 
+## 2026-04-09 — Module 5 Phase 5 End-of-Session Self-Audit
+
+**Type:** End-of-session self-audit
+**Module:** Module 5 — Bulk Ordering System (Phase 5: Platform Admin Endpoints)
+
+### Self-Audit Checklist
+- [ ] **New pattern?** → No new patterns. Phase 5 follows the exact platform endpoint pattern established in Module 4 Phase 5 (`platform/orders.py`): `require_reel48_admin` dependency, `list_all_*` service method with optional company_id/status filters, cross-company detail endpoint with no company_id filter.
+- [ ] **Pattern violated?** → No deviations. The endpoint, service method, and test patterns all mirror `platform/orders.py`.
+- [ ] **New decision?** → No ADR-worthy decisions.
+- [ ] **Missing guidance?** → No gaps discovered.
+- [ ] **Reusable task?** → No new prompt templates needed.
+- [x] **Changelog updated?** → This entry.
+
+### Harness Files Updated
+- **`backend/CLAUDE.md`** — Added `bulk_orders.py` to the `platform/` directory listing in the project structure section.
+
+### Session Metrics
+- **Tests written:** 6 (cross-company list, filter by company, filter by status, detail with items, 2 authorization checks)
+- **Total test suite:** 322 passed, 0 failed
+- **Mistakes caught by harness:** 0
+- **Gaps found:** 0
+
+### Implementation Notes
+- `list_all_bulk_orders()` service method follows the same pattern as `list_all_orders()`: no company_id filter by default, optional company_id_filter and status_filter params
+- Tests create bulk orders via API (not direct DB inserts) using manager tokens for both Company A and Company B, ensuring the full endpoint pipeline runs
+- Status filter test creates two bulk orders, submits one, then verifies filter correctly partitions results
+
+---
+
 ## 2026-04-09 — Module 5 Phase 3 End-of-Session Self-Audit
 
 **Type:** End-of-session self-audit
