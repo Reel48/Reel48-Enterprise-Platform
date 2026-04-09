@@ -205,11 +205,9 @@ via `SET LOCAL`, then query to verify RLS filtering. **Two critical rules:**
    Each test must commit its seed data, then clean up in a `finally` block.
 
 ```python
-async def _set_tenant_context(session, company_id, sub_brand_id=""):
-    cid = company_id or ""
-    sbid = sub_brand_id or ""
-    await session.execute(text(f"SET LOCAL app.current_company_id = '{cid}'"))
-    await session.execute(text(f"SET LOCAL app.current_sub_brand_id = '{sbid}'"))
+async def _set_tenant_context(session, company_id, sub_brand_id):
+    await session.execute(text(f"SET LOCAL app.current_company_id = '{company_id}'"))
+    await session.execute(text(f"SET LOCAL app.current_sub_brand_id = '{sub_brand_id}'"))
 
 # Pattern: seed as superuser (committed), query as app role (RLS enforced),
 # clean up in finally block
@@ -227,6 +225,42 @@ finally:
         # ... delete test data in reverse FK order ...
         await cleanup.commit()
 ```
+
+### CRITICAL: RLS Isolation Tests Must Use Real UUIDs (Not Empty Strings)
+
+# --- ADDED 2026-04-09 after Module 8 Phase 1 ---
+# Reason: PostgreSQL does NOT guarantee short-circuit evaluation of OR in RLS
+# policies. Setting session variables to '' causes `::uuid` cast errors even when
+# an earlier OR branch (= '') is true, because the planner may evaluate all branches.
+# Impact: All isolation tests pass real UUIDs for both company_id and sub_brand_id.
+
+PostgreSQL's RLS policies contain expressions like:
+```sql
+current_setting('app.current_sub_brand_id', true) = ''
+OR sub_brand_id = current_setting('app.current_sub_brand_id')::uuid
+```
+
+**The OR is NOT guaranteed to short-circuit.** If `app.current_sub_brand_id` is set to
+`''`, the `::uuid` cast in the third branch may still be evaluated, causing
+`invalid input syntax for type uuid: ""`. This happens because:
+1. Custom GUC variables default to `''` (empty string), not NULL
+2. PostgreSQL may evaluate all OR branches during RLS policy checks
+3. The `::uuid` cast fails on empty strings
+
+**Rule:** In isolation tests using the `reel48_app` role, ALWAYS pass **real UUID values**
+for both `company_id` and `sub_brand_id`. Never use empty strings.
+
+- To test **company isolation:** Set company_id to Company A's UUID and sub_brand_id to
+  Brand A1's UUID. Verify Company B's data is not visible.
+- To test **sub-brand isolation:** Set both to Company A / Brand A1. Verify Brand A2 and
+  Company B data is not visible.
+- To test **reel48_admin cross-company visibility:** Use `admin_db_session` (superuser)
+  instead of `reel48_app` role. The actual application routes reel48_admin requests
+  through the superuser session via the `client` fixture.
+
+**This does NOT affect production code.** The `get_tenant_context` middleware sets session
+variables on the superuser session (via `get_db_session`), which bypasses RLS entirely.
+The RLS policies only activate for the non-superuser `reel48_app` role used in tests.
 
 ### Adding New Tables to the Test Infrastructure
 When a new module adds tables:
