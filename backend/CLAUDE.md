@@ -740,6 +740,44 @@ in `mock_email.sent_emails` list for assertions. Filter by `e.get("type")` —
 `"approval_needed"` or `"approval_decision"`.
 
 
+### Stripe Service Integration (Invoicing)
+
+# --- ADDED 2026-04-09 during Module 7 Phase 2 ---
+# Reason: StripeService introduces a new external service pattern (Stripe SDK) with
+# unique error mapping (StripeError → 502) and a synchronous webhook verification method.
+# Impact: Future modules and tests know the Stripe integration patterns.
+
+`StripeService` wraps the Stripe Python SDK and is injected via `get_stripe_service()`
+dependency. It follows the same External Service Integration Pattern as CognitoService
+and EmailService.
+
+**Key differences from other external services:**
+- **StripeError(AppException):** Maps Stripe SDK errors to HTTP 502 (bad gateway) since
+  the failure is in the upstream Stripe API. `InvalidRequestError` maps to `ValidationError`
+  (422) when the request itself is invalid (e.g., finalizing an already-finalized invoice).
+- **Lazy import:** `import stripe` happens inside methods, not at module top level.
+- **Webhook verification is synchronous:** `construct_webhook_event()` is intentionally
+  not async — signature verification is CPU-bound, not I/O-bound. It raises
+  `stripe.error.SignatureVerificationError` on invalid signatures.
+- **Amounts:** All amounts sent to Stripe are in **cents** (`int(amount * 100)`). All
+  amounts stored locally are in **dollars** (`Numeric(10,2)`).
+
+**InvoiceService** orchestrates the three billing flows:
+- `create_assigned_invoice()` — Flow 1: reel48_admin creates invoice from orders
+- `create_self_service_invoice()` — Flow 2: auto-generated at checkout
+- `create_post_window_invoice()` — Flow 3: consolidated after buying window closes
+
+Webhook handlers are **idempotent**: they check the current invoice status before
+updating. A `_STATUS_ORDER` dict prevents status regression if events arrive out of
+order (e.g., `invoice.paid` arriving before `invoice.sent`).
+
+**Config:** `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_API_VERSION` in settings.
+
+**Testing:** Create `MockStripeService` in conftest.py (autouse fixture) following
+the same pattern as `MockCognitoService`. Record created invoices, customers, etc.
+in lists for test assertions. Override via `app.dependency_overrides[get_stripe_service]`.
+
+
 ## Pydantic Schema Conventions
 
 # --- WHY THIS SECTION EXISTS ---

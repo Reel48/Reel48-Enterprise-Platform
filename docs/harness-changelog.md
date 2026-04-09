@@ -30,6 +30,42 @@
 
 ---
 
+## 2026-04-09 — Module 7 Phase 2 (Stripe & Invoice Services)
+
+**Type:** End-of-session self-audit (Trigger 1)
+**Module:** Module 7 — Invoicing & Client Billing (Phase 2)
+
+### What was built
+- `backend/app/services/stripe_service.py` — Thin Stripe SDK wrapper following the
+  External Service Integration Pattern (dependency-injectable, testable via mocking).
+  Methods: get_or_create_customer, create_invoice, create_invoice_item, finalize_invoice,
+  send_invoice, void_invoice, get_invoice, construct_webhook_event.
+- `backend/app/services/invoice_service.py` — Core business logic for the three billing
+  flows (assigned, self-service, post-window), invoice lifecycle actions (finalize, send,
+  void), idempotent webhook handlers, and tenant-scoped + platform-admin queries.
+- `backend/app/core/config.py` — Added STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET,
+  STRIPE_API_VERSION settings.
+
+### Harness review
+1. **New pattern?** Yes — StripeService introduces `StripeError(AppException)` for mapping
+   Stripe SDK errors to the standard AppException hierarchy (HTTP 502). Added to
+   backend CLAUDE.md under Stripe Service Integration section.
+2. **Pattern violated?** No — follows established CognitoService/EmailService patterns.
+3. **New decision?** Webhook idempotency uses status ordering (`_STATUS_ORDER` dict) to
+   prevent status regression when events arrive out of order. Not ADR-worthy — standard
+   webhook handling pattern.
+4. **Missing guidance?** No — stripe-invoicing.md rule covered all scenarios.
+5. **Prompt template needed?** No — this is module-specific, not a recurring pattern.
+
+### Files changed
+- **`backend/app/core/config.py`** — Added Stripe settings
+- **`backend/app/services/stripe_service.py`** — New file (StripeService + StripeError)
+- **`backend/app/services/invoice_service.py`** — New file (InvoiceService)
+- **`backend/CLAUDE.md`** — Added Stripe Service Integration section
+- **`docs/harness-changelog.md`** — This entry
+
+---
+
 ## 2026-04-09 — Module 6 Completion (Approval Workflows — Post-Module Harness Review)
 
 **Type:** Post-module harness review (MANDATORY — Trigger 2)
