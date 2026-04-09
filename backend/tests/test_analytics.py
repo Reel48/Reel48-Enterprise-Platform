@@ -1028,6 +1028,192 @@ class TestAnalyticsAPIAuthorization:
         assert response.status_code == 200
 
 
+# ===========================================================================
+# PLATFORM ANALYTICS API TESTS — Module 8 Phase 3
+#
+# These tests verify the platform admin analytics endpoints under
+# /api/v1/platform/analytics/. Only reel48_admin can access them.
+# ===========================================================================
+
+_PLATFORM_ANALYTICS_ENDPOINTS = [
+    "/api/v1/platform/analytics/overview",
+    "/api/v1/platform/analytics/revenue/by-company",
+    "/api/v1/platform/analytics/revenue/over-time",
+    "/api/v1/platform/analytics/orders/status-breakdown",
+    "/api/v1/platform/analytics/orders/top-products",
+    "/api/v1/platform/analytics/invoices/summary",
+    "/api/v1/platform/analytics/approvals/metrics",
+]
+
+
+class TestPlatformAnalyticsAPIFunctional:
+    """Functional tests for platform analytics endpoints."""
+
+    async def test_platform_overview_returns_correct_counts(
+        self, client, analytics_data, reel48_admin_token
+    ):
+        """All entity counts match seeded data."""
+        response = await client.get(
+            "/api/v1/platform/analytics/overview",
+            headers={"Authorization": f"Bearer {reel48_admin_token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["total_companies"] >= 2
+        assert data["total_sub_brands"] >= 3
+        assert data["total_users"] >= 3
+        assert data["total_orders"] >= 6
+        assert data["total_revenue"] >= 450  # paid invoices: 150 + 300
+        assert data["active_catalogs"] >= 3
+
+    async def test_platform_revenue_by_company_lists_all_companies(
+        self, client, analytics_data, reel48_admin_token
+    ):
+        """Both Company A and B appear in revenue breakdown."""
+        response = await client.get(
+            "/api/v1/platform/analytics/revenue/by-company",
+            headers={"Authorization": f"Bearer {reel48_admin_token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()["data"]
+        company_names = {r["company_name"] for r in data}
+        assert "Company A" in company_names
+        assert "Company B" in company_names
+
+    async def test_platform_revenue_over_time(
+        self, client, analytics_data, reel48_admin_token
+    ):
+        """Time series includes all companies' order data."""
+        response = await client.get(
+            "/api/v1/platform/analytics/revenue/over-time?granularity=month",
+            headers={"Authorization": f"Bearer {reel48_admin_token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert isinstance(data, list)
+        assert len(data) >= 1
+        # Total should include both companies' order spend
+        total = sum(r["total_spend"] for r in data)
+        assert total >= 1625  # 725 (ind) + 900 (bulk) from analytics_data
+
+    async def test_platform_order_breakdown_cross_company(
+        self, client, analytics_data, reel48_admin_token
+    ):
+        """Status counts span all companies."""
+        response = await client.get(
+            "/api/v1/platform/analytics/orders/status-breakdown",
+            headers={"Authorization": f"Bearer {reel48_admin_token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert isinstance(data, list)
+        # Should have entries for both individual and bulk orders
+        order_types = {r["order_type"] for r in data}
+        assert "individual" in order_types
+        assert "bulk" in order_types
+        # Total individual count: 6 (3 approved + 1 delivered + 1 cancelled + 1 pending)
+        ind_total = sum(r["count"] for r in data if r["order_type"] == "individual")
+        assert ind_total >= 6
+
+    async def test_platform_top_products_cross_company(
+        self, client, analytics_data, reel48_admin_token
+    ):
+        """Products from all companies ranked together."""
+        response = await client.get(
+            "/api/v1/platform/analytics/orders/top-products?limit=10",
+            headers={"Authorization": f"Bearer {reel48_admin_token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert isinstance(data, list)
+        assert len(data) >= 3
+        # Widget Alpha (18), Gadget One (14), Widget Beta (3)
+        product_names = [r["product_name"] for r in data]
+        assert "Widget Alpha" in product_names
+        assert "Gadget One" in product_names
+        assert "Widget Beta" in product_names
+
+    async def test_platform_invoice_summary_cross_company(
+        self, client, analytics_data, reel48_admin_token
+    ):
+        """All invoices across all companies included."""
+        response = await client.get(
+            "/api/v1/platform/analytics/invoices/summary",
+            headers={"Authorization": f"Bearer {reel48_admin_token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()["data"]
+        # 5 total invoices: paid A 150, sent A 75, finalized A 200, voided A 999, paid B 300
+        assert data["invoice_count"] >= 5
+        assert data["total_paid"] >= 450  # 150 + 300
+        assert "by_status" in data
+        assert "by_billing_flow" in data
+
+    async def test_platform_approval_metrics_cross_company(
+        self, client, analytics_data, reel48_admin_token
+    ):
+        """Approval metrics span all companies."""
+        response = await client.get(
+            "/api/v1/platform/analytics/approvals/metrics",
+            headers={"Authorization": f"Bearer {reel48_admin_token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["pending_count"] >= 1
+        assert data["approved_count"] >= 2  # A1 + B1
+        assert data["rejected_count"] >= 1
+        assert "approval_rate" in data
+        assert "avg_approval_time_hours" in data
+
+
+class TestPlatformAnalyticsAPIAuthorization:
+    """Authorization tests — only reel48_admin can access platform analytics."""
+
+    @pytest.mark.parametrize("endpoint", _PLATFORM_ANALYTICS_ENDPOINTS)
+    async def test_corporate_admin_gets_403_on_platform_analytics(
+        self, client, company_a, company_a_corporate_admin_token, endpoint
+    ):
+        """corporate_admin gets 403 on platform analytics endpoints."""
+        response = await client.get(
+            endpoint,
+            headers={"Authorization": f"Bearer {company_a_corporate_admin_token}"},
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.parametrize("endpoint", _PLATFORM_ANALYTICS_ENDPOINTS)
+    async def test_sub_brand_admin_gets_403_on_platform_analytics(
+        self, client, company_a, company_a_brand_a1_admin_token, endpoint
+    ):
+        """sub_brand_admin gets 403 on platform analytics endpoints."""
+        response = await client.get(
+            endpoint,
+            headers={"Authorization": f"Bearer {company_a_brand_a1_admin_token}"},
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.parametrize("endpoint", _PLATFORM_ANALYTICS_ENDPOINTS)
+    async def test_employee_gets_403_on_platform_analytics(
+        self, client, company_a, company_a_brand_a1_employee_token, endpoint
+    ):
+        """employee gets 403 on platform analytics endpoints."""
+        response = await client.get(
+            endpoint,
+            headers={"Authorization": f"Bearer {company_a_brand_a1_employee_token}"},
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.parametrize("endpoint", _PLATFORM_ANALYTICS_ENDPOINTS)
+    async def test_reel48_admin_gets_200_on_all_platform_endpoints(
+        self, client, analytics_data, reel48_admin_token, endpoint
+    ):
+        """reel48_admin gets 200 on every platform analytics endpoint."""
+        response = await client.get(
+            endpoint,
+            headers={"Authorization": f"Bearer {reel48_admin_token}"},
+        )
+        assert response.status_code == 200
+
+
 class TestAnalyticsAPIIsolation:
     """Isolation tests — verify tenant boundaries via API.
 

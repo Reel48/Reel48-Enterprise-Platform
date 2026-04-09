@@ -116,6 +116,7 @@ backend/
 │   │           ├── bulk_orders.py     # Cross-company bulk order visibility
 │   │           ├── catalogs.py        # Catalog management, pricing, approval
 │   │           ├── invoices.py        # Invoice creation for client companies
+│   │           ├── analytics.py       # Cross-company analytics (reel48_admin)
 │   │           └── companies.py       # Client company management
 │   └── services/                  # Business logic (called by routes)
 │       ├── company_service.py
