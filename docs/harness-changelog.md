@@ -30,6 +30,59 @@
 
 ---
 
+## 2026-04-10 — User Management Page Enhancement (Session Audit)
+
+**Type:** End-of-session audit (Trigger 1) — enhanced admin/users page with full
+invite management, org code management, and bug fixes.
+**Session:** Frontend-only session to add missing user management capabilities.
+
+### Changes Made
+
+- **File changed:** `frontend/src/app/(authenticated)/admin/users/page.tsx`
+- **Change:** Restructured into 3 Carbon Tabs (Users, Invites, Org Code). Fixed
+  invite modal (was sending `fullName` instead of `targetSubBrandId`). Fixed
+  deactivate endpoint (`POST /deactivate` → `DELETE /users/{id}`).
+- **Reason:** Backend APIs for invites and org codes existed but had no frontend.
+  Invite modal was non-functional due to schema mismatch with backend.
+- **Impact:** Admins can now manage invites (list, create with sub-brand, delete)
+  and corporate admins can manage org codes (generate, copy, deactivate).
+
+- **File changed:** `frontend/src/app/(authenticated)/admin/users/_types.ts` (new)
+- **Change:** Extracted User, Invite, OrgCode, SubBrand interfaces.
+- **Reason:** Page was growing too large for a single file; co-located types keep
+  the page manageable.
+
+- **File changed:** `frontend/src/app/(authenticated)/admin/users/_hooks.ts` (new)
+- **Change:** 9 React Query hooks for all CRUD operations across users, invites,
+  sub-brands, and org codes.
+- **Reason:** Same extraction rationale. Hooks handle API calls, cache invalidation,
+  and 404-as-null pattern for org codes.
+
+- **File changed:** `frontend/CLAUDE.md`
+- **Change:** Updated routing structure to document new `_types.ts` and `_hooks.ts`
+  co-located files under `admin/users/`.
+- **Reason:** Future sessions need to know these files exist.
+
+### Patterns Established
+
+- **Co-located underscore files for complex pages:** When a page grows beyond ~300
+  lines, extract hooks into `_hooks.ts` and types into `_types.ts` in the same
+  directory. The `_` prefix tells Next.js these are not route segments.
+- **Org code 404-as-null pattern:** `useCurrentOrgCode()` catches 404 from the API
+  and returns `null` as data instead of throwing. Uses `retry: false` for 404s.
+- **Sub-brand auto-select for sub_brand_admin:** In invite modals, auto-set
+  `inviteSubBrandId` from `user.tenantContext.subBrandId` and show a read-only
+  field instead of a dropdown.
+
+### Harness Review
+- New pattern introduced? Yes — co-located `_hooks.ts`/`_types.ts` for complex pages.
+- Existing pattern violated? No.
+- New decision made? No — all patterns follow existing Carbon + React Query conventions.
+- Missing guidance discovered? No.
+- Prompt template needed? No — this is a one-off page enhancement.
+
+---
+
 ## 2026-04-10 — Frontend-Backend Field Name Audit & Fix (TRIGGER 3)
 
 **Type:** Reactive update (Trigger 3) — multiple frontend pages used field names

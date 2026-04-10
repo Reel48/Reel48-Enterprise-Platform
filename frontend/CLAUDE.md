@@ -340,7 +340,9 @@ src/app/
 │   ├── notifications/page.tsx  # Notification feed with unread filter and pagination
 │   ├── wishlist/page.tsx       # Wishlist grid with remove and empty state
 │   ├── admin/
-│   │   ├── users/page.tsx     # User management (admin only)
+│   │   ├── users/page.tsx     # User management: tabbed (Users, Invites, Org Code)
+│   │   ├── users/_types.ts    # User, Invite, OrgCode, SubBrand interfaces
+│   │   ├── users/_hooks.ts    # React Query hooks for users, invites, org codes
 │   │   ├── brands/page.tsx    # Sub-brand management (corporate_admin only)
 │   │   ├── approvals/page.tsx # Approval queue
 │   │   └── analytics/page.tsx # Analytics dashboard
