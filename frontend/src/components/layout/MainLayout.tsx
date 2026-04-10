@@ -17,10 +17,10 @@ export function MainLayout({ children }: MainLayoutProps) {
       <Sidebar />
       <Theme theme="g10">
         <main
-          className="p-6"
+          className="px-8 pb-8 pt-10"
           style={{
             marginLeft: '256px',
-            paddingTop: '48px',
+            paddingTop: 'calc(48px + 2.5rem)',
             minHeight: '100vh',
           }}
         >

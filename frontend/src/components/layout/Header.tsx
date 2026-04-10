@@ -33,7 +33,7 @@ export function Header() {
           {user && (
             <span className="flex items-center gap-2 px-4 text-sm text-text-inverse">
               <span>{user.fullName}</span>
-              <span className="text-charcoal-500">({roleLabel})</span>
+              <span className="opacity-70 text-text-inverse">({roleLabel})</span>
             </span>
           )}
           {user && user.tenantContext.role !== 'reel48_admin' && (

@@ -86,15 +86,20 @@ export function Sidebar() {
   const navItems = navByRole[role];
 
   return (
-    <Theme theme="g100">
+    <Theme theme="g10">
       <SideNav
         aria-label="Side navigation"
         isFixedNav
         expanded
         isChildOfHeader={false}
-        style={{ backgroundColor: 'var(--r48-charcoal-900)' }}
+        style={{
+          backgroundColor: '#ffffff',
+          borderRight: '1px solid var(--cds-border-subtle-01)',
+          top: '48px',
+          height: 'calc(100vh - 48px)',
+        }}
       >
-        <SideNavItems>
+        <SideNavItems className="pt-4">
           {navItems.map((item) => {
             const isActive = pathname === item.href;
             const Icon = item.icon;
@@ -102,12 +107,25 @@ export function Sidebar() {
               <SideNavLink
                 key={item.href}
                 href={item.href}
-                renderIcon={() => <Icon size={20} />}
+                renderIcon={() => (
+                  <Icon
+                    size={20}
+                    style={
+                      isActive
+                        ? { fill: 'var(--r48-teal-700)' }
+                        : { fill: 'var(--cds-icon-secondary)' }
+                    }
+                  />
+                )}
                 isActive={isActive}
                 style={
                   isActive
-                    ? { color: 'var(--r48-teal-400)' }
-                    : undefined
+                    ? {
+                        color: 'var(--r48-teal-700)',
+                        borderLeft: '3px solid var(--r48-teal-700)',
+                        backgroundColor: 'var(--r48-teal-50)',
+                      }
+                    : { color: 'var(--cds-text-secondary)' }
                 }
               >
                 {item.label}
