@@ -179,7 +179,7 @@ class NotificationService:
 
         Idempotent — calling twice for the same user has no effect.
         """
-        notification = await self._get_notification(notification_id, company_id)
+        notification = await self.get_notification(notification_id, company_id)
 
         # Check if already read
         read_by = notification.read_by or []
@@ -280,7 +280,7 @@ class NotificationService:
         company_id: UUID,
     ) -> Notification:
         """Soft-deactivate a notification (set is_active=False)."""
-        notification = await self._get_notification(notification_id, company_id)
+        notification = await self.get_notification(notification_id, company_id)
         notification.is_active = False  # type: ignore[assignment]
         await self.db.flush()
         await self.db.refresh(notification)
@@ -291,7 +291,7 @@ class NotificationService:
         )
         return notification
 
-    async def _get_notification(
+    async def get_notification(
         self,
         notification_id: UUID,
         company_id: UUID,
