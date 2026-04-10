@@ -30,6 +30,53 @@
 
 ---
 
+## 2026-04-10 — S3 Storage Service Phase 4: Frontend Integration & Harness Updates (TRIGGER 1)
+
+**Type:** End-of-session self-audit (Trigger 1)
+**Module:** S3 Storage Service — Phase 4 (Final Phase)
+
+### Changes Made
+- **File created:** `frontend/src/types/storage.ts`
+- **Change:** TypeScript types for storage API (UploadUrlResponse, DownloadUrlResponse, StorageCategory). Uses camelCase field names matching the API client's automatic snake_case → camelCase transform.
+- **Reason:** Typed API contract for frontend storage operations
+
+- **File created:** `frontend/src/hooks/useStorage.ts`
+- **Change:** Two React Query mutation hooks: `useFileUpload()` (full upload flow: client-side size validation → get pre-signed URL → PUT to S3 → return s3Key) and `useDownloadUrl()` (resolve s3Key to download URL)
+- **Reason:** Reusable hooks for all frontend components that upload or display S3 files
+
+- **File created:** `frontend/src/components/ui/S3Image.tsx`
+- **Change:** First component in `src/components/ui/`. Resolves an s3Key to a pre-signed download URL and displays via `next/image`. Shows Carbon `Loading` spinner during resolution, fallback on null/error.
+- **Reason:** Common pattern of "I have an s3_key, show the image" needed a reusable component
+
+- **File created:** `frontend/src/__tests__/storage.test.tsx`
+- **Change:** 9 tests covering useFileUpload (3 tests: upload flow, size rejection, S3 failure), useDownloadUrl (1 test), S3Image (5 tests: null fallback, custom fallback, loading state, image render, error fallback)
+- **Reason:** Frontend test coverage for storage hooks and component
+
+- **File changed:** `frontend/CLAUDE.md`
+- **Change:** Added S3Image to component locations listing; added "S3 File Upload Pattern" section documenting the pre-signed URL upload flow, hooks, types, and display component
+- **Reason:** Future sessions know the S3 frontend integration pattern
+
+- **File changed:** `.claude/rules/s3-storage.md`
+- **Change:** Added "Implementation Lessons" section covering: S3Service dependency injection pattern, tenant validation on downloads, JSONB array update pattern, profile photo S3 key storage, frontend upload pattern, reel48_admin rejection on tenant endpoints
+- **Reason:** Captures implementation details and edge cases from all 4 phases
+
+### Notes
+- No database migration was needed (no new tables — S3 storage uses existing columns)
+- S3Service follows the established External Service Integration Pattern (CognitoService, StripeService, EmailService)
+- S3Image is the first component in `src/components/ui/` (directory created in this phase)
+- All 106 frontend tests pass (97 existing + 9 new)
+- TypeScript compiles clean, ESLint passes (warnings only in test mock files, consistent with existing tests)
+
+### Self-Audit Checklist
+- [x] **New pattern?** Yes — S3 pre-signed URL upload pattern added to frontend CLAUDE.md
+- [x] **Pattern violated?** No
+- [x] **New decision?** No — frontend types use camelCase (matches existing API client transform convention)
+- [x] **Missing guidance?** Yes — s3-storage rule had no implementation lessons section; added
+- [x] **Reusable task?** No — S3 upload hook is reusable, documented in frontend CLAUDE.md
+- [x] **Changelog updated?** Yes (this entry)
+
+---
+
 ## 2026-04-10 — S3 Storage Service Phase 3: Profile Photo Management (TRIGGER 1)
 
 **Type:** End-of-session self-audit (Trigger 1)

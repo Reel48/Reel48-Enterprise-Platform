@@ -132,6 +132,58 @@ async def generate_upload_url(
   - Logos: `Cache-Control: public, max-age=604800` (7 days)
   - Documents: `Cache-Control: private, no-cache` (always fetch fresh)
 
+## Implementation Lessons (S3 Storage Service)
+
+# --- ADDED 2026-04-10 during S3 Storage Service Phases 1-4 ---
+# Reason: Four-phase implementation revealed patterns and edge cases not
+# anticipated by the original rule file.
+# Impact: Future sessions working on file storage avoid these pitfalls.
+
+### S3Service Follows External Service Integration Pattern
+`S3Service` is injected via `get_s3_service()` dependency (same pattern as
+CognitoService, StripeService, EmailService). boto3 import is lazy (inside the
+factory function). `MockS3Service` in conftest.py replicates category validation
+logic so tests accurately reflect real behavior.
+
+### Tenant Validation on Download URLs
+The download URL endpoint (`POST /api/v1/storage/download-url`) validates the
+`s3_key` prefix against the user's `company_id` from TenantContext. The check
+splits the key on `/` and compares the first segment. Sub-brand validation is
+secondary — the primary security boundary is company-level isolation.
+
+### JSONB Array Update Pattern for Product Images
+Products store image URLs as a JSONB array (`image_urls`). SQLAlchemy doesn't detect
+in-place JSONB mutations. The service copies the list, modifies it, and reassigns:
+```python
+new_list = list(product.image_urls)
+new_list.append(s3_key)
+product.image_urls = new_list
+```
+This triggers SQLAlchemy's change detection. Removing an image from `image_urls`
+does NOT delete the file from S3 — orphaned files can be cleaned up by a future
+background job.
+
+### Profile Photo S3 Key Storage
+Employee profiles store the S3 key (not the pre-signed URL) in `profile_photo_s3_key`.
+The frontend resolves the key to a pre-signed URL at render time using the
+`useDownloadUrl` hook or the `<S3Image>` component.
+
+### Frontend Upload Pattern (Pre-Signed URL → Direct PUT)
+The frontend uses a two-step pattern:
+1. `POST /api/v1/storage/upload-url` to get a pre-signed URL + s3_key
+2. `fetch(uploadUrl, { method: 'PUT', body: file })` to upload directly to S3
+
+Client-side size validation runs BEFORE the API call to avoid unnecessary backend
+requests. The `useFileUpload()` hook encapsulates the full flow. The API client's
+`deepTransformKeys` converts request body keys to snake_case and response keys to
+camelCase automatically — TypeScript types use camelCase field names.
+
+### reel48_admin Rejected on Tenant Storage Endpoints
+The storage endpoints use `get_tenant_context` and require `company_id` (which
+`reel48_admin` lacks). The `_require_company_id` guard returns 403 with a message
+directing to platform endpoints. Cross-company file access for platform admins
+would need separate platform storage endpoints if needed in the future.
+
 ## Common Mistakes to Avoid
 - ❌ Storing files at the bucket root (no tenant isolation)
 - ❌ Using the same expiry time for upload and download URLs
