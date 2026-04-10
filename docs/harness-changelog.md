@@ -30,6 +30,42 @@
 
 ---
 
+## 2026-04-10 — Build Remaining 9 Frontend Pages (TRIGGER 1)
+
+**Type:** End-of-session self-audit (Trigger 1)
+**Session:** Build 9 remaining frontend pages identified by cross-referencing sidebar
+links, href patterns, and router.push calls against existing page.tsx files.
+
+### Changes Made
+
+- **Files created:** 9 new page components
+  - `frontend/src/app/(authenticated)/orders/[id]/page.tsx` — Order detail with line items, cancel action
+  - `frontend/src/app/(authenticated)/bulk-orders/[id]/page.tsx` — Bulk order detail with submit/approve/cancel
+  - `frontend/src/app/(authenticated)/bulk-orders/new/page.tsx` — Create bulk order form
+  - `frontend/src/app/(platform)/platform/companies/[id]/page.tsx` — Company detail with edit form and sub-brands list
+  - `frontend/src/app/(platform)/platform/invoices/[id]/page.tsx` — Invoice detail with Stripe info and lifecycle actions
+  - `frontend/src/app/(authenticated)/settings/page.tsx` — Account info and password change form
+  - `frontend/src/app/(authenticated)/admin/users/page.tsx` — User management with invite modal and role filter
+  - `frontend/src/app/(authenticated)/admin/brands/page.tsx` — Sub-brand management with create modal
+  - `frontend/src/app/(authenticated)/invoices/page.tsx` — Tenant-scoped invoice list with status filter
+  - **Reason:** In-app links (detail pages from list views, sidebar nav, header menu) pointed to routes without page.tsx files
+  - **Impact:** All frontend navigation links now resolve to real pages; 30 total routes compile
+
+### Session Review
+- **New pattern?** No — all pages follow established patterns
+- **Pattern violated?** Minor: Carbon `Dropdown` requires a `label` prop (not just `titleText`). Fixed during build verification.
+- **New decision?** No
+- **Missing guidance?** The `ApiResponse.meta` type is `Record<string, unknown>`, causing `total > perPage` to fail TypeScript strict checks. Fixed with `Number()` cast. This is a pre-existing type gap in `types/api.ts` (the `meta` type is too loose), not a harness gap.
+- **Reusable task?** No
+
+### Harness Health Metrics
+- **Mistakes per module:** 2 minor TS errors (missing Dropdown `label`, `unknown` comparison) — fixed in same session
+- **Harness gaps:** 0
+- **Rules added:** 0
+- **First-attempt acceptance rate:** Build succeeded on third attempt after two quick fixes
+
+---
+
 ## 2026-04-10 — Build Missing Frontend Pages (TRIGGER 1)
 
 **Type:** End-of-session self-audit (Trigger 1)
