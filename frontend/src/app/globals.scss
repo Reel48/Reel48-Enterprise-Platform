@@ -3,3 +3,33 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+// =============================================================================
+// Carbon SideNav active-state overrides
+// Carbon's internal CSS applies IBM blue to active SideNavLink elements.
+// These overrides ensure teal is used instead, matching the brand palette.
+// =============================================================================
+.cds--side-nav__link--current,
+.cds--side-nav__link[aria-current='page'] {
+  background-color: var(--r48-teal-50) !important;
+  border-left: 3px solid var(--r48-teal-700);
+
+  .cds--side-nav__link-text {
+    color: var(--r48-teal-700) !important;
+  }
+
+  .cds--side-nav__icon > svg {
+    fill: var(--r48-teal-700) !important;
+  }
+}
+
+.cds--side-nav__link:hover {
+  background-color: #f4f4f4 !important;
+}
+
+// Pagination and other interactive element focus rings
+.cds--pagination__button:focus,
+.cds--btn:focus {
+  border-color: var(--r48-teal-700);
+  box-shadow: inset 0 0 0 1px var(--r48-teal-700), inset 0 0 0 2px #ffffff;
+}

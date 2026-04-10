@@ -25,11 +25,50 @@
     // Replaces Carbon's default IBM blue (#0f62fe) with a modern teal that
     // pops against the charcoal brand color. #0a6b6b achieves 5.07:1 contrast
     // against white (WCAG AA for all text sizes).
+    //
+    // IMPORTANT: Every Carbon token that defaults to IBM blue must be
+    // overridden here. Missing even one causes blue to bleed through on
+    // buttons, selected states, links, or focus rings.
     // =========================================================================
     interactive: #0a6b6b,
     link-primary: #0a6b6b,
+    link-primary-hover: #063c44,
     link-secondary: #063c44,
+    link-visited: #0a6b6b,
+    link-inverse: #3db8b8,
+    link-inverse-hover: #a8e0e0,
     focus: #0a6b6b,
+    border-interactive: #0a6b6b,
+
+    // Button tokens — ensures all button variants use teal, not IBM blue
+    button-primary: #0a6b6b,
+    button-primary-hover: #063c44,
+    button-primary-active: #063c44,
+    button-secondary: #393939,
+    button-secondary-hover: #4a5056,
+    button-secondary-active: #393939,
+    button-tertiary: #0a6b6b,
+    button-tertiary-hover: #063c44,
+    button-tertiary-active: #063c44,
+
+    // Selection and toggle tokens
+    background-selected: #e0f5f5,
+    background-selected-hover: #a8e0e0,
+    layer-selected-01: #e0f5f5,
+    layer-selected-02: #e0f5f5,
+    layer-selected-inverse: #0a6b6b,
+    layer-accent-01: #e0f5f5,
+    layer-accent-hover-01: #a8e0e0,
+    layer-accent-active-01: #0a6b6b,
+    toggle-off: #8d8d8d,
+
+    // Tag and notification interactive tokens
+    tag-background-blue: #e0f5f5,
+    tag-color-blue: #0a6b6b,
+    tag-hover-blue: #a8e0e0,
+
+    // Inline notification link
+    link-inverse-active: #0a6b6b,
 
     // =========================================================================
     // BACKGROUNDS & SURFACES
