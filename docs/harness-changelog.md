@@ -30,6 +30,80 @@
 
 ---
 
+## 2026-04-10 — Build Missing Frontend Pages (TRIGGER 1)
+
+**Type:** End-of-session self-audit (Trigger 1)
+**Session:** Build 8 missing frontend pages that caused 404 errors in production
+
+### Changes Made
+
+- **Files created:** 7 new TypeScript type definition files in `frontend/src/types/`
+  - `orders.ts`, `catalogs.ts`, `bulk-orders.ts`, `approvals.ts`, `invoices.ts`, `companies.ts`, `profiles.ts`
+  - **Reason:** Pages need typed interfaces for API responses; no domain types existed beyond engagement/auth/storage
+  - **Impact:** All future frontend work on these domains has typed interfaces ready
+
+- **Files created:** 8 new page components
+  - `frontend/src/app/(authenticated)/profile/page.tsx`
+  - `frontend/src/app/(authenticated)/orders/page.tsx`
+  - `frontend/src/app/(authenticated)/catalog/page.tsx`
+  - `frontend/src/app/(authenticated)/admin/approvals/page.tsx`
+  - `frontend/src/app/(authenticated)/bulk-orders/page.tsx`
+  - `frontend/src/app/(platform)/platform/companies/page.tsx`
+  - `frontend/src/app/(platform)/platform/catalogs/page.tsx`
+  - `frontend/src/app/(platform)/platform/invoices/page.tsx`
+  - **Reason:** Sidebar navigation linked to these routes but no page.tsx existed, causing 404s in production
+  - **Impact:** All sidebar navigation links now resolve to real pages
+
+### Session Review
+- **New pattern?** No — all pages follow established patterns from dashboard, notifications, wishlist, and analytics pages
+- **Pattern violated?** No
+- **New decision?** No — all pages use existing conventions (DataTable key destructuring, React Query hooks, Carbon components, status color mapping)
+- **Missing guidance?** No — the existing harness rules (carbon-design-system.md DataTable key pattern, api-endpoints.md, frontend CLAUDE.md) covered all scenarios
+- **Reusable task?** No — the `prompts/frontend-missing-pages.md` prompt already existed from the prior session
+
+### Harness Health Metrics
+- **Mistakes per module:** 0 — build passed on first attempt with zero TS errors
+- **Harness gaps:** 0 — all patterns were well-documented
+- **Rules added:** 0
+- **First-attempt acceptance rate:** Build succeeded first try
+
+---
+
+## 2026-04-10 — Production Deployment & Infrastructure Session (TRIGGER 1)
+
+**Type:** End-of-session self-audit (Trigger 1)
+**Session:** Production infrastructure deployment
+
+### Changes Made
+- **File changed:** `vercel.json`
+- **Change:** Removed `rootDirectory` property (project-level setting, not valid in vercel.json schema)
+- **Reason:** Vercel deployment failed with schema validation error
+
+- **File created:** `prompts/frontend-missing-pages.md`
+- **Change:** Comprehensive prompt template for building 8 missing frontend pages that cause 404 errors
+- **Reason:** Sidebar navigation links to pages without page.tsx files; work deferred to dedicated session
+
+### Session Review
+- **New pattern?** No — deployment follows standard AWS/Vercel patterns
+- **Pattern violated?** No
+- **New decision?** Docker images for ECS Fargate must be built with `--platform linux/amd64` on Apple Silicon Macs
+- **Missing guidance?** Production deployment procedures not documented in harness (acceptable — one-time setup, not a recurring pattern)
+- **Reusable task?** The `prompts/frontend-missing-pages.md` prompt was created for the page-building session
+
+### Deployment Notes (For Reference)
+- All 9 Alembic migrations applied to production RDS
+- ACM certificate required adding `0 issue "amazon.com"` CAA record to DNS
+- ECS task definition pinned to `runtimePlatform: {cpuArchitecture: X86_64}`
+- SES MAIL FROM DNS records added; awaiting propagation
+- 8 frontend pages identified as missing — prompt created, work deferred to next session
+
+### Frontend Pages Status
+**Built:** dashboard, notifications, wishlist, onboarding, admin/analytics, platform/dashboard, platform/analytics
+**Missing (404):** catalog, orders, profile, bulk-orders, admin/approvals, platform/companies, platform/catalogs, platform/invoices
+**Also missing but lower priority:** invoices (tenant), admin/users, admin/brands, settings
+
+---
+
 ## 2026-04-10 — S3 Storage Service Phase 4: Frontend Integration & Harness Updates (TRIGGER 1)
 
 **Type:** End-of-session self-audit (Trigger 1)

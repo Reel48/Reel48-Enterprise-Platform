@@ -1,0 +1,31 @@
+export interface Profile {
+  id: string;
+  userId: string;
+  fullName: string;
+  email: string;
+  department: string | null;
+  jobTitle: string | null;
+  shirtSize: string | null;
+  pantSize: string | null;
+  shoeSize: string | null;
+  deliveryAddressLine1: string | null;
+  deliveryAddressLine2: string | null;
+  deliveryCity: string | null;
+  deliveryState: string | null;
+  deliveryZip: string | null;
+  profilePhotoS3Key: string | null;
+  onboardingComplete: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const SHIRT_SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'] as const;
+
+export const PANT_SIZES = [
+  '28', '29', '30', '31', '32', '33', '34', '36', '38', '40', '42', '44',
+] as const;
+
+export const SHOE_SIZES = [
+  '6', '6.5', '7', '7.5', '8', '8.5', '9', '9.5', '10', '10.5',
+  '11', '11.5', '12', '13', '14', '15',
+] as const;
