@@ -19,6 +19,7 @@ from app.api.v1.platform.approval_rules import router as platform_approval_rules
 from app.api.v1.platform.approvals import router as platform_approvals_router
 from app.api.v1.platform.analytics import router as platform_analytics_router
 from app.api.v1.platform.invoices import router as platform_invoices_router
+from app.api.v1.platform.companies import router as platform_companies_router
 from app.api.v1.platform.products import router as platform_products_router
 from app.api.v1.sub_brands import router as sub_brands_router
 from app.api.v1.users import router as users_router
@@ -43,6 +44,7 @@ v1_router.include_router(bulk_orders_router)
 v1_router.include_router(approvals_router)
 v1_router.include_router(approval_rules_router)
 v1_router.include_router(invoices_router)
+v1_router.include_router(platform_companies_router)
 v1_router.include_router(platform_products_router)
 v1_router.include_router(platform_catalogs_router)
 v1_router.include_router(platform_orders_router)

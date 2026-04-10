@@ -28,6 +28,23 @@ class CompanyService:
         result = await self.db.execute(query)
         return list(result.scalars().all()), total or 0
 
+    async def list_all_companies(
+        self,
+        page: int,
+        per_page: int,
+        is_active: bool | None = None,
+    ) -> tuple[list[Company], int]:
+        """List all companies across the platform with optional is_active filter."""
+        query = select(Company)
+        if is_active is not None:
+            query = query.where(Company.is_active == is_active)
+
+        total = await self.db.scalar(select(func.count()).select_from(query.subquery()))
+        query = query.order_by(Company.created_at.desc())
+        query = query.offset((page - 1) * per_page).limit(per_page)
+        result = await self.db.execute(query)
+        return list(result.scalars().all()), total or 0
+
     async def get_company(self, company_id: UUID) -> Company:
         result = await self.db.execute(select(Company).where(Company.id == company_id))
         company = result.scalar_one_or_none()
