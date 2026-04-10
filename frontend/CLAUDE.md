@@ -237,7 +237,8 @@ src/
 │   │   ├── TenantBadge.tsx    #   Built FROM Carbon primitives (Tag, etc.)
 │   │   ├── EmptyState.tsx     #   For scenarios Carbon doesn't cover
 │   │   ├── PageHeader.tsx     #   Consistent page header with breadcrumbs
-│   │   └── StatusIndicator.tsx#   Order/invoice/approval status display
+│   │   ├── StatusIndicator.tsx#   Order/invoice/approval status display
+│   │   └── S3Image.tsx        #   S3-backed image with pre-signed URL resolution
 │   │                          #
 │   │   NOTE: Do NOT create wrappers for Carbon components here.
 │   │   Import directly from @carbon/react. This directory is for
@@ -464,6 +465,34 @@ const response = await api.post<ValidateOrgCodeData>(
 // ✅ CORRECT — authenticated endpoint (default behavior)
 const response = await api.get<UserProfile>('/api/v1/users/me');
 ```
+
+
+## S3 File Upload Pattern
+
+# --- ADDED 2026-04-10 during S3 Storage Service Phase 4 ---
+# Reason: S3 uploads use a pre-signed URL pattern where the frontend uploads
+#   directly to S3 (not through the backend). This is a new integration pattern.
+# Impact: Future components that upload files use `useFileUpload()` consistently.
+
+File uploads use a **two-step pre-signed URL pattern**:
+
+1. **Backend generates a pre-signed URL:** `POST /api/v1/storage/upload-url` with
+   `category`, `contentType`, `fileExtension`. Returns `uploadUrl` and `s3Key`.
+2. **Frontend PUTs directly to S3:** The file is uploaded via `fetch(uploadUrl, { method: 'PUT', body: file })`.
+3. **Store the s3Key:** The `s3Key` returned in step 1 is saved to the database
+   (e.g., `product.image_urls`, `profile.profile_photo_s3_key`).
+
+**Hooks** (`src/hooks/useStorage.ts`):
+- `useFileUpload()` — Full upload flow (size validation → get URL → PUT to S3). Returns `s3Key`.
+- `useDownloadUrl()` — Resolves an `s3Key` to a pre-signed download URL.
+
+**Display component** (`src/components/ui/S3Image.tsx`):
+- `<S3Image s3Key="..." alt="..." width={200} height={200} />` — Resolves and displays
+  an S3-backed image. Shows Carbon `Loading` spinner while resolving, fallback on error/null.
+
+**Types** (`src/types/storage.ts`): `UploadUrlResponse`, `DownloadUrlResponse`, `StorageCategory`.
+
+**Client-side size limits:** Enforced before the API call (logos/profiles: 5MB, products: 10MB, catalog: 25MB).
 
 
 ## Styling Rules (Carbon + Tailwind)
