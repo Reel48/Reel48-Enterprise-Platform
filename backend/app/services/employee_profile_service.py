@@ -6,7 +6,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import ConflictError, NotFoundError
+from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError, ValidationError
 from app.models.employee_profile import EmployeeProfile
 from app.schemas.employee_profile import EmployeeProfileCreate, EmployeeProfileUpdate
 
@@ -173,6 +173,47 @@ class EmployeeProfileService:
             )
             self.db.add(profile)
 
+        await self.db.flush()
+        await self.db.refresh(profile)
+        return profile
+
+    async def set_profile_photo(
+        self,
+        user_id: UUID,
+        company_id: UUID,
+        s3_key: str,
+    ) -> EmployeeProfile:
+        """Set the profile photo URL for the user's profile.
+
+        Validates:
+        - Profile exists for the user
+        - s3_key starts with the correct company_id prefix
+        - s3_key is in the 'profiles' category path
+        """
+        profile = await self.get_profile_by_user_id(user_id, company_id)
+
+        # Validate s3_key starts with the correct company_id prefix
+        if not s3_key.startswith(f"{company_id}/"):
+            raise ForbiddenError("S3 key does not match your company scope")
+
+        # Validate s3_key is in the profiles category path
+        parts = s3_key.split("/")
+        if len(parts) < 4 or parts[2] != "profiles":
+            raise ValidationError("S3 key must be in the profiles category path")
+
+        profile.profile_photo_url = s3_key  # type: ignore[assignment]
+        await self.db.flush()
+        await self.db.refresh(profile)
+        return profile
+
+    async def remove_profile_photo(
+        self,
+        user_id: UUID,
+        company_id: UUID | None = None,
+    ) -> EmployeeProfile:
+        """Remove the profile photo URL from the user's profile."""
+        profile = await self.get_profile_by_user_id(user_id, company_id)
+        profile.profile_photo_url = None  # type: ignore[assignment]
         await self.db.flush()
         await self.db.refresh(profile)
         return profile
