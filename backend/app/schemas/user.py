@@ -34,5 +34,6 @@ class UserResponse(BaseModel):
     role: str
     registration_method: str
     is_active: bool
+    company_name: str | None = None
     created_at: datetime
     updated_at: datetime

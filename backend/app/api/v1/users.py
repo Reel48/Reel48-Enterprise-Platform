@@ -1,11 +1,13 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db_session, get_tenant_context, require_admin
 from app.core.exceptions import ForbiddenError, NotFoundError
 from app.core.tenant import TenantContext
+from app.models.company import Company
 from app.schemas.common import ApiListResponse, ApiResponse, PaginationMeta
 from app.schemas.user import UserCreate, UserResponse, UserUpdate
 from app.services.cognito_service import CognitoService, get_cognito_service
@@ -19,12 +21,21 @@ async def get_current_user(
     context: TenantContext = Depends(get_tenant_context),
     db: AsyncSession = Depends(get_db_session),
 ) -> ApiResponse[UserResponse]:
-    """Return the authenticated user's own profile."""
+    """Return the authenticated user's own profile with company name."""
     service = UserService(db)
     user = await service.get_user_by_cognito_sub(context.user_id)
     if user is None:
         raise NotFoundError("User", context.user_id)
-    return ApiResponse(data=UserResponse.model_validate(user))
+    response = UserResponse.model_validate(user)
+
+    # Resolve company name from the company table
+    if user.company_id:
+        result = await db.execute(
+            select(Company.name).where(Company.id == user.company_id)
+        )
+        response.company_name = result.scalar_one_or_none()
+
+    return ApiResponse(data=response)
 
 
 @router.get("/", response_model=ApiListResponse[UserResponse])

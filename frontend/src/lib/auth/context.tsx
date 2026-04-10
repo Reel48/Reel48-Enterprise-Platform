@@ -16,6 +16,7 @@ import {
 } from 'aws-amplify/auth';
 
 import type { AuthState, AuthUser, TenantContext, UserRole } from '@/types/auth';
+import { api } from '@/lib/api/client';
 
 export interface AuthContextValue {
   user: AuthUser | null;
@@ -66,17 +67,32 @@ export function AuthProvider({ children }: AuthProviderProps) {
         payload,
       );
 
-      const companyName =
-        (payload['custom:company_name'] as string) ||
-        (tenantContext.role === 'reel48_admin' ? 'Reel48+' : '');
+      const email = (payload['email'] as string) || '';
+      const fullName = (payload['name'] as string) || email;
 
+      // Set initial user state so the app is usable immediately
       setUser({
-        email: (payload['email'] as string) || '',
-        fullName: (payload['name'] as string) || (payload['email'] as string) || '',
-        companyName,
+        email,
+        fullName,
+        companyName: tenantContext.role === 'reel48_admin' ? 'Reel48+' : '',
         tenantContext,
       });
       setAuthState('authenticated');
+
+      // Fetch company name from API (non-blocking)
+      if (tenantContext.role !== 'reel48_admin') {
+        try {
+          const response = await api.get<{ companyName?: string }>('/api/v1/users/me');
+          const apiCompanyName = response.data?.companyName || '';
+          if (apiCompanyName) {
+            setUser((prev) =>
+              prev ? { ...prev, companyName: apiCompanyName } : prev,
+            );
+          }
+        } catch {
+          // Company name fetch failed — keep empty string fallback
+        }
+      }
     } catch {
       setUser(null);
       setAuthState('unauthenticated');
