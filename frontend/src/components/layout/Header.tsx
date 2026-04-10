@@ -1,10 +1,10 @@
 'use client';
 
+import Image from 'next/image';
 import {
   Header as CarbonHeader,
   HeaderGlobalAction,
   HeaderGlobalBar,
-  HeaderName,
   OverflowMenu,
   OverflowMenuItem,
   Theme,
@@ -25,9 +25,15 @@ export function Header() {
         aria-label="Reel48+"
         className="bg-charcoal-900"
       >
-        <HeaderName href="/dashboard" prefix="">
-          Reel48+
-        </HeaderName>
+        <a href="/dashboard" className="flex items-center px-4 h-full">
+          <Image
+            src="/reel48-logo.svg"
+            alt="Reel48+"
+            width={120}
+            height={32}
+            priority
+          />
+        </a>
 
         <HeaderGlobalBar>
           {user && (
