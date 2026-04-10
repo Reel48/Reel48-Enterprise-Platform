@@ -7,7 +7,7 @@ from app.core.dependencies import get_db_session, get_tenant_context, require_ad
 from app.core.exceptions import ForbiddenError, NotFoundError
 from app.core.tenant import TenantContext
 from app.schemas.common import ApiListResponse, ApiResponse, PaginationMeta
-from app.schemas.product import ProductCreate, ProductResponse, ProductUpdate
+from app.schemas.product import ProductAddImage, ProductCreate, ProductResponse, ProductUpdate
 from app.services.approval_service import ApprovalService
 from app.services.email_service import EmailService, get_email_service
 from app.services.helpers import resolve_current_user_id
@@ -170,4 +170,42 @@ async def submit_product(
         requested_by=submitted_by,
     )
 
+    return ApiResponse(data=ProductResponse.model_validate(product))
+
+
+@router.post(
+    "/{product_id}/images",
+    response_model=ApiResponse[ProductResponse],
+)
+async def add_product_image(
+    product_id: UUID,
+    data: ProductAddImage,
+    context: TenantContext = Depends(require_admin),
+    db: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[ProductResponse]:
+    """Add an image to a draft product. Requires admin role."""
+    company_id = _require_company_id(context)
+    service = ProductService(db)
+    product = await service.add_product_image(
+        product_id, data.s3_key, company_id, context.sub_brand_id
+    )
+    return ApiResponse(data=ProductResponse.model_validate(product))
+
+
+@router.delete(
+    "/{product_id}/images/{index}",
+    response_model=ApiResponse[ProductResponse],
+)
+async def remove_product_image(
+    product_id: UUID,
+    index: int,
+    context: TenantContext = Depends(require_admin),
+    db: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[ProductResponse]:
+    """Remove an image from a draft product by index. Requires admin role."""
+    company_id = _require_company_id(context)
+    service = ProductService(db)
+    product = await service.remove_product_image(
+        product_id, index, company_id, context.sub_brand_id
+    )
     return ApiResponse(data=ProductResponse.model_validate(product))
