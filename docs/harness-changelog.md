@@ -2637,3 +2637,48 @@ personalized engagement hub with notification and wishlist integration.
 ### Verification
 - TypeScript: `npx tsc --noEmit` — exit 0, no errors
 - ESLint: `npx next lint` — exit 0, no warnings or errors
+
+
+## 2026-04-10 — S3 Storage Service Phase 1
+
+### Session Summary
+Built the S3 Storage Service Phase 1: S3Service wrapper, storage API endpoints for
+pre-signed URL generation, Pydantic schemas, test infrastructure updates (MockS3Service),
+and 23 comprehensive tests.
+
+### Files Created
+- **`backend/app/services/s3_service.py`:** S3Service class wrapping boto3 for pre-signed
+  URL generation. Includes `_CATEGORY_RULES` dict for file type validation per category
+  (logos, products, catalog, profiles). Dependency factory `get_s3_service()` follows
+  the same lazy-import pattern as CognitoService and StripeService.
+- **`backend/app/schemas/storage.py`:** Pydantic schemas for upload/download URL requests
+  and responses. Includes `file_extension` normalizer (adds dot prefix, lowercases).
+- **`backend/app/api/v1/storage.py`:** Two tenant-scoped endpoints:
+  - `POST /api/v1/storage/upload-url` — Generates pre-signed PUT URL (15 min expiry)
+  - `POST /api/v1/storage/download-url` — Generates pre-signed GET URL (1 hour expiry)
+    with tenant validation (company_id prefix check on s3_key)
+- **`backend/tests/test_storage.py`:** 23 tests covering functional, isolation,
+  authorization, and mock verification scenarios.
+
+### Files Modified
+- **`backend/app/core/config.py`:** Added `S3_BUCKET_NAME`, `CLOUDFRONT_DOMAIN`,
+  `AWS_REGION` settings.
+- **`backend/app/api/v1/router.py`:** Registered storage router.
+- **`backend/tests/conftest.py`:** Added `MockS3Service` class and `mock_s3` autouse
+  fixture. Mock replicates validation logic so tests reflect real behavior.
+- **`backend/CLAUDE.md`:** Added S3Service to project structure, schemas, services,
+  tests listings, and External Service Integration Pattern section.
+- **`docs/harness-changelog.md`:** This entry.
+
+### End-of-Session Self-Audit
+1. **New pattern?** Yes — tenant-scoped file path validation on download URLs
+   (company_id prefix check). Documented in backend CLAUDE.md under S3Service section.
+2. **Existing pattern violated?** No — follows established External Service Integration
+   Pattern (lazy import, dependency injection, mock in conftest).
+3. **New decision?** No — all S3 conventions were already defined in
+   `.claude/rules/s3-storage.md`. Implementation follows them faithfully.
+4. **Missing guidance discovered?** No gaps encountered.
+5. **Prompt template needed?** No — the storage endpoint pattern is straightforward.
+
+### Test Results
+- Backend: 655 passed (632 existing + 23 new storage tests), 0 failed

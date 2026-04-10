@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     STRIPE_WEBHOOK_SECRET: str = ""
     STRIPE_API_VERSION: str = "2024-06-20"
 
+    # Amazon S3 (file storage)
+    S3_BUCKET_NAME: str = "reel48-assets"
+    CLOUDFRONT_DOMAIN: str | None = None  # If set, download URLs use CloudFront
+    AWS_REGION: str = "us-east-1"
+
     # CORS
     ALLOWED_ORIGINS: list[str] = ["http://localhost:3000"]
 

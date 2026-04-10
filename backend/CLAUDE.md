@@ -92,6 +92,7 @@ backend/
 │   │   ├── invoice.py
 │   │   ├── approval.py
 │   │   ├── org_code.py
+│   │   ├── storage.py             # Upload/download URL request/response schemas
 │   │   └── user.py
 │   ├── api/
 │   │   └── v1/
@@ -108,6 +109,7 @@ backend/
 │   │       ├── invites.py              # Invite creation and management (admin)
 │   │       ├── org_codes.py            # Org code management (corporate_admin)
 │   │       ├── invoices.py
+│   │       ├── storage.py             # Pre-signed URL generation (upload/download)
 │   │       ├── webhooks.py            # Stripe webhook receiver
 │   │       ├── analytics.py
 │   │       └── platform/              # Reel48 admin endpoints (cross-company)
@@ -131,6 +133,7 @@ backend/
 │       ├── analytics_service.py
 │       ├── email_service.py       # SES integration
 │       ├── invoice_service.py     # Stripe invoice lifecycle
+│       ├── s3_service.py          # S3 pre-signed URL generation + file validation
 │       └── stripe_service.py      # Stripe API client wrapper
 ├── migrations/
 │   ├── env.py
@@ -142,6 +145,7 @@ backend/
 │   ├── test_orders.py
 │   ├── test_invoices.py
 │   ├── test_self_registration.py  # Org code registration, rate limiting, isolation
+│   ├── test_storage.py            # S3 pre-signed URL generation, tenant isolation
 │   ├── test_isolation.py          # Cross-tenant and cross-sub-brand access tests
 │   └── factories/                 # Test data factories
 │       ├── company_factory.py
@@ -708,6 +712,36 @@ app.dependency_overrides[get_cognito_service] = lambda: mock_cognito_service
 - Map AWS SDK exceptions to `AppException` subclasses inside the service class
 - Services that need an external service accept it as an **optional constructor parameter**
   for backward compatibility (e.g., `UserService(db, cognito_service=None)`)
+
+### S3 Storage Service (Pre-Signed URL Generation)
+
+# --- ADDED 2026-04-10 during S3 Storage Service Phase 1 ---
+# Reason: S3Service introduces a new external service for file storage with
+# tenant-scoped path validation and file type rules per category.
+# Impact: Future modules generating file URLs use S3Service consistently.
+
+`S3Service` wraps boto3 S3 client and is injected via `get_s3_service()` dependency.
+It follows the same External Service Integration Pattern as CognitoService.
+
+**Key behaviors:**
+- `generate_upload_url()`: Validates content_type and file_extension against per-category
+  rules (logos, products, catalog, profiles) before generating a pre-signed PUT URL.
+  Generates unique filenames (`{uuid}.{ext}`) to prevent collisions and path traversal.
+  S3 key format: `{company_id}/{sub_brand_slug}/{category}/{uuid}.{ext}`. Expires in 15 min.
+- `generate_download_url()`: Generates pre-signed GET URL (1 hour expiry). If
+  `CLOUDFRONT_DOMAIN` is configured, returns a CloudFront URL instead.
+- File type rules are defined in `_CATEGORY_RULES` dict inside `s3_service.py`.
+
+**Tenant validation on downloads:** The storage endpoint (`POST /api/v1/storage/download-url`)
+validates that the `s3_key` prefix matches the user's `company_id` before generating
+the URL. This prevents cross-company file access.
+
+**Config:** `S3_BUCKET_NAME`, `CLOUDFRONT_DOMAIN` (optional), `AWS_REGION` in settings.
+
+**Testing:** `MockS3Service` in conftest.py (autouse fixture). Records generated URLs
+in `mock_s3.generated_upload_urls` and `mock_s3.generated_download_urls` lists.
+The mock replicates the real service's validation logic (category rules) so tests
+accurately reflect validation behavior.
 
 
 ### Email Notification Pattern (Non-Blocking SES)
