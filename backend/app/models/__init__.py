@@ -9,12 +9,14 @@ from app.models.company import Company
 from app.models.employee_profile import EmployeeProfile
 from app.models.invite import Invite
 from app.models.invoice import Invoice
+from app.models.notification import Notification
 from app.models.order import Order
 from app.models.order_line_item import OrderLineItem
 from app.models.org_code import OrgCode
 from app.models.product import Product
 from app.models.sub_brand import SubBrand
 from app.models.user import User
+from app.models.wishlist import Wishlist
 
 __all__ = [
     "Base",
@@ -37,4 +39,6 @@ __all__ = [
     "BulkOrder",
     "BulkOrderItem",
     "Invoice",
+    "Notification",
+    "Wishlist",
 ]
