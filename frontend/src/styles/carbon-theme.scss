@@ -1,129 +1,20 @@
 // carbon-theme.scss — Reel48+ Brand Color System
 //
 // This file is the SINGLE SOURCE OF TRUTH for the Reel48+ color scheme.
-// It customizes Carbon v11's design tokens and defines accent colors as
-// CSS custom properties for use by Tailwind and custom components.
+// It loads Carbon v11 styles and then overrides CSS custom properties on
+// Carbon's theme class selectors (.cds--g10, .cds--g100) to replace IBM
+// blue with our teal brand palette.
 //
-// IMPORTANT: @use ... with () must appear BEFORE @use '@carbon/react'.
-// Sass modules can only be configured once — if Carbon loads the theme
-// module internally before this clause runs, customization is silently ignored.
+// WHY CSS overrides instead of @use ... with ($theme)?
+// Carbon's <Theme> React component applies a CSS class (e.g. .cds--g10)
+// that hardcodes all token values as CSS custom properties. The Sass-level
+// $theme configuration is ignored at runtime because the class selector's
+// custom properties take precedence. We must override at the CSS level.
 
 @use '@carbon/react/scss/themes';
 @use '@carbon/react/scss/theme' with (
   $fallback: themes.$g10,
-  $theme: (
-    // =========================================================================
-    // BRAND IDENTITY
-    // Brand color: #292c2f (dark charcoal). Applied to inverse/brand surfaces
-    // so the header, sidebar, and dark UI zones carry the Reel48 identity.
-    // =========================================================================
-    background-brand: #292c2f,
-    background-inverse: #292c2f,
-
-    // =========================================================================
-    // PRIMARY INTERACTIVE — Teal
-    // Replaces Carbon's default IBM blue (#0f62fe) with a modern teal that
-    // pops against the charcoal brand color. #0a6b6b achieves 5.07:1 contrast
-    // against white (WCAG AA for all text sizes).
-    //
-    // IMPORTANT: Every Carbon token that defaults to IBM blue must be
-    // overridden here. Missing even one causes blue to bleed through on
-    // buttons, selected states, links, or focus rings.
-    // =========================================================================
-    interactive: #0a6b6b,
-    link-primary: #0a6b6b,
-    link-primary-hover: #063c44,
-    link-secondary: #063c44,
-    link-visited: #0a6b6b,
-    link-inverse: #3db8b8,
-    link-inverse-hover: #a8e0e0,
-    focus: #0a6b6b,
-    border-interactive: #0a6b6b,
-
-    // Button tokens — ensures all button variants use teal, not IBM blue
-    button-primary: #0a6b6b,
-    button-primary-hover: #063c44,
-    button-primary-active: #063c44,
-    button-secondary: #393939,
-    button-secondary-hover: #4a5056,
-    button-secondary-active: #393939,
-    button-tertiary: #0a6b6b,
-    button-tertiary-hover: #063c44,
-    button-tertiary-active: #063c44,
-
-    // Selection and toggle tokens
-    background-selected: #e0f5f5,
-    background-selected-hover: #a8e0e0,
-    layer-selected-01: #e0f5f5,
-    layer-selected-02: #e0f5f5,
-    layer-selected-inverse: #0a6b6b,
-    layer-accent-01: #e0f5f5,
-    layer-accent-hover-01: #a8e0e0,
-    layer-accent-active-01: #0a6b6b,
-    toggle-off: #8d8d8d,
-
-    // Tag and notification interactive tokens
-    tag-background-blue: #e0f5f5,
-    tag-color-blue: #0a6b6b,
-    tag-hover-blue: #a8e0e0,
-
-    // Inline notification link
-    link-inverse-active: #0a6b6b,
-
-    // =========================================================================
-    // BACKGROUNDS & SURFACES
-    // g10 defaults retained for the light content area. The charcoal brand
-    // surfaces are handled by background-brand/background-inverse above and
-    // by wrapping the sidebar/header in <Theme theme="g100">.
-    // =========================================================================
-    background: #f4f4f4,
-    layer-01: #ffffff,
-    layer-02: #f4f4f4,
-    layer-hover-01: #e8e8e8,
-
-    // =========================================================================
-    // TEXT
-    // Standard g10 text colors. text-inverse is white for use on charcoal
-    // and teal surfaces.
-    // =========================================================================
-    text-primary: #161616,
-    text-secondary: #525252,
-    text-placeholder: #a8a8a8,
-    text-inverse: #ffffff,
-    text-on-color: #ffffff,
-
-    // =========================================================================
-    // BORDERS
-    // =========================================================================
-    border-subtle-01: #e0e0e0,
-    border-strong-01: #8d8d8d,
-
-    // =========================================================================
-    // ICONS
-    // =========================================================================
-    icon-primary: #161616,
-    icon-secondary: #525252,
-    icon-on-color: #ffffff,
-    icon-inverse: #ffffff,
-
-    // =========================================================================
-    // FORM FIELDS
-    // field-01: input bg on white card surfaces (uses page gray)
-    // field-02: input bg on gray page background (uses white)
-    // =========================================================================
-    field-01: #f4f4f4,
-    field-02: #ffffff,
-
-    // =========================================================================
-    // SEMANTIC / STATUS COLORS
-    // Error, success, and warning retain Carbon defaults for universal
-    // recognition. Info is remapped to brand teal for cohesion.
-    // =========================================================================
-    support-error: #da1e28,
-    support-success: #198038,
-    support-warning: #f1c21b,
-    support-info: #0d8a8a,
-  )
+  $theme: ()
 );
 
 // Load Carbon component styles
@@ -131,6 +22,118 @@
 @use '@carbon/react/scss/grid';
 @use '@carbon/react/scss/layer';
 @use '@carbon/react';
+
+// =============================================================================
+// THEME OVERRIDES — Light theme (g10)
+// Applied to the main content area via <Theme theme="g10">
+// =============================================================================
+.cds--g10,
+.cds--white {
+  // Brand identity
+  --cds-background-brand: #292c2f;
+  --cds-background-inverse: #292c2f;
+
+  // Primary interactive — teal replaces IBM blue
+  --cds-interactive: #0a6b6b;
+  --cds-link-primary: #0a6b6b;
+  --cds-link-primary-hover: #063c44;
+  --cds-link-secondary: #063c44;
+  --cds-link-visited: #0a6b6b;
+  --cds-focus: #0a6b6b;
+  --cds-border-interactive: #0a6b6b;
+  --cds-icon-interactive: #0a6b6b;
+
+  // Buttons
+  --cds-button-primary: #0a6b6b;
+  --cds-button-primary-hover: #063c44;
+  --cds-button-primary-active: #063c44;
+  --cds-button-tertiary: #0a6b6b;
+  --cds-button-tertiary-hover: #063c44;
+  --cds-button-tertiary-active: #063c44;
+
+  // Selection states
+  --cds-background-selected: #e0f5f5;
+  --cds-background-selected-hover: #a8e0e0;
+  --cds-layer-selected-01: #e0f5f5;
+  --cds-layer-selected-02: #e0f5f5;
+  --cds-layer-selected-inverse: #0a6b6b;
+  --cds-layer-accent-01: #e0f5f5;
+  --cds-layer-accent-hover-01: #a8e0e0;
+  --cds-layer-accent-active-01: #0a6b6b;
+
+  // Tags
+  --cds-tag-background-blue: #e0f5f5;
+  --cds-tag-color-blue: #0a6b6b;
+  --cds-tag-hover-blue: #a8e0e0;
+
+  // Backgrounds & surfaces
+  --cds-background: #f4f4f4;
+  --cds-layer-01: #ffffff;
+  --cds-layer-02: #f4f4f4;
+  --cds-layer-hover-01: #e8e8e8;
+
+  // Text
+  --cds-text-primary: #161616;
+  --cds-text-secondary: #525252;
+  --cds-text-placeholder: #a8a8a8;
+  --cds-text-inverse: #ffffff;
+  --cds-text-on-color: #ffffff;
+
+  // Borders
+  --cds-border-subtle-01: #e0e0e0;
+  --cds-border-strong-01: #8d8d8d;
+
+  // Icons
+  --cds-icon-primary: #161616;
+  --cds-icon-secondary: #525252;
+  --cds-icon-on-color: #ffffff;
+  --cds-icon-inverse: #ffffff;
+
+  // Fields
+  --cds-field-01: #f4f4f4;
+  --cds-field-02: #ffffff;
+
+  // Status
+  --cds-support-error: #da1e28;
+  --cds-support-success: #198038;
+  --cds-support-warning: #f1c21b;
+  --cds-support-info: #0d8a8a;
+}
+
+// =============================================================================
+// THEME OVERRIDES — Dark theme (g100)
+// Applied to the header via <Theme theme="g100">
+// =============================================================================
+.cds--g100,
+.cds--g90 {
+  // Brand identity
+  --cds-background-brand: #292c2f;
+  --cds-background-inverse: #292c2f;
+
+  // Interactive — teal on dark
+  --cds-interactive: #3db8b8;
+  --cds-link-primary: #3db8b8;
+  --cds-link-primary-hover: #a8e0e0;
+  --cds-focus: #0a6b6b;
+  --cds-border-interactive: #0a6b6b;
+  --cds-icon-interactive: #3db8b8;
+
+  // Buttons on dark surfaces
+  --cds-button-primary: #0a6b6b;
+  --cds-button-primary-hover: #0d8a8a;
+  --cds-button-primary-active: #063c44;
+  --cds-button-tertiary: #3db8b8;
+  --cds-button-tertiary-hover: #0d8a8a;
+  --cds-button-tertiary-active: #063c44;
+
+  // Selection on dark
+  --cds-background-selected: #353a3f;
+  --cds-background-selected-hover: #4a5056;
+  --cds-layer-selected-inverse: #0a6b6b;
+
+  // Status on dark
+  --cds-support-info: #0d8a8a;
+}
 
 // =============================================================================
 // REEL48+ ACCENT PALETTE — CSS Custom Properties
