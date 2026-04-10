@@ -19,6 +19,8 @@ import {
   Enterprise,
   Settings,
   Store,
+  Notification,
+  FavoriteFilled,
 } from '@carbon/react/icons';
 
 import type { CarbonIconType } from '@carbon/icons-react/lib/CarbonIcon';
@@ -36,6 +38,8 @@ const employeeNav: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: Dashboard },
   { label: 'Catalog', href: '/catalog', icon: Catalog },
   { label: 'Orders', href: '/orders', icon: ShoppingCart },
+  { label: 'Wishlist', href: '/wishlist', icon: FavoriteFilled },
+  { label: 'Notifications', href: '/notifications', icon: Notification },
   { label: 'Profile', href: '/profile', icon: UserProfile },
 ];
 

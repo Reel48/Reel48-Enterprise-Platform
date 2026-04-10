@@ -12,6 +12,7 @@ import {
 import { UserAvatar } from '@carbon/react/icons';
 
 import { useAuth } from '@/lib/auth/hooks';
+import { NotificationBell } from '@/components/features/engagement/NotificationBell';
 
 export function Header() {
   const { user, signOut } = useAuth();
@@ -35,6 +36,7 @@ export function Header() {
               <span className="text-charcoal-500">({roleLabel})</span>
             </span>
           )}
+          {user && <NotificationBell />}
           <HeaderGlobalAction
             aria-label="User menu"
             tooltipAlignment="end"

@@ -265,9 +265,11 @@ src/
 │       │   ├── InvoiceTable.tsx
 │       │   ├── InvoiceDetail.tsx
 │       │   └── CreateInvoiceForm.tsx
-│       └── analytics/
-│           ├── SpendChart.tsx
-│           └── SizeDistribution.tsx
+│       ├── analytics/
+│       │   ├── SpendChart.tsx
+│       │   └── SizeDistribution.tsx
+│       └── engagement/
+│           └── NotificationBell.tsx  # Header notification icon with unread badge + dropdown
 ```
 
 ### Component Conventions
@@ -334,6 +336,8 @@ src/app/
 │   ├── invoices/
 │   │   ├── page.tsx           # Invoice list (corporate_admin: company-wide, sub_brand_admin/regional_manager: brand-scoped)
 │   │   └── [id]/page.tsx      # Invoice detail with PDF download
+│   ├── notifications/page.tsx  # Notification feed with unread filter and pagination
+│   ├── wishlist/page.tsx       # Wishlist grid with remove and empty state
 │   ├── admin/
 │   │   ├── users/page.tsx     # User management (admin only)
 │   │   ├── brands/page.tsx    # Sub-brand management (corporate_admin only)
