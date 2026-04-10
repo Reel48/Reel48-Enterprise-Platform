@@ -358,6 +358,81 @@ class TestDeleteProfile:
 
 
 # ---------------------------------------------------------------------------
+# Complete Onboarding Tests
+# ---------------------------------------------------------------------------
+
+
+class TestCompleteOnboarding:
+    async def test_complete_onboarding_sets_flag_true(
+        self,
+        client: AsyncClient,
+        user_a1_employee_token: str,
+        user_a1_employee,
+    ):
+        # Create a profile first
+        await client.put(
+            "/api/v1/profiles/me",
+            json={"department": "Sales"},
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+
+        response = await client.post(
+            "/api/v1/profiles/me/complete-onboarding",
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+        assert response.status_code == 200
+        assert response.json()["data"]["onboarding_complete"] is True
+
+    async def test_complete_onboarding_idempotent(
+        self,
+        client: AsyncClient,
+        user_a1_employee_token: str,
+        user_a1_employee,
+    ):
+        # Create profile and complete onboarding
+        await client.put(
+            "/api/v1/profiles/me",
+            json={"department": "Sales"},
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+        await client.post(
+            "/api/v1/profiles/me/complete-onboarding",
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+
+        # Call again — should still return 200
+        response = await client.post(
+            "/api/v1/profiles/me/complete-onboarding",
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+        assert response.status_code == 200
+        assert response.json()["data"]["onboarding_complete"] is True
+
+    async def test_complete_onboarding_creates_profile_if_none_exists(
+        self,
+        client: AsyncClient,
+        user_a1_employee_token: str,
+        user_a1_employee,
+    ):
+        # No profile exists yet
+        response = await client.post(
+            "/api/v1/profiles/me/complete-onboarding",
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["onboarding_complete"] is True
+        assert data["user_id"] == str(user_a1_employee.id)
+
+    async def test_complete_onboarding_unauthenticated_returns_401(
+        self,
+        client: AsyncClient,
+    ):
+        response = await client.post("/api/v1/profiles/me/complete-onboarding")
+        assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
 # Authorization Tests
 # ---------------------------------------------------------------------------
 

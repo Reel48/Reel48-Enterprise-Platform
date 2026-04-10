@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import {
+  ActionableNotification,
   Button,
   ProgressBar,
   Tag,
@@ -203,6 +204,22 @@ function EmployeeDashboard({ fullName }: { fullName: string }) {
 
   return (
     <div className="flex flex-col gap-6">
+      {/* Onboarding Banner */}
+      {profile && !profile.onboardingComplete && (
+        <ActionableNotification
+          kind="info"
+          title="Complete Your Profile"
+          subtitle="Set up your sizing, delivery address, and department to get the most out of your apparel program."
+          actionButtonLabel="Get Started"
+          onActionButtonClick={() => {
+            window.location.href = '/onboarding';
+          }}
+          lowContrast
+          hideCloseButton
+          className="mb-0"
+        />
+      )}
+
       {/* Row 1: Welcome + Profile Completeness */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Tile>

@@ -53,6 +53,21 @@ async def upsert_my_profile(
     return ApiResponse(data=EmployeeProfileResponse.model_validate(profile))
 
 
+@router.post("/me/complete-onboarding", response_model=ApiResponse[EmployeeProfileResponse])
+async def complete_onboarding(
+    context: TenantContext = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[EmployeeProfileResponse]:
+    """Mark the authenticated user's onboarding as complete. Idempotent."""
+    company_id = _require_company_id(context)
+    user_id = await resolve_current_user_id(db, context.user_id)
+    service = EmployeeProfileService(db)
+    profile = await service.complete_onboarding(
+        user_id, company_id, context.sub_brand_id
+    )
+    return ApiResponse(data=EmployeeProfileResponse.model_validate(profile))
+
+
 @router.get("/", response_model=ApiListResponse[EmployeeProfileResponse])
 async def list_profiles(
     page: int = 1,

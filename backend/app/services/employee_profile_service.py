@@ -114,6 +114,37 @@ class EmployeeProfileService:
         await self.db.refresh(profile)
         return profile
 
+    async def complete_onboarding(
+        self,
+        user_id: UUID,
+        company_id: UUID,
+        sub_brand_id: UUID | None,
+    ) -> EmployeeProfile:
+        """Mark onboarding as complete. Creates profile if none exists. Idempotent."""
+        result = await self.db.execute(
+            select(EmployeeProfile).where(
+                EmployeeProfile.user_id == user_id,
+                EmployeeProfile.deleted_at.is_(None),
+            )
+        )
+        profile = result.scalar_one_or_none()
+
+        if profile is not None:
+            if not profile.onboarding_complete:
+                profile.onboarding_complete = True  # type: ignore[assignment]
+        else:
+            profile = EmployeeProfile(
+                user_id=user_id,
+                company_id=company_id,
+                sub_brand_id=sub_brand_id,
+                onboarding_complete=True,
+            )
+            self.db.add(profile)
+
+        await self.db.flush()
+        await self.db.refresh(profile)
+        return profile
+
     async def upsert_my_profile(
         self,
         user_id: UUID,
