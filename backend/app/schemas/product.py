@@ -21,6 +21,12 @@ class ProductCreate(ProductBase):
     image_urls: list[str] = []
 
 
+class ProductAddImage(BaseModel):
+    """Used for POST /products/{id}/images. Adds an S3 key to the product's image_urls."""
+
+    s3_key: str
+
+
 class ProductUpdate(BaseModel):
     """Used for PATCH /products/{id}. All fields optional for partial updates."""
 

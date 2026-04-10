@@ -743,6 +743,34 @@ in `mock_s3.generated_upload_urls` and `mock_s3.generated_download_urls` lists.
 The mock replicates the real service's validation logic (category rules) so tests
 accurately reflect validation behavior.
 
+### Product Image Management (S3 Storage Phase 2)
+
+# --- ADDED 2026-04-10 during S3 Storage Service Phase 2 ---
+# Reason: Product images are managed through dedicated endpoints that validate
+# S3 keys against tenant scope and enforce a maximum image count.
+# Impact: Future modules know how product images are stored and the validation rules.
+
+Products have an `image_urls` JSONB column (`list[str]`, default `[]`). Images are
+managed via dedicated endpoints, NOT through the general product update endpoint:
+
+- `POST /api/v1/products/{product_id}/images` — Add an image (s3_key in body)
+- `DELETE /api/v1/products/{product_id}/images/{index}` — Remove by 0-based index
+
+**Validation rules:**
+- Only `draft` products can have images added/removed (same restriction as edits)
+- Maximum 10 images per product (`MAX_PRODUCT_IMAGES` in `product_service.py`)
+- `s3_key` must start with the user's `company_id` (tenant validation)
+- `s3_key` must be in the `products` category path (3rd path segment = "products")
+- Sub-brand-scoped admins can only manage images for their own sub-brand's products
+- Corporate admins can manage images for any sub-brand within their company
+- Employees cannot manage product images (requires admin role)
+
+**JSONB mutation pattern:** SQLAlchemy doesn't detect in-place JSONB mutations. The
+service copies the list, modifies it, and reassigns: `product.image_urls = new_list`.
+
+**File cleanup:** Removing an image from `image_urls` does NOT delete the file from
+S3. Orphaned files can be cleaned up by a future background job.
+
 
 ### Email Notification Pattern (Non-Blocking SES)
 

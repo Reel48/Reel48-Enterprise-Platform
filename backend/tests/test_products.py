@@ -644,3 +644,330 @@ class TestProductIsolation:
         )
         assert response.status_code == 200
         assert response.json()["meta"]["total"] >= 2
+
+
+# ---------------------------------------------------------------------------
+# Product Image Management Tests
+# ---------------------------------------------------------------------------
+
+
+def _make_s3_key(company_id, sub_brand_slug="test-brand", filename="img.png"):
+    """Build a valid products-category S3 key for testing."""
+    return f"{company_id}/{sub_brand_slug}/products/{filename}"
+
+
+class TestAddProductImage:
+    async def test_add_image_to_draft_product_returns_200(
+        self,
+        client: AsyncClient,
+        user_a1_admin_token: str,
+        user_a1_admin,
+        admin_db_session: AsyncSession,
+        company_a,
+    ):
+        company, brand_a1, _a2 = company_a
+        product = await _create_product(
+            admin_db_session, company.id, brand_a1.id, user_a1_admin.id
+        )
+        s3_key = _make_s3_key(company.id)
+
+        response = await client.post(
+            f"/api/v1/products/{product.id}/images",
+            json={"s3_key": s3_key},
+            headers={"Authorization": f"Bearer {user_a1_admin_token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert s3_key in data["image_urls"]
+        assert len(data["image_urls"]) == 1
+
+    async def test_add_image_to_non_draft_product_returns_403(
+        self,
+        client: AsyncClient,
+        user_a1_admin_token: str,
+        user_a1_admin,
+        admin_db_session: AsyncSession,
+        company_a,
+    ):
+        company, brand_a1, _a2 = company_a
+        product = await _create_product(
+            admin_db_session, company.id, brand_a1.id, user_a1_admin.id,
+            status="submitted",
+        )
+        s3_key = _make_s3_key(company.id)
+
+        response = await client.post(
+            f"/api/v1/products/{product.id}/images",
+            json={"s3_key": s3_key},
+            headers={"Authorization": f"Bearer {user_a1_admin_token}"},
+        )
+        assert response.status_code == 403
+
+    async def test_add_11th_image_returns_422(
+        self,
+        client: AsyncClient,
+        user_a1_admin_token: str,
+        user_a1_admin,
+        admin_db_session: AsyncSession,
+        company_a,
+    ):
+        company, brand_a1, _a2 = company_a
+        product = await _create_product(
+            admin_db_session, company.id, brand_a1.id, user_a1_admin.id
+        )
+        # Pre-fill with 10 images
+        product.image_urls = [
+            _make_s3_key(company.id, filename=f"img{i}.png") for i in range(10)
+        ]
+        await admin_db_session.flush()
+        await admin_db_session.refresh(product)
+
+        s3_key = _make_s3_key(company.id, filename="img_overflow.png")
+        response = await client.post(
+            f"/api/v1/products/{product.id}/images",
+            json={"s3_key": s3_key},
+            headers={"Authorization": f"Bearer {user_a1_admin_token}"},
+        )
+        assert response.status_code == 422
+
+    async def test_add_image_wrong_company_prefix_returns_403(
+        self,
+        client: AsyncClient,
+        user_a1_admin_token: str,
+        user_a1_admin,
+        admin_db_session: AsyncSession,
+        company_a,
+    ):
+        """s3_key with a different company_id prefix is rejected."""
+        company, brand_a1, _a2 = company_a
+        product = await _create_product(
+            admin_db_session, company.id, brand_a1.id, user_a1_admin.id
+        )
+        bad_key = _make_s3_key(uuid4())  # Different company UUID
+
+        response = await client.post(
+            f"/api/v1/products/{product.id}/images",
+            json={"s3_key": bad_key},
+            headers={"Authorization": f"Bearer {user_a1_admin_token}"},
+        )
+        assert response.status_code == 403
+
+    async def test_add_image_wrong_category_returns_422(
+        self,
+        client: AsyncClient,
+        user_a1_admin_token: str,
+        user_a1_admin,
+        admin_db_session: AsyncSession,
+        company_a,
+    ):
+        """s3_key not in the products category path is rejected."""
+        company, brand_a1, _a2 = company_a
+        product = await _create_product(
+            admin_db_session, company.id, brand_a1.id, user_a1_admin.id
+        )
+        bad_key = f"{company.id}/test-brand/logos/logo.png"
+
+        response = await client.post(
+            f"/api/v1/products/{product.id}/images",
+            json={"s3_key": bad_key},
+            headers={"Authorization": f"Bearer {user_a1_admin_token}"},
+        )
+        assert response.status_code == 422
+
+    async def test_add_image_as_employee_returns_403(
+        self,
+        client: AsyncClient,
+        user_a1_employee_token: str,
+        user_a1_employee,
+        user_a1_admin,
+        admin_db_session: AsyncSession,
+        company_a,
+    ):
+        company, brand_a1, _a2 = company_a
+        product = await _create_product(
+            admin_db_session, company.id, brand_a1.id, user_a1_admin.id
+        )
+        s3_key = _make_s3_key(company.id)
+
+        response = await client.post(
+            f"/api/v1/products/{product.id}/images",
+            json={"s3_key": s3_key},
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+        assert response.status_code == 403
+
+
+class TestRemoveProductImage:
+    async def test_remove_image_by_valid_index_returns_200(
+        self,
+        client: AsyncClient,
+        user_a1_admin_token: str,
+        user_a1_admin,
+        admin_db_session: AsyncSession,
+        company_a,
+    ):
+        company, brand_a1, _a2 = company_a
+        s3_key_0 = _make_s3_key(company.id, filename="first.png")
+        s3_key_1 = _make_s3_key(company.id, filename="second.png")
+        product = await _create_product(
+            admin_db_session, company.id, brand_a1.id, user_a1_admin.id
+        )
+        product.image_urls = [s3_key_0, s3_key_1]
+        await admin_db_session.flush()
+        await admin_db_session.refresh(product)
+
+        response = await client.delete(
+            f"/api/v1/products/{product.id}/images/0",
+            headers={"Authorization": f"Bearer {user_a1_admin_token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert len(data["image_urls"]) == 1
+        assert s3_key_0 not in data["image_urls"]
+        assert s3_key_1 in data["image_urls"]
+
+    async def test_remove_image_out_of_bounds_returns_422(
+        self,
+        client: AsyncClient,
+        user_a1_admin_token: str,
+        user_a1_admin,
+        admin_db_session: AsyncSession,
+        company_a,
+    ):
+        company, brand_a1, _a2 = company_a
+        product = await _create_product(
+            admin_db_session, company.id, brand_a1.id, user_a1_admin.id
+        )
+        # Product has 0 images by default
+
+        response = await client.delete(
+            f"/api/v1/products/{product.id}/images/0",
+            headers={"Authorization": f"Bearer {user_a1_admin_token}"},
+        )
+        assert response.status_code == 422
+
+    async def test_remove_image_from_non_draft_returns_403(
+        self,
+        client: AsyncClient,
+        user_a1_admin_token: str,
+        user_a1_admin,
+        admin_db_session: AsyncSession,
+        company_a,
+    ):
+        company, brand_a1, _a2 = company_a
+        product = await _create_product(
+            admin_db_session, company.id, brand_a1.id, user_a1_admin.id,
+            status="active",
+        )
+        product.image_urls = [_make_s3_key(company.id)]
+        await admin_db_session.flush()
+        await admin_db_session.refresh(product)
+
+        response = await client.delete(
+            f"/api/v1/products/{product.id}/images/0",
+            headers={"Authorization": f"Bearer {user_a1_admin_token}"},
+        )
+        assert response.status_code == 403
+
+    async def test_remove_image_as_employee_returns_403(
+        self,
+        client: AsyncClient,
+        user_a1_employee_token: str,
+        user_a1_employee,
+        user_a1_admin,
+        admin_db_session: AsyncSession,
+        company_a,
+    ):
+        company, brand_a1, _a2 = company_a
+        product = await _create_product(
+            admin_db_session, company.id, brand_a1.id, user_a1_admin.id
+        )
+        product.image_urls = [_make_s3_key(company.id)]
+        await admin_db_session.flush()
+        await admin_db_session.refresh(product)
+
+        response = await client.delete(
+            f"/api/v1/products/{product.id}/images/0",
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+        assert response.status_code == 403
+
+
+class TestProductImageIsolation:
+    async def test_company_b_cannot_add_image_to_company_a_product(
+        self,
+        client: AsyncClient,
+        user_a1_admin,
+        company_a,
+        company_b,
+        admin_db_session: AsyncSession,
+    ):
+        """Cross-company isolation: Company B admin cannot add images to Company A's product."""
+        company_a_obj, brand_a1, _a2 = company_a
+        product = await _create_product(
+            admin_db_session, company_a_obj.id, brand_a1.id, user_a1_admin.id
+        )
+
+        company_b_obj, brand_b1 = company_b
+        b_admin = await _create_user(admin_db_session, company_b_obj.id, brand_b1.id)
+        b_admin_token = create_test_token(
+            user_id=b_admin.cognito_sub,
+            company_id=str(company_b_obj.id),
+            sub_brand_id=str(brand_b1.id),
+            role="sub_brand_admin",
+        )
+        s3_key = _make_s3_key(company_b_obj.id)
+
+        response = await client.post(
+            f"/api/v1/products/{product.id}/images",
+            json={"s3_key": s3_key},
+            headers={"Authorization": f"Bearer {b_admin_token}"},
+        )
+        # Should be 404 (product not found in Company B scope)
+        assert response.status_code == 404
+
+
+class TestProductImageAuthorization:
+    async def test_sub_brand_admin_can_add_image_to_own_brand_product(
+        self,
+        client: AsyncClient,
+        user_a1_admin_token: str,
+        user_a1_admin,
+        admin_db_session: AsyncSession,
+        company_a,
+    ):
+        company, brand_a1, _a2 = company_a
+        product = await _create_product(
+            admin_db_session, company.id, brand_a1.id, user_a1_admin.id
+        )
+        s3_key = _make_s3_key(company.id)
+
+        response = await client.post(
+            f"/api/v1/products/{product.id}/images",
+            json={"s3_key": s3_key},
+            headers={"Authorization": f"Bearer {user_a1_admin_token}"},
+        )
+        assert response.status_code == 200
+
+    async def test_corporate_admin_can_add_image_to_any_brand_product(
+        self,
+        client: AsyncClient,
+        user_a_corporate_admin_token: str,
+        user_a_corporate_admin,
+        user_a1_admin,
+        admin_db_session: AsyncSession,
+        company_a,
+    ):
+        company, brand_a1, brand_a2 = company_a
+        # Product in brand_a1 — corporate admin (no sub_brand_id) should be able to add images
+        product = await _create_product(
+            admin_db_session, company.id, brand_a1.id, user_a1_admin.id
+        )
+        s3_key = _make_s3_key(company.id)
+
+        response = await client.post(
+            f"/api/v1/products/{product.id}/images",
+            json={"s3_key": s3_key},
+            headers={"Authorization": f"Bearer {user_a_corporate_admin_token}"},
+        )
+        assert response.status_code == 200

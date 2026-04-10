@@ -2682,3 +2682,41 @@ and 23 comprehensive tests.
 
 ### Test Results
 - Backend: 655 passed (632 existing + 23 new storage tests), 0 failed
+
+
+## 2026-04-10 — S3 Storage Service Phase 2: Product Image Management
+
+### Summary
+Added product image management endpoints that integrate S3 storage with the Product
+model. Images are managed through dedicated POST/DELETE endpoints (not through the
+general product update endpoint) with tenant validation on S3 keys.
+
+### Files Created
+None.
+
+### Files Modified
+- **`backend/app/services/product_service.py`:** Added `add_product_image()` and
+  `remove_product_image()` methods with tenant validation, draft-only restriction,
+  image limit (10), and S3 key path validation.
+- **`backend/app/schemas/product.py`:** Added `ProductAddImage` schema with `s3_key` field.
+- **`backend/app/api/v1/products.py`:** Added `POST /{product_id}/images` and
+  `DELETE /{product_id}/images/{index}` endpoints. Both require admin role.
+- **`backend/tests/test_products.py`:** Added 13 new tests across 4 test classes:
+  `TestAddProductImage` (6 tests), `TestRemoveProductImage` (4 tests),
+  `TestProductImageIsolation` (1 test), `TestProductImageAuthorization` (2 tests).
+- **`backend/CLAUDE.md`:** Added "Product Image Management (S3 Storage Phase 2)" section
+  documenting the endpoints, validation rules, and JSONB mutation pattern.
+- **`docs/harness-changelog.md`:** This entry.
+
+### End-of-Session Self-Audit
+1. **New pattern?** Yes — JSONB array mutation pattern (copy-modify-reassign instead of
+   in-place mutation). Documented in backend CLAUDE.md under the new section.
+2. **Existing pattern violated?** No — follows established admin-only endpoint pattern
+   with `require_admin` and `_require_company_id` guard.
+3. **New decision?** No — S3 key validation rules were already defined in
+   `.claude/rules/s3-storage.md` and the Phase 2 prompt.
+4. **Missing guidance discovered?** No gaps encountered.
+5. **Prompt template needed?** No — the image management pattern is product-specific.
+
+### Test Results
+- Backend: 37 product tests passed (24 existing + 13 new image tests), 0 failed

@@ -6,9 +6,11 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
+from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError, ValidationError
 from app.models.product import Product
 from app.schemas.product import ProductCreate, ProductUpdate
+
+MAX_PRODUCT_IMAGES = 10
 
 
 class ProductService:
@@ -174,6 +176,83 @@ class ProductService:
         if product.status != "approved":
             raise ForbiddenError("Only approved products can be activated")
         product.status = "active"  # type: ignore[assignment]
+        await self.db.flush()
+        await self.db.refresh(product)
+        return product
+
+    async def add_product_image(
+        self,
+        product_id: UUID,
+        s3_key: str,
+        company_id: UUID,
+        sub_brand_id: UUID | None,
+    ) -> Product:
+        """Add an image S3 key to a product's image_urls array."""
+        product = await self.get_product(product_id, company_id)
+
+        if product.status != "draft":
+            raise ForbiddenError("Images can only be managed on draft products")
+
+        # Sub-brand scoping: non-corporate admins can only manage their sub-brand's products
+        if (
+            sub_brand_id is not None
+            and product.sub_brand_id is not None
+            and product.sub_brand_id != sub_brand_id
+        ):
+            raise ForbiddenError("You can only manage images for products in your sub-brand")
+
+        # Validate s3_key starts with the correct company_id prefix
+        if not s3_key.startswith(f"{company_id}/"):
+            raise ForbiddenError("S3 key does not match your company scope")
+
+        # Validate s3_key is in the products category path
+        parts = s3_key.split("/")
+        if len(parts) < 4 or parts[2] != "products":
+            raise ValidationError("S3 key must be in the products category path")
+
+        # Check image limit
+        current_urls = list(product.image_urls) if product.image_urls else []
+        if len(current_urls) >= MAX_PRODUCT_IMAGES:
+            raise ValidationError(
+                f"Product cannot have more than {MAX_PRODUCT_IMAGES} images"
+            )
+
+        # Append and reassign (SQLAlchemy doesn't detect in-place JSONB mutations)
+        current_urls.append(s3_key)
+        product.image_urls = current_urls  # type: ignore[assignment]
+        await self.db.flush()
+        await self.db.refresh(product)
+        return product
+
+    async def remove_product_image(
+        self,
+        product_id: UUID,
+        index: int,
+        company_id: UUID,
+        sub_brand_id: UUID | None,
+    ) -> Product:
+        """Remove an image URL from a product's image_urls array by index."""
+        product = await self.get_product(product_id, company_id)
+
+        if product.status != "draft":
+            raise ForbiddenError("Images can only be managed on draft products")
+
+        # Sub-brand scoping
+        if (
+            sub_brand_id is not None
+            and product.sub_brand_id is not None
+            and product.sub_brand_id != sub_brand_id
+        ):
+            raise ForbiddenError("You can only manage images for products in your sub-brand")
+
+        current_urls = list(product.image_urls) if product.image_urls else []
+        if index < 0 or index >= len(current_urls):
+            raise ValidationError(
+                f"Image index {index} is out of bounds (product has {len(current_urls)} images)"
+            )
+
+        current_urls.pop(index)
+        product.image_urls = current_urls  # type: ignore[assignment]
         await self.db.flush()
         await self.db.refresh(product)
         return product
