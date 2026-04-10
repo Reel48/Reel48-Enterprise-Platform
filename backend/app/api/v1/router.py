@@ -24,6 +24,7 @@ from app.api.v1.sub_brands import router as sub_brands_router
 from app.api.v1.users import router as users_router
 from app.api.v1.analytics import router as analytics_router
 from app.api.v1.notifications import router as notifications_router
+from app.api.v1.wishlists import router as wishlists_router
 from app.api.v1.webhooks import router as webhooks_router
 
 v1_router = APIRouter(prefix="/api/v1")
@@ -52,4 +53,5 @@ v1_router.include_router(platform_invoices_router)
 v1_router.include_router(platform_analytics_router)
 v1_router.include_router(analytics_router)
 v1_router.include_router(notifications_router)
+v1_router.include_router(wishlists_router)
 v1_router.include_router(webhooks_router)
