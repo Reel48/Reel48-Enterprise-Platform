@@ -63,6 +63,12 @@ class EmployeeProfileUpdate(BaseModel):
         return v
 
 
+class ProfilePhotoSet(BaseModel):
+    """Used for POST /profiles/me/photo. Sets the profile photo S3 key."""
+
+    s3_key: str
+
+
 class EmployeeProfileResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

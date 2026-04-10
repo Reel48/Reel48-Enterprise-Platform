@@ -11,6 +11,7 @@ from app.schemas.employee_profile import (
     EmployeeProfileCreate,
     EmployeeProfileResponse,
     EmployeeProfileUpdate,
+    ProfilePhotoSet,
 )
 from app.services.employee_profile_service import EmployeeProfileService
 from app.services.helpers import resolve_current_user_id
@@ -65,6 +66,32 @@ async def complete_onboarding(
     profile = await service.complete_onboarding(
         user_id, company_id, context.sub_brand_id
     )
+    return ApiResponse(data=EmployeeProfileResponse.model_validate(profile))
+
+
+@router.post("/me/photo", response_model=ApiResponse[EmployeeProfileResponse])
+async def set_profile_photo(
+    data: ProfilePhotoSet,
+    context: TenantContext = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[EmployeeProfileResponse]:
+    """Set the authenticated user's profile photo. Any authenticated role."""
+    company_id = _require_company_id(context)
+    user_id = await resolve_current_user_id(db, context.user_id)
+    service = EmployeeProfileService(db)
+    profile = await service.set_profile_photo(user_id, company_id, data.s3_key)
+    return ApiResponse(data=EmployeeProfileResponse.model_validate(profile))
+
+
+@router.delete("/me/photo", response_model=ApiResponse[EmployeeProfileResponse])
+async def remove_profile_photo(
+    context: TenantContext = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[EmployeeProfileResponse]:
+    """Remove the authenticated user's profile photo. Any authenticated role."""
+    user_id = await resolve_current_user_id(db, context.user_id)
+    service = EmployeeProfileService(db)
+    profile = await service.remove_profile_photo(user_id, context.company_id)
     return ApiResponse(data=EmployeeProfileResponse.model_validate(profile))
 
 

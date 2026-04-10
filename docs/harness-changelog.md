@@ -30,6 +30,38 @@
 
 ---
 
+## 2026-04-10 — S3 Storage Service Phase 3: Profile Photo Management (TRIGGER 1)
+
+**Type:** End-of-session self-audit (Trigger 1)
+**Module:** S3 Storage Service — Phase 3
+
+### Changes Made
+- **File changed:** `backend/app/schemas/employee_profile.py`
+- **Change:** Added `ProfilePhotoSet` schema for `POST /profiles/me/photo` request body
+- **Reason:** New endpoint needs a schema for the `s3_key` field
+
+- **File changed:** `backend/app/services/employee_profile_service.py`
+- **Change:** Added `set_profile_photo()` and `remove_profile_photo()` methods with S3 key validation (company_id prefix + profiles category path)
+- **Reason:** Profile photo management requires tenant-scoped S3 key validation, following the same pattern as `ProductService.add_product_image()`
+
+- **File changed:** `backend/app/api/v1/employee_profiles.py`
+- **Change:** Added `POST /profiles/me/photo` and `DELETE /profiles/me/photo` endpoints
+- **Reason:** Employees need endpoints to manage their own profile photos
+
+- **File changed:** `backend/tests/test_employee_profiles.py`
+- **Change:** Added 12 tests across 3 test classes: `TestSetProfilePhoto` (6 tests), `TestRemoveProfilePhoto` (4 tests), `TestProfilePhotoAuthorization` (2 tests)
+- **Reason:** Functional, isolation, and authorization tests for profile photo management
+
+### Self-Audit Checklist
+- [x] **New pattern?** No — follows existing S3 key validation pattern from product images
+- [x] **Pattern violated?** No
+- [x] **New decision?** No
+- [x] **Missing guidance?** No
+- [x] **Reusable task?** No
+- [x] **Changelog updated?** Yes (this entry)
+
+---
+
 ## 2026-04-09 — Module 9 Post-Module Harness Review (TRIGGER 2)
 
 **Type:** Post-module harness review (Trigger 2)

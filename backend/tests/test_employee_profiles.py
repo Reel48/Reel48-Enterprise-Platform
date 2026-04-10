@@ -716,3 +716,273 @@ async def _create_employee_user(
     db.add(user)
     await db.flush()
     return user
+
+
+# ---------------------------------------------------------------------------
+# Profile Photo Management Tests (Phase 3: S3 Storage Integration)
+# ---------------------------------------------------------------------------
+
+
+class TestSetProfilePhoto:
+    async def test_set_photo_returns_200_with_updated_url(
+        self,
+        client: AsyncClient,
+        user_a1_employee_token: str,
+        user_a1_employee,
+        company_a,
+    ):
+        company, brand_a1, _brand_a2 = company_a
+        # Create profile first
+        await client.put(
+            "/api/v1/profiles/me",
+            json={"department": "Engineering"},
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+
+        s3_key = f"{company.id}/{brand_a1.slug}/profiles/{uuid4()}.png"
+        response = await client.post(
+            "/api/v1/profiles/me/photo",
+            json={"s3_key": s3_key},
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+        assert response.status_code == 200
+        assert response.json()["data"]["profile_photo_url"] == s3_key
+
+    async def test_set_photo_overwrites_previous(
+        self,
+        client: AsyncClient,
+        user_a1_employee_token: str,
+        user_a1_employee,
+        company_a,
+    ):
+        company, brand_a1, _brand_a2 = company_a
+        await client.put(
+            "/api/v1/profiles/me",
+            json={"department": "Sales"},
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+
+        first_key = f"{company.id}/{brand_a1.slug}/profiles/{uuid4()}.png"
+        await client.post(
+            "/api/v1/profiles/me/photo",
+            json={"s3_key": first_key},
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+
+        second_key = f"{company.id}/{brand_a1.slug}/profiles/{uuid4()}.jpeg"
+        response = await client.post(
+            "/api/v1/profiles/me/photo",
+            json={"s3_key": second_key},
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+        assert response.status_code == 200
+        assert response.json()["data"]["profile_photo_url"] == second_key
+
+    async def test_set_photo_when_no_profile_returns_404(
+        self,
+        client: AsyncClient,
+        user_a1_employee_token: str,
+        user_a1_employee,
+        company_a,
+    ):
+        company, brand_a1, _brand_a2 = company_a
+        s3_key = f"{company.id}/{brand_a1.slug}/profiles/{uuid4()}.png"
+        response = await client.post(
+            "/api/v1/profiles/me/photo",
+            json={"s3_key": s3_key},
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+        assert response.status_code == 404
+
+    async def test_set_photo_wrong_company_prefix_returns_403(
+        self,
+        client: AsyncClient,
+        user_a1_employee_token: str,
+        user_a1_employee,
+        company_a,
+    ):
+        company, brand_a1, _brand_a2 = company_a
+        # Create profile first
+        await client.put(
+            "/api/v1/profiles/me",
+            json={"department": "Engineering"},
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+
+        # Use a different company_id in the s3_key
+        wrong_company_id = uuid4()
+        s3_key = f"{wrong_company_id}/{brand_a1.slug}/profiles/{uuid4()}.png"
+        response = await client.post(
+            "/api/v1/profiles/me/photo",
+            json={"s3_key": s3_key},
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+        assert response.status_code == 403
+
+    async def test_set_photo_wrong_category_returns_422(
+        self,
+        client: AsyncClient,
+        user_a1_employee_token: str,
+        user_a1_employee,
+        company_a,
+    ):
+        company, brand_a1, _brand_a2 = company_a
+        await client.put(
+            "/api/v1/profiles/me",
+            json={"department": "Engineering"},
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+
+        # Use 'products' category instead of 'profiles'
+        s3_key = f"{company.id}/{brand_a1.slug}/products/{uuid4()}.png"
+        response = await client.post(
+            "/api/v1/profiles/me/photo",
+            json={"s3_key": s3_key},
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+        assert response.status_code == 422
+
+    async def test_set_photo_unauthenticated_returns_401(
+        self,
+        client: AsyncClient,
+    ):
+        response = await client.post(
+            "/api/v1/profiles/me/photo",
+            json={"s3_key": "some/path/profiles/photo.png"},
+        )
+        assert response.status_code == 401
+
+
+class TestRemoveProfilePhoto:
+    async def test_remove_photo_returns_200_with_null_url(
+        self,
+        client: AsyncClient,
+        user_a1_employee_token: str,
+        user_a1_employee,
+        company_a,
+    ):
+        company, brand_a1, _brand_a2 = company_a
+        # Create profile and set a photo
+        await client.put(
+            "/api/v1/profiles/me",
+            json={"department": "Engineering"},
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+        s3_key = f"{company.id}/{brand_a1.slug}/profiles/{uuid4()}.png"
+        await client.post(
+            "/api/v1/profiles/me/photo",
+            json={"s3_key": s3_key},
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+
+        # Remove the photo
+        response = await client.delete(
+            "/api/v1/profiles/me/photo",
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+        assert response.status_code == 200
+        assert response.json()["data"]["profile_photo_url"] is None
+
+    async def test_remove_photo_when_no_photo_set_returns_200(
+        self,
+        client: AsyncClient,
+        user_a1_employee_token: str,
+        user_a1_employee,
+    ):
+        # Create profile without photo
+        await client.put(
+            "/api/v1/profiles/me",
+            json={"department": "Engineering"},
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+
+        response = await client.delete(
+            "/api/v1/profiles/me/photo",
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+        assert response.status_code == 200
+        assert response.json()["data"]["profile_photo_url"] is None
+
+    async def test_remove_photo_when_no_profile_returns_404(
+        self,
+        client: AsyncClient,
+        user_a1_employee_token: str,
+        user_a1_employee,
+    ):
+        response = await client.delete(
+            "/api/v1/profiles/me/photo",
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+        assert response.status_code == 404
+
+    async def test_remove_photo_unauthenticated_returns_401(
+        self,
+        client: AsyncClient,
+    ):
+        response = await client.delete("/api/v1/profiles/me/photo")
+        assert response.status_code == 401
+
+
+class TestProfilePhotoAuthorization:
+    async def test_any_role_can_set_photo(
+        self,
+        client: AsyncClient,
+        user_a1_admin_token: str,
+        user_a1_admin,
+        user_a1_manager_token: str,
+        user_a1_manager,
+        company_a,
+    ):
+        company, brand_a1, _brand_a2 = company_a
+
+        # Admin can set photo
+        await client.put(
+            "/api/v1/profiles/me",
+            json={"department": "Management"},
+            headers={"Authorization": f"Bearer {user_a1_admin_token}"},
+        )
+        s3_key = f"{company.id}/{brand_a1.slug}/profiles/{uuid4()}.png"
+        response = await client.post(
+            "/api/v1/profiles/me/photo",
+            json={"s3_key": s3_key},
+            headers={"Authorization": f"Bearer {user_a1_admin_token}"},
+        )
+        assert response.status_code == 200
+
+        # Manager can set photo
+        await client.put(
+            "/api/v1/profiles/me",
+            json={"department": "Operations"},
+            headers={"Authorization": f"Bearer {user_a1_manager_token}"},
+        )
+        s3_key = f"{company.id}/{brand_a1.slug}/profiles/{uuid4()}.png"
+        response = await client.post(
+            "/api/v1/profiles/me/photo",
+            json={"s3_key": s3_key},
+            headers={"Authorization": f"Bearer {user_a1_manager_token}"},
+        )
+        assert response.status_code == 200
+
+    async def test_endpoint_is_me_scoped(
+        self,
+        client: AsyncClient,
+        user_a1_employee_token: str,
+        user_a1_employee,
+        company_a,
+    ):
+        """POST /me/photo only affects the authenticated user's profile."""
+        company, brand_a1, _brand_a2 = company_a
+        await client.put(
+            "/api/v1/profiles/me",
+            json={"department": "Sales"},
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+
+        s3_key = f"{company.id}/{brand_a1.slug}/profiles/{uuid4()}.png"
+        response = await client.post(
+            "/api/v1/profiles/me/photo",
+            json={"s3_key": s3_key},
+            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
+        )
+        assert response.status_code == 200
+        assert response.json()["data"]["user_id"] == str(user_a1_employee.id)
