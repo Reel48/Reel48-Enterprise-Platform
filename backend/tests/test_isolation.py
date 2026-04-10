@@ -11,7 +11,8 @@ Coverage:
 - Sub-Brand A1 cannot see Sub-Brand A2's data (within same company)
 - Corporate admin (empty sub_brand_id) sees all sub-brands in their company
 - reel48_admin (empty company_id) sees all companies
-- Isolation applies to all 5 Module 1 tables
+- Isolation applies to: Module 1 tables (users, companies, sub_brands, invites, org_codes),
+  Module 7 (invoices), Module 9 (notifications, wishlists)
 """
 
 from datetime import UTC, datetime, timedelta
@@ -23,9 +24,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.company import Company
 from app.models.invite import Invite
 from app.models.invoice import Invoice
+from app.models.notification import Notification
 from app.models.org_code import OrgCode
+from app.models.product import Product
 from app.models.sub_brand import SubBrand
 from app.models.user import User
+from app.models.wishlist import Wishlist
 
 
 # ---------------------------------------------------------------------------
@@ -87,9 +91,12 @@ async def _cleanup_companies(session: AsyncSession, company_ids: list):
     """Delete all data for the given companies (reverse FK order)."""
     for cid in company_ids:
         cid_str = str(cid)
+        await session.execute(text(f"DELETE FROM wishlists WHERE company_id = '{cid_str}'"))
+        await session.execute(text(f"DELETE FROM notifications WHERE company_id = '{cid_str}'"))
         await session.execute(text(f"DELETE FROM invoices WHERE company_id = '{cid_str}'"))
         await session.execute(text(f"DELETE FROM invites WHERE company_id = '{cid_str}'"))
         await session.execute(text(f"DELETE FROM org_codes WHERE company_id = '{cid_str}'"))
+        await session.execute(text(f"DELETE FROM products WHERE company_id = '{cid_str}'"))
         await session.execute(text(f"DELETE FROM users WHERE company_id = '{cid_str}'"))
         await session.execute(text(f"DELETE FROM sub_brands WHERE company_id = '{cid_str}'"))
         await session.execute(text(f"DELETE FROM companies WHERE id = '{cid_str}'"))
@@ -495,6 +502,251 @@ class TestInvoicesIsolation:
                     await _set_tenant_context(app_sess, None, None)
                     rows = (await app_sess.execute(select(Invoice))).scalars().all()
                     company_ids = {inv.company_id for inv in rows}
+                    assert data["co_a"].id in company_ids
+                    assert data["co_b"].id in company_ids
+        finally:
+            async with admin_factory() as cleanup:
+                await _cleanup_companies(cleanup, [data["co_a"].id, data["co_b"].id])
+
+
+# ---------------------------------------------------------------------------
+# Notifications table isolation
+# ---------------------------------------------------------------------------
+class TestNotificationsIsolation:
+    async def _create_users_and_notifications(self, session, data):
+        """Create users and notifications across companies/sub-brands."""
+        user_a = User(
+            company_id=data["co_a"].id, sub_brand_id=data["brand_a1"].id,
+            cognito_sub=str(uuid4()), email=f"notif-a-{uuid4().hex[:6]}@a.com",
+            full_name="Notif A", role="sub_brand_admin",
+        )
+        user_b = User(
+            company_id=data["co_b"].id, sub_brand_id=data["brand_b1"].id,
+            cognito_sub=str(uuid4()), email=f"notif-b-{uuid4().hex[:6]}@b.com",
+            full_name="Notif B", role="sub_brand_admin",
+        )
+        session.add_all([user_a, user_b])
+        await session.flush()
+
+        notif_a1 = Notification(
+            company_id=data["co_a"].id, sub_brand_id=data["brand_a1"].id,
+            title="A1 Notification", body="Body A1",
+            notification_type="announcement", target_scope="sub_brand",
+            created_by=user_a.id,
+        )
+        notif_a2 = Notification(
+            company_id=data["co_a"].id, sub_brand_id=data["brand_a2"].id,
+            title="A2 Notification", body="Body A2",
+            notification_type="announcement", target_scope="sub_brand",
+            created_by=user_a.id,
+        )
+        notif_b = Notification(
+            company_id=data["co_b"].id, sub_brand_id=data["brand_b1"].id,
+            title="B Notification", body="Body B",
+            notification_type="announcement", target_scope="sub_brand",
+            created_by=user_b.id,
+        )
+        session.add_all([notif_a1, notif_a2, notif_b])
+        await session.flush()
+        return {"notif_a1": notif_a1, "notif_a2": notif_a2, "notif_b": notif_b}
+
+    async def test_notifications_company_isolation_rls(self, setup_database):
+        """Company A context cannot see Company B notifications."""
+        admin_factory = setup_database["admin_factory"]
+        app_factory = setup_database["app_factory"]
+
+        async with admin_factory() as seed:
+            data = await _create_two_companies(seed)
+            notifs = await self._create_users_and_notifications(seed, data)
+            await seed.commit()
+
+        try:
+            co_a_id = str(data["co_a"].id)
+            a1_id = str(data["brand_a1"].id)
+            async with app_factory() as app_sess:
+                async with app_sess.begin():
+                    await _set_tenant_context(app_sess, co_a_id, a1_id)
+                    rows = (await app_sess.execute(select(Notification))).scalars().all()
+                    for n in rows:
+                        assert n.company_id == data["co_a"].id
+                    ids = {n.id for n in rows}
+                    assert notifs["notif_b"].id not in ids
+        finally:
+            async with admin_factory() as cleanup:
+                await _cleanup_companies(cleanup, [data["co_a"].id, data["co_b"].id])
+
+    async def test_notifications_sub_brand_scoping_rls(self, setup_database):
+        """Sub-brand A1 context cannot see A2 notifications."""
+        admin_factory = setup_database["admin_factory"]
+        app_factory = setup_database["app_factory"]
+
+        async with admin_factory() as seed:
+            data = await _create_two_companies(seed)
+            notifs = await self._create_users_and_notifications(seed, data)
+            await seed.commit()
+
+        try:
+            co_a_id = str(data["co_a"].id)
+            a1_id = str(data["brand_a1"].id)
+            async with app_factory() as app_sess:
+                async with app_sess.begin():
+                    await _set_tenant_context(app_sess, co_a_id, a1_id)
+                    rows = (await app_sess.execute(select(Notification))).scalars().all()
+                    for n in rows:
+                        assert n.sub_brand_id == data["brand_a1"].id
+                    ids = {n.id for n in rows}
+                    assert notifs["notif_a2"].id not in ids
+        finally:
+            async with admin_factory() as cleanup:
+                await _cleanup_companies(cleanup, [data["co_a"].id, data["co_b"].id])
+
+    async def test_notifications_reel48_admin_bypass_rls(self, setup_database):
+        """Empty company_id sees notifications across all companies."""
+        admin_factory = setup_database["admin_factory"]
+        app_factory = setup_database["app_factory"]
+
+        async with admin_factory() as seed:
+            data = await _create_two_companies(seed)
+            notifs = await self._create_users_and_notifications(seed, data)
+            await seed.commit()
+
+        try:
+            async with app_factory() as app_sess:
+                async with app_sess.begin():
+                    await _set_tenant_context(app_sess, None, None)
+                    rows = (await app_sess.execute(select(Notification))).scalars().all()
+                    company_ids = {n.company_id for n in rows}
+                    assert data["co_a"].id in company_ids
+                    assert data["co_b"].id in company_ids
+        finally:
+            async with admin_factory() as cleanup:
+                await _cleanup_companies(cleanup, [data["co_a"].id, data["co_b"].id])
+
+
+# ---------------------------------------------------------------------------
+# Wishlists table isolation
+# ---------------------------------------------------------------------------
+class TestWishlistsIsolation:
+    async def _create_users_products_and_wishlists(self, session, data):
+        """Create users, products, and wishlist entries across companies/sub-brands."""
+        user_a = User(
+            company_id=data["co_a"].id, sub_brand_id=data["brand_a1"].id,
+            cognito_sub=str(uuid4()), email=f"wl-a-{uuid4().hex[:6]}@a.com",
+            full_name="WL A", role="employee",
+        )
+        user_a2 = User(
+            company_id=data["co_a"].id, sub_brand_id=data["brand_a2"].id,
+            cognito_sub=str(uuid4()), email=f"wl-a2-{uuid4().hex[:6]}@a.com",
+            full_name="WL A2", role="employee",
+        )
+        user_b = User(
+            company_id=data["co_b"].id, sub_brand_id=data["brand_b1"].id,
+            cognito_sub=str(uuid4()), email=f"wl-b-{uuid4().hex[:6]}@b.com",
+            full_name="WL B", role="employee",
+        )
+        session.add_all([user_a, user_a2, user_b])
+        await session.flush()
+
+        prod_a1 = Product(
+            company_id=data["co_a"].id, sub_brand_id=data["brand_a1"].id,
+            name="Product A1", sku=f"SKU-A1-{uuid4().hex[:6]}",
+            unit_price=10, status="active", created_by=user_a.id,
+        )
+        prod_a2 = Product(
+            company_id=data["co_a"].id, sub_brand_id=data["brand_a2"].id,
+            name="Product A2", sku=f"SKU-A2-{uuid4().hex[:6]}",
+            unit_price=20, status="active", created_by=user_a2.id,
+        )
+        prod_b = Product(
+            company_id=data["co_b"].id, sub_brand_id=data["brand_b1"].id,
+            name="Product B", sku=f"SKU-B-{uuid4().hex[:6]}",
+            unit_price=30, status="active", created_by=user_b.id,
+        )
+        session.add_all([prod_a1, prod_a2, prod_b])
+        await session.flush()
+
+        wl_a1 = Wishlist(
+            company_id=data["co_a"].id, sub_brand_id=data["brand_a1"].id,
+            user_id=user_a.id, product_id=prod_a1.id,
+        )
+        wl_a2 = Wishlist(
+            company_id=data["co_a"].id, sub_brand_id=data["brand_a2"].id,
+            user_id=user_a2.id, product_id=prod_a2.id,
+        )
+        wl_b = Wishlist(
+            company_id=data["co_b"].id, sub_brand_id=data["brand_b1"].id,
+            user_id=user_b.id, product_id=prod_b.id,
+        )
+        session.add_all([wl_a1, wl_a2, wl_b])
+        await session.flush()
+        return {"wl_a1": wl_a1, "wl_a2": wl_a2, "wl_b": wl_b}
+
+    async def test_wishlists_company_isolation_rls(self, setup_database):
+        """Company A context cannot see Company B wishlist entries."""
+        admin_factory = setup_database["admin_factory"]
+        app_factory = setup_database["app_factory"]
+
+        async with admin_factory() as seed:
+            data = await _create_two_companies(seed)
+            wls = await self._create_users_products_and_wishlists(seed, data)
+            await seed.commit()
+
+        try:
+            co_a_id = str(data["co_a"].id)
+            a1_id = str(data["brand_a1"].id)
+            async with app_factory() as app_sess:
+                async with app_sess.begin():
+                    await _set_tenant_context(app_sess, co_a_id, a1_id)
+                    rows = (await app_sess.execute(select(Wishlist))).scalars().all()
+                    for w in rows:
+                        assert w.company_id == data["co_a"].id
+                    ids = {w.id for w in rows}
+                    assert wls["wl_b"].id not in ids
+        finally:
+            async with admin_factory() as cleanup:
+                await _cleanup_companies(cleanup, [data["co_a"].id, data["co_b"].id])
+
+    async def test_wishlists_sub_brand_scoping_rls(self, setup_database):
+        """Sub-brand A1 context cannot see A2 wishlist entries."""
+        admin_factory = setup_database["admin_factory"]
+        app_factory = setup_database["app_factory"]
+
+        async with admin_factory() as seed:
+            data = await _create_two_companies(seed)
+            wls = await self._create_users_products_and_wishlists(seed, data)
+            await seed.commit()
+
+        try:
+            co_a_id = str(data["co_a"].id)
+            a1_id = str(data["brand_a1"].id)
+            async with app_factory() as app_sess:
+                async with app_sess.begin():
+                    await _set_tenant_context(app_sess, co_a_id, a1_id)
+                    rows = (await app_sess.execute(select(Wishlist))).scalars().all()
+                    for w in rows:
+                        assert w.sub_brand_id == data["brand_a1"].id
+                    ids = {w.id for w in rows}
+                    assert wls["wl_a2"].id not in ids
+        finally:
+            async with admin_factory() as cleanup:
+                await _cleanup_companies(cleanup, [data["co_a"].id, data["co_b"].id])
+
+    async def test_wishlists_reel48_admin_bypass_rls(self, setup_database):
+        """Empty company_id sees wishlists across all companies."""
+        admin_factory = setup_database["admin_factory"]
+        app_factory = setup_database["app_factory"]
+
+        async with admin_factory() as seed:
+            data = await _create_two_companies(seed)
+            wls = await self._create_users_products_and_wishlists(seed, data)
+            await seed.commit()
+
+        try:
+            async with app_factory() as app_sess:
+                async with app_sess.begin():
+                    await _set_tenant_context(app_sess, None, None)
+                    rows = (await app_sess.execute(select(Wishlist))).scalars().all()
+                    company_ids = {w.company_id for w in rows}
                     assert data["co_a"].id in company_ids
                     assert data["co_b"].id in company_ids
         finally:
