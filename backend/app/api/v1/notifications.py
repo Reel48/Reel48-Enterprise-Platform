@@ -197,9 +197,9 @@ async def deactivate_notification(
         raise ForbiddenError("Admin role required")
 
     service = NotificationService(db)
-    notification = await service.deactivate_notification(notification_id, company_id)
 
-    # Sub-brand admins can only deactivate their own sub-brand's notifications
+    # Check sub-brand authorization BEFORE deactivating to prevent race condition
+    notification = await service.get_notification(notification_id, company_id)
     if (
         context.sub_brand_id is not None
         and notification.sub_brand_id is not None
@@ -207,4 +207,5 @@ async def deactivate_notification(
     ):
         raise ForbiddenError("Cannot deactivate notifications from another sub-brand")
 
+    notification = await service.deactivate_notification(notification_id, company_id)
     return ApiResponse(data=NotificationResponse.model_validate(notification))

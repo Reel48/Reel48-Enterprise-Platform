@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db_session, get_tenant_context, require_reel48_admin
@@ -15,12 +15,11 @@ router = APIRouter(prefix="/companies", tags=["companies"])
 
 @router.get("/", response_model=ApiListResponse[CompanyResponse])
 async def list_companies(
-    page: int = 1,
-    per_page: int = 20,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
     context: TenantContext = Depends(get_tenant_context),
     db: AsyncSession = Depends(get_db_session),
 ) -> ApiListResponse[CompanyResponse]:
-    per_page = min(per_page, 100)
     service = CompanyService(db)
     # reel48_admin sees all; others see only their own company
     companies, total = await service.list_companies(context.company_id, page, per_page)
