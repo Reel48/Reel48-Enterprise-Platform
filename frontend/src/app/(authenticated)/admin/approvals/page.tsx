@@ -32,14 +32,6 @@ import type { ApprovalRequest } from '@/types/approvals';
 // Helpers
 // ---------------------------------------------------------------------------
 
-function formatPrice(price: number | null): string {
-  if (price == null) return '—';
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  }).format(price);
-}
-
 function formatDate(dateString: string): string {
   return new Date(dateString).toLocaleDateString('en-US', {
     month: 'short',
@@ -141,19 +133,18 @@ function useRejectRequest() {
 // ---------------------------------------------------------------------------
 
 const pendingHeaders = [
-  { key: 'requestType', header: 'Type' },
-  { key: 'requesterName', header: 'Requester' },
-  { key: 'amount', header: 'Amount' },
+  { key: 'entityType', header: 'Type' },
+  { key: 'requestedBy', header: 'Requester' },
   { key: 'createdAt', header: 'Submitted' },
   { key: 'actions', header: '' },
 ];
 
 const historyHeaders = [
-  { key: 'requestType', header: 'Type' },
-  { key: 'requesterName', header: 'Requester' },
+  { key: 'entityType', header: 'Type' },
+  { key: 'requestedBy', header: 'Requester' },
   { key: 'status', header: 'Decision' },
-  { key: 'decisionByName', header: 'Decided By' },
-  { key: 'decisionAt', header: 'Date' },
+  { key: 'decidedBy', header: 'Decided By' },
+  { key: 'decidedAt', header: 'Date' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -196,19 +187,18 @@ export default function ApprovalsPage() {
 
   const pendingRows = pendingItems.map((item) => ({
     id: item.id,
-    requestType: item.requestType,
-    requesterName: item.requesterName,
-    amount: item.amount,
+    entityType: item.entityType,
+    requestedBy: item.requestedBy,
     createdAt: item.createdAt,
   }));
 
   const historyRows = historyItems.map((item) => ({
     id: item.id,
-    requestType: item.requestType,
-    requesterName: item.requesterName,
+    entityType: item.entityType,
+    requestedBy: item.requestedBy,
     status: item.status,
-    decisionByName: item.decisionByName ?? '—',
-    decisionAt: item.decisionAt ?? '',
+    decidedBy: item.decidedBy ?? '—',
+    decidedAt: item.decidedAt ?? '',
   }));
 
   return (
@@ -278,19 +268,12 @@ export default function ApprovalsPage() {
                           return (
                             <TableRow key={String(rowKey)} {...rowProps}>
                               {row.cells.map((cell) => {
-                                if (cell.info.header === 'requestType') {
+                                if (cell.info.header === 'entityType') {
                                   return (
                                     <TableCell key={cell.id}>
                                       <Tag type="blue" size="sm">
                                         {requestTypeLabel(cell.value as string)}
                                       </Tag>
-                                    </TableCell>
-                                  );
-                                }
-                                if (cell.info.header === 'amount') {
-                                  return (
-                                    <TableCell key={cell.id}>
-                                      {formatPrice(cell.value as number | null)}
                                     </TableCell>
                                   );
                                 }
@@ -405,7 +388,7 @@ export default function ApprovalsPage() {
                           return (
                             <TableRow key={String(rowKey)} {...rowProps}>
                               {row.cells.map((cell) => {
-                                if (cell.info.header === 'requestType') {
+                                if (cell.info.header === 'entityType') {
                                   return (
                                     <TableCell key={cell.id}>
                                       <Tag type="blue" size="sm">
@@ -423,7 +406,7 @@ export default function ApprovalsPage() {
                                     </TableCell>
                                   );
                                 }
-                                if (cell.info.header === 'decisionAt') {
+                                if (cell.info.header === 'decidedAt') {
                                   return (
                                     <TableCell key={cell.id}>
                                       {(cell.value as string) ? formatDate(cell.value as string) : '—'}

@@ -154,7 +154,7 @@ function useInvoiceAction(action: string) {
 
 const tableHeaders = [
   { key: 'invoiceNumber', header: 'Invoice #' },
-  { key: 'companyName', header: 'Company' },
+  { key: 'companyId', header: 'Company' },
   { key: 'billingFlow', header: 'Flow' },
   { key: 'status', header: 'Status' },
   { key: 'totalAmount', header: 'Amount' },
@@ -190,7 +190,7 @@ export default function PlatformInvoicesPage() {
   const rows = invoices.map((inv) => ({
     id: inv.id,
     invoiceNumber: inv.invoiceNumber ?? 'Draft',
-    companyName: inv.companyName ?? '—',
+    companyId: inv.companyId ?? '—',
     billingFlow: inv.billingFlow,
     status: inv.status,
     totalAmount: inv.totalAmount,

@@ -30,6 +30,73 @@
 
 ---
 
+## 2026-04-10 — Frontend-Backend Field Name Audit & Fix (TRIGGER 3)
+
+**Type:** Reactive update (Trigger 3) — multiple frontend pages used field names
+that did not match backend Pydantic response schemas.
+**Session:** Systematic audit of all frontend TypeScript types and page files against
+backend schemas to eliminate runtime errors (403, 404, 422) and TypeScript compile errors.
+
+### Root Cause
+Frontend type definitions were authored speculatively during page creation without
+cross-referencing the actual backend Pydantic response schemas. The API client's
+`deepTransformKeys` converts snake_case→camelCase automatically, but the frontend
+types assumed field names that didn't exist in the backend (e.g., `itemCount` instead
+of `totalItems`, `requestType` instead of `entityType`, `profilePhotoS3Key` instead
+of `profilePhotoUrl`).
+
+### Changes Made
+
+- **7 type definition files rewritten** to exactly match backend schemas:
+  - `types/orders.ts` — removed `itemCount`, renamed `totalPrice`→`lineTotal`, added shipping/cancel fields
+  - `types/bulk-orders.ts` — `name`→`title`, `itemCount`→`totalItems`, `createdById`→`createdBy`, `lineItems`→`items`
+  - `types/profiles.ts` — removed `fullName`/`email` (not in backend profile), `profilePhotoS3Key`→`profilePhotoUrl`, fixed `SHIRT_SIZES` (removed 4XL/5XL)
+  - `types/invoices.ts` — `createdById`→`createdBy`, removed `companyName`, added missing fields
+  - `types/catalogs.ts` — removed `productCount`/`companyName`, added `slug`/`approvedBy`/`createdBy`/`deletedAt`
+  - `types/approvals.ts` — complete rewrite (all field names were wrong)
+  - `types/companies.ts` — removed `stripeCustomerId`
+
+- **10 page files fixed** to use correct field names:
+  - `orders/page.tsx` — `itemCount`→`subtotal` column with `formatPrice` renderer
+  - `orders/[id]/page.tsx` — `OrderWithItems` import, `lineItems.length`, `lineTotal`
+  - `bulk-orders/page.tsx` — `title`, `totalItems`, `createdBy`
+  - `bulk-orders/[id]/page.tsx` — same plus `items` instead of `lineItems`
+  - `profile/page.tsx` — `fullName`/`email` sourced from `useAuth()` (read-only), `profilePhotoUrl`
+  - `admin/approvals/page.tsx` — `entityType`, `requestedBy`, removed `amount` column, `decidedBy`/`decidedAt`
+  - `catalog/page.tsx` — removed `productCount` reference
+  - `platform/companies/[id]/page.tsx` — `stripeCustomerId`→`slug`
+  - `platform/catalogs/page.tsx` — removed `companyName`/`productCount`
+  - `platform/invoices/page.tsx` + `[id]/page.tsx` — `companyName`→`companyId`
+
+- **Reason:** Runtime errors (422 from unknown fields, undefined property access) and TypeScript compile errors
+- **Impact:** All 30+ frontend pages now use field names that exactly match backend API responses; `tsc --noEmit` passes with 0 errors
+
+### Session Review
+- **New pattern?** Yes — when profile data doesn't include user identity fields (`fullName`, `email`), source them from `useAuth()` context instead. This is because the backend Profile model is separate from the User model.
+- **Pattern violated?** Yes — the original page builds created type definitions without verifying against backend schemas. This violated the implicit principle of "types must match the API contract."
+- **New decision?** No
+- **Missing guidance?** Yes — the harness had no explicit rule requiring frontend type definitions to be verified against backend Pydantic schemas. Added note below.
+- **Reusable task?** Yes — the audit methodology (compare every backend schema file against every frontend type file) could be a prompt template for future use.
+
+### Harness Gap Identified
+**Gap:** No rule explicitly requires that frontend TypeScript types match backend Pydantic
+response schemas field-by-field. The API naming convention section in `frontend/CLAUDE.md`
+mentions snake_case→camelCase transformation but doesn't mandate verifying field names
+against the actual backend schema files.
+
+**Recommendation:** When building frontend pages that consume API data, always read the
+corresponding backend schema file (`backend/app/schemas/{module}.py`) and verify that
+every field in the frontend TypeScript interface maps to a real field in the Pydantic
+response model (after camelCase transformation).
+
+### Harness Health Metrics
+- **Mistakes caught:** 35+ field name mismatches across 7 type files and 10 page files
+- **Harness gaps:** 1 (missing schema verification rule)
+- **Rules added:** 0 (recommendation noted above; formal rule addition deferred)
+- **First-attempt acceptance rate:** TypeScript passed with 0 errors after all fixes applied
+
+---
+
 ## 2026-04-10 — Build Remaining 9 Frontend Pages (TRIGGER 1)
 
 **Type:** End-of-session self-audit (Trigger 1)

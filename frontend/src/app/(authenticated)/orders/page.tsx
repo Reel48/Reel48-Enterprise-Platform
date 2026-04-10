@@ -132,7 +132,7 @@ const headers = [
   { key: 'orderNumber', header: 'Order #' },
   { key: 'status', header: 'Status' },
   { key: 'totalAmount', header: 'Amount' },
-  { key: 'itemCount', header: 'Items' },
+  { key: 'subtotal', header: 'Subtotal' },
   { key: 'createdAt', header: 'Date' },
   { key: 'actions', header: '' },
 ];
@@ -161,7 +161,7 @@ export default function OrdersPage() {
     orderNumber: order.orderNumber,
     status: order.status,
     totalAmount: order.totalAmount,
-    itemCount: order.itemCount,
+    subtotal: order.subtotal,
     createdAt: order.createdAt,
   }));
 
@@ -258,7 +258,7 @@ export default function OrdersPage() {
                               </TableCell>
                             );
                           }
-                          if (cell.info.header === 'totalAmount') {
+                          if (cell.info.header === 'subtotal' || cell.info.header === 'totalAmount') {
                             return (
                               <TableCell key={cell.id}>
                                 {formatPrice(cell.value as number)}

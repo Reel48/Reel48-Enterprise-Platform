@@ -36,7 +36,9 @@ export function Header() {
               <span className="text-charcoal-500">({roleLabel})</span>
             </span>
           )}
-          {user && <NotificationBell />}
+          {user && user.tenantContext.role !== 'reel48_admin' && (
+            <NotificationBell />
+          )}
           <HeaderGlobalAction
             aria-label="User menu"
             tooltipAlignment="end"

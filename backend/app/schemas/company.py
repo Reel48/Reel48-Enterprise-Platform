@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict
 
 class CompanyCreate(BaseModel):
     name: str
-    slug: str
+    slug: str | None = None  # Auto-generated from name if not provided
 
 
 class CompanyUpdate(BaseModel):

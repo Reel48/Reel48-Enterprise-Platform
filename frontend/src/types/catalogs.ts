@@ -3,7 +3,8 @@ export type CatalogStatus =
   | 'submitted'
   | 'approved'
   | 'active'
-  | 'closed';
+  | 'closed'
+  | 'archived';
 
 export type PaymentModel = 'self_service' | 'invoice_after_close';
 
@@ -19,16 +20,19 @@ export interface CatalogProduct {
 
 export interface Catalog {
   id: string;
+  companyId: string;
+  subBrandId: string | null;
   name: string;
   description: string | null;
-  status: CatalogStatus;
+  slug: string;
   paymentModel: PaymentModel;
-  companyId: string;
-  companyName?: string;
-  subBrandId: string | null;
-  productCount: number;
+  status: CatalogStatus;
   buyingWindowOpensAt: string | null;
   buyingWindowClosesAt: string | null;
+  approvedBy: string | null;
+  approvedAt: string | null;
+  createdBy: string;
+  deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }

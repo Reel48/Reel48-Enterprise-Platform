@@ -103,10 +103,9 @@ function useCatalogAction(action: string) {
 
 const tableHeaders = [
   { key: 'name', header: 'Catalog Name' },
-  { key: 'companyName', header: 'Company' },
+  { key: 'companyId', header: 'Company' },
   { key: 'status', header: 'Status' },
   { key: 'paymentModel', header: 'Payment Model' },
-  { key: 'productCount', header: 'Products' },
   { key: 'createdAt', header: 'Created' },
   { key: 'actions', header: '' },
 ];
@@ -133,10 +132,9 @@ export default function PlatformCatalogsPage() {
   const rows = catalogs.map((c) => ({
     id: c.id,
     name: c.name,
-    companyName: c.companyName ?? '—',
+    companyId: c.companyId ?? '—',
     status: c.status,
     paymentModel: c.paymentModel === 'self_service' ? 'Self-Service' : 'Invoice After Close',
-    productCount: c.productCount,
     createdAt: c.createdAt,
   }));
 

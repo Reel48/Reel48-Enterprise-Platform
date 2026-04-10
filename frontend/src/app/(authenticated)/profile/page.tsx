@@ -12,6 +12,7 @@ import {
 import { Save, TrashCan, Upload } from '@carbon/react/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
+import { useAuth } from '@/lib/auth/hooks';
 import { api } from '@/lib/api/client';
 import { useFileUpload } from '@/hooks/useStorage';
 import { S3Image } from '@/components/ui/S3Image';
@@ -87,6 +88,7 @@ function toDropdownItem(value: string) {
 // ---------------------------------------------------------------------------
 
 export default function ProfilePage() {
+  const { user } = useAuth();
   const { data: profile, isLoading, isError } = useMyProfile();
   const updateProfile = useUpdateProfile();
   const deletePhoto = useDeleteProfilePhoto();
@@ -96,7 +98,6 @@ export default function ProfilePage() {
   const [toast, setToast] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
 
   // Form state — initialized from profile
-  const [fullName, setFullName] = useState('');
   const [department, setDepartment] = useState('');
   const [jobTitle, setJobTitle] = useState('');
   const [shirtSize, setShirtSize] = useState('');
@@ -111,7 +112,6 @@ export default function ProfilePage() {
 
   // Sync form state from profile data on first load
   if (profile && !initialized) {
-    setFullName(profile.fullName ?? '');
     setDepartment(profile.department ?? '');
     setJobTitle(profile.jobTitle ?? '');
     setShirtSize(profile.shirtSize ?? '');
@@ -128,7 +128,6 @@ export default function ProfilePage() {
   const handleSave = () => {
     updateProfile.mutate(
       {
-        fullName,
         department: department || null,
         jobTitle: jobTitle || null,
         shirtSize: shirtSize || null,
@@ -233,7 +232,7 @@ export default function ProfilePage() {
         <div className="flex items-center gap-6">
           <div className="flex-shrink-0 rounded-full overflow-hidden">
             <S3Image
-              s3Key={profile.profilePhotoS3Key}
+              s3Key={profile.profilePhotoUrl}
               alt="Profile photo"
               width={96}
               height={96}
@@ -258,7 +257,7 @@ export default function ProfilePage() {
                 className="hidden"
               />
             </label>
-            {profile.profilePhotoS3Key && (
+            {profile.profilePhotoUrl && (
               <Button
                 kind="danger--ghost"
                 size="sm"
@@ -282,13 +281,14 @@ export default function ProfilePage() {
           <TextInput
             id="fullName"
             labelText="Full Name"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
+            value={user?.fullName ?? ''}
+            readOnly
+            disabled
           />
           <TextInput
             id="email"
             labelText="Email"
-            value={profile.email}
+            value={user?.email ?? ''}
             readOnly
             disabled
           />

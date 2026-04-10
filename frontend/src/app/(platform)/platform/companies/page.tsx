@@ -72,7 +72,7 @@ function useCompanies(page: number, perPage: number, search: string, status: str
 function useCreateCompany() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: { name: string; contactEmail?: string; contactPhone?: string }) => {
+    mutationFn: async (data: { name: string }) => {
       const res = await api.post<Company>('/api/v1/platform/companies/', data);
       return res.data;
     },
@@ -100,9 +100,8 @@ function useDeactivateCompany() {
 
 const tableHeaders = [
   { key: 'name', header: 'Company Name' },
+  { key: 'slug', header: 'Slug' },
   { key: 'isActive', header: 'Status' },
-  { key: 'subBrandCount', header: 'Sub-Brands' },
-  { key: 'contactEmail', header: 'Contact' },
   { key: 'createdAt', header: 'Created' },
   { key: 'actions', header: '' },
 ];
@@ -119,8 +118,6 @@ export default function PlatformCompaniesPage() {
 
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [newName, setNewName] = useState('');
-  const [newEmail, setNewEmail] = useState('');
-  const [newPhone, setNewPhone] = useState('');
   const [toast, setToast] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
 
   const { data, isLoading, isError } = useCompanies(page, perPage, search, statusFilter);
@@ -133,26 +130,19 @@ export default function PlatformCompaniesPage() {
   const rows = companies.map((c) => ({
     id: c.id,
     name: c.name,
+    slug: c.slug,
     isActive: c.isActive,
-    subBrandCount: c.subBrandCount ?? 0,
-    contactEmail: c.contactEmail ?? '—',
     createdAt: c.createdAt,
   }));
 
   const handleCreate = () => {
     if (!newName.trim()) return;
     createCompany.mutate(
-      {
-        name: newName,
-        contactEmail: newEmail || undefined,
-        contactPhone: newPhone || undefined,
-      },
+      { name: newName },
       {
         onSuccess: () => {
           setCreateModalOpen(false);
           setNewName('');
-          setNewEmail('');
-          setNewPhone('');
           setToast({ kind: 'success', message: 'Company created successfully' });
           setTimeout(() => setToast(null), 3000);
         },
@@ -331,8 +321,6 @@ export default function PlatformCompaniesPage() {
         onRequestClose={() => {
           setCreateModalOpen(false);
           setNewName('');
-          setNewEmail('');
-          setNewPhone('');
         }}
         primaryButtonDisabled={!newName.trim() || createCompany.isPending}
       >
@@ -343,18 +331,6 @@ export default function PlatformCompaniesPage() {
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             required
-          />
-          <TextInput
-            id="company-email"
-            labelText="Contact Email"
-            value={newEmail}
-            onChange={(e) => setNewEmail(e.target.value)}
-          />
-          <TextInput
-            id="company-phone"
-            labelText="Contact Phone"
-            value={newPhone}
-            onChange={(e) => setNewPhone(e.target.value)}
           />
         </div>
       </Modal>

@@ -1,10 +1,11 @@
 export interface Profile {
   id: string;
+  companyId: string;
+  subBrandId: string | null;
   userId: string;
-  fullName: string;
-  email: string;
   department: string | null;
   jobTitle: string | null;
+  location: string | null;
   shirtSize: string | null;
   pantSize: string | null;
   shoeSize: string | null;
@@ -13,13 +14,15 @@ export interface Profile {
   deliveryCity: string | null;
   deliveryState: string | null;
   deliveryZip: string | null;
-  profilePhotoS3Key: string | null;
+  deliveryCountry: string | null;
+  notes: string | null;
+  profilePhotoUrl: string | null;
   onboardingComplete: boolean;
   createdAt: string;
   updatedAt: string;
 }
 
-export const SHIRT_SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL'] as const;
+export const SHIRT_SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL'] as const;
 
 export const PANT_SIZES = [
   '28', '29', '30', '31', '32', '33', '34', '36', '38', '40', '42', '44',

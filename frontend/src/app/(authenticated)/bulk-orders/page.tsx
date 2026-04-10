@@ -148,11 +148,11 @@ function useCancelBulkOrder() {
 // ---------------------------------------------------------------------------
 
 const headers = [
-  { key: 'name', header: 'Name' },
+  { key: 'title', header: 'Title' },
   { key: 'status', header: 'Status' },
-  { key: 'itemCount', header: 'Items' },
+  { key: 'totalItems', header: 'Items' },
   { key: 'totalAmount', header: 'Amount' },
-  { key: 'createdByName', header: 'Created By' },
+  { key: 'createdBy', header: 'Created By' },
   { key: 'createdAt', header: 'Date' },
   { key: 'actions', header: '' },
 ];
@@ -180,11 +180,11 @@ export default function BulkOrdersPage() {
 
   const rows = bulkOrders.map((bo) => ({
     id: bo.id,
-    name: bo.name ?? `Bulk Order`,
+    title: bo.title ?? 'Bulk Order',
     status: bo.status,
-    itemCount: bo.itemCount,
+    totalItems: bo.totalItems,
     totalAmount: bo.totalAmount,
-    createdByName: bo.createdByName ?? '—',
+    createdBy: bo.createdBy ?? '—',
     createdAt: bo.createdAt,
   }));
 

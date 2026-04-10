@@ -1,3 +1,4 @@
+import re
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -7,6 +8,14 @@ from app.core.exceptions import ConflictError, NotFoundError
 from app.models.company import Company
 from app.models.sub_brand import SubBrand
 from app.schemas.company import CompanyCreate, CompanyUpdate
+
+
+def _slugify(name: str) -> str:
+    """Generate a URL-safe slug from a name."""
+    slug = name.lower()
+    slug = re.sub(r"[^a-z0-9]+", "-", slug)
+    slug = slug.strip("-")
+    return slug or "company"
 
 
 class CompanyService:
@@ -52,16 +61,26 @@ class CompanyService:
             raise NotFoundError("Company", str(company_id))
         return company
 
+    async def _resolve_unique_slug(self, base_slug: str) -> str:
+        """Return a unique slug, appending -2, -3, etc. on collision."""
+        slug = base_slug
+        suffix = 1
+        while True:
+            existing = await self.db.execute(
+                select(Company).where(Company.slug == slug)
+            )
+            if existing.scalar_one_or_none() is None:
+                return slug
+            suffix += 1
+            slug = f"{base_slug}-{suffix}"
+
     async def create_company(self, data: CompanyCreate) -> Company:
-        # Check slug uniqueness
-        existing = await self.db.execute(
-            select(Company).where(Company.slug == data.slug)
-        )
-        if existing.scalar_one_or_none() is not None:
-            raise ConflictError(f"Company with slug '{data.slug}' already exists")
+        # Auto-generate slug from name if not provided
+        base_slug = data.slug if data.slug else _slugify(data.name)
+        slug = await self._resolve_unique_slug(base_slug)
 
         # Create company
-        company = Company(name=data.name, slug=data.slug)
+        company = Company(name=data.name, slug=slug)
         self.db.add(company)
         await self.db.flush()
 

@@ -13,7 +13,7 @@ import { GroupResource } from '@carbon/react/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api/client';
-import type { BulkOrder } from '@/types/bulk-orders';
+import type { BulkOrderWithItems } from '@/types/bulk-orders';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -55,7 +55,7 @@ function useBulkOrder(id: string) {
   return useQuery({
     queryKey: ['bulk-order', id],
     queryFn: async () => {
-      const res = await api.get<BulkOrder>(`/api/v1/bulk_orders/${id}`);
+      const res = await api.get<BulkOrderWithItems>(`/api/v1/bulk_orders/${id}`);
       return res.data;
     },
   });
@@ -109,7 +109,7 @@ export default function BulkOrderDetailPage() {
       <Breadcrumb noTrailingSlash>
         <BreadcrumbItem href="/bulk-orders">Bulk Orders</BreadcrumbItem>
         <BreadcrumbItem isCurrentPage>
-          {bulkOrder.name ?? 'Bulk Order'}
+          {bulkOrder.title ?? 'Bulk Order'}
         </BreadcrumbItem>
       </Breadcrumb>
 
@@ -118,7 +118,7 @@ export default function BulkOrderDetailPage() {
         <div className="flex items-center gap-3">
           <GroupResource size={24} className="text-interactive" />
           <h1 className="text-2xl font-semibold text-text-primary">
-            {bulkOrder.name ?? 'Bulk Order'}
+            {bulkOrder.title ?? 'Bulk Order'}
           </h1>
           <Tag type={statusColor(bulkOrder.status)} size="sm">
             {bulkOrder.status}
@@ -169,13 +169,13 @@ export default function BulkOrderDetailPage() {
         <Tile>
           <p className="text-xs text-text-secondary mb-1">Items</p>
           <p className="text-xl font-semibold text-text-primary">
-            {bulkOrder.itemCount}
+            {bulkOrder.totalItems}
           </p>
         </Tile>
         <Tile>
           <p className="text-xs text-text-secondary mb-1">Created By</p>
           <p className="text-xl font-semibold text-text-primary">
-            {bulkOrder.createdByName ?? '—'}
+            {bulkOrder.createdBy ?? '—'}
           </p>
         </Tile>
         <Tile>
@@ -187,13 +187,13 @@ export default function BulkOrderDetailPage() {
       </div>
 
       {/* Line Items */}
-      {bulkOrder.lineItems && bulkOrder.lineItems.length > 0 && (
+      {bulkOrder.items && bulkOrder.items.length > 0 && (
         <Tile>
           <h2 className="text-base font-semibold text-text-primary mb-4">
             Line Items
           </h2>
           <div className="flex flex-col gap-3">
-            {bulkOrder.lineItems.map((item) => (
+            {bulkOrder.items.map((item) => (
               <div
                 key={item.id}
                 className="flex items-center justify-between py-2 border-b border-border-subtle-01 last:border-0"
@@ -209,7 +209,7 @@ export default function BulkOrderDetailPage() {
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-medium text-text-primary">
-                    {formatPrice(item.totalPrice)}
+                    {formatPrice(item.lineTotal)}
                   </p>
                   <p className="text-xs text-text-secondary">
                     {item.quantity} × {formatPrice(item.unitPrice)}

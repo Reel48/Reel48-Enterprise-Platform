@@ -13,7 +13,7 @@ import { ShoppingCart } from '@carbon/react/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api/client';
-import type { Order } from '@/types/orders';
+import type { OrderWithItems } from '@/types/orders';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -55,7 +55,7 @@ function useOrder(orderId: string) {
   return useQuery({
     queryKey: ['order', orderId],
     queryFn: async () => {
-      const res = await api.get<Order>(`/api/v1/orders/${orderId}`);
+      const res = await api.get<OrderWithItems>(`/api/v1/orders/${orderId}`);
       return res.data;
     },
   });
@@ -143,7 +143,7 @@ export default function OrderDetailPage() {
         <Tile>
           <p className="text-xs text-text-secondary mb-1">Items</p>
           <p className="text-xl font-semibold text-text-primary">
-            {order.itemCount}
+            {order.lineItems?.length ?? 0}
           </p>
         </Tile>
         <Tile>
@@ -177,7 +177,7 @@ export default function OrderDetailPage() {
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-medium text-text-primary">
-                    {formatPrice(item.totalPrice)}
+                    {formatPrice(item.lineTotal)}
                   </p>
                   <p className="text-xs text-text-secondary">
                     {item.quantity} × {formatPrice(item.unitPrice)}

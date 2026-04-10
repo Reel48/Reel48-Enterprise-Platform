@@ -156,7 +156,7 @@ export default function CatalogPage() {
                 )}
                 <div className="flex items-center gap-2 mt-2">
                   <Tag type="teal" size="sm">
-                    {catalog.productCount} products
+                    {catalog.paymentModel === 'self_service' ? 'Self-Service' : 'Invoice'}
                   </Tag>
                   {catalog.paymentModel === 'invoice_after_close' && catalog.buyingWindowClosesAt && (
                     <Tag type="purple" size="sm">

@@ -111,15 +111,11 @@ export default function CompanyDetailPage() {
   const deactivateCompany = useDeactivateCompany();
 
   const [editName, setEditName] = useState('');
-  const [editEmail, setEditEmail] = useState('');
-  const [editPhone, setEditPhone] = useState('');
   const [initialized, setInitialized] = useState(false);
   const [toast, setToast] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
 
   if (company && !initialized) {
     setEditName(company.name);
-    setEditEmail(company.contactEmail ?? '');
-    setEditPhone(company.contactPhone ?? '');
     setInitialized(true);
   }
 
@@ -148,8 +144,6 @@ export default function CompanyDetailPage() {
         id: params.id,
         data: {
           name: editName,
-          contactEmail: editEmail || null,
-          contactPhone: editPhone || null,
         },
       },
       {
@@ -226,13 +220,13 @@ export default function CompanyDetailPage() {
         <Tile>
           <p className="text-xs text-text-secondary mb-1">Sub-Brands</p>
           <p className="text-sm font-semibold text-text-primary">
-            {subBrands?.length ?? company.subBrandCount ?? 0}
+            {subBrands?.length ?? 0}
           </p>
         </Tile>
         <Tile>
-          <p className="text-xs text-text-secondary mb-1">Stripe Customer</p>
+          <p className="text-xs text-text-secondary mb-1">Slug</p>
           <p className="text-sm font-semibold text-text-primary">
-            {company.stripeCustomerId ?? 'Not connected'}
+            {company.slug}
           </p>
         </Tile>
       </div>
@@ -250,16 +244,11 @@ export default function CompanyDetailPage() {
             onChange={(e) => setEditName(e.target.value)}
           />
           <TextInput
-            id="contact-email"
-            labelText="Contact Email"
-            value={editEmail}
-            onChange={(e) => setEditEmail(e.target.value)}
-          />
-          <TextInput
-            id="contact-phone"
-            labelText="Contact Phone"
-            value={editPhone}
-            onChange={(e) => setEditPhone(e.target.value)}
+            id="company-slug"
+            labelText="Slug"
+            value={company.slug}
+            readOnly
+            disabled
           />
         </div>
       </Tile>

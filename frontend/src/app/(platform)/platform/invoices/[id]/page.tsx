@@ -212,7 +212,7 @@ export default function InvoiceDetailPage() {
         <Tile>
           <p className="text-xs text-text-secondary mb-1">Company</p>
           <p className="text-sm font-semibold text-text-primary">
-            {invoice.companyName ?? invoice.companyId}
+            {invoice.companyId}
           </p>
         </Tile>
         <Tile>
