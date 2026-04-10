@@ -31,9 +31,9 @@ export function Header() {
 
         <HeaderGlobalBar>
           {user && (
-            <span className="flex items-center gap-2 px-4 text-sm text-text-inverse">
+            <span className="flex items-center gap-2 px-4 text-sm" style={{ color: '#ffffff' }}>
               <span>{user.fullName}</span>
-              <span className="opacity-70 text-text-inverse">({roleLabel})</span>
+              <span style={{ color: 'rgba(255, 255, 255, 0.7)' }}>({roleLabel})</span>
             </span>
           )}
           {user && user.tenantContext.role !== 'reel48_admin' && (
