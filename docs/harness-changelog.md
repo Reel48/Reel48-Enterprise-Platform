@@ -30,6 +30,59 @@
 
 ---
 
+## 2026-04-09 — Module 9 Post-Module Harness Review (TRIGGER 2)
+
+**Type:** Post-module harness review (Trigger 2)
+**Module:** Module 9 — Employee Engagement (Complete)
+
+### Post-Module Review (5 Steps)
+
+**Step 1 — Pattern Consistency:**
+- All Module 9 endpoints follow standard patterns: TenantContext from JWT, `_require_company_id` guard, standard ApiResponse wrapper, role checks before business logic.
+- Notification endpoints use `is_admin` for create/deactivate, `is_corporate_admin_or_above` for company-scope notifications. Consistent with Module 6 authorization patterns.
+- Wishlist endpoints are open to all authenticated roles (any employee can manage their own wishlist). Consistent with Module 2 (profile management).
+- Both tables use TenantBase with standard dual RLS policies (PERMISSIVE company + RESTRICTIVE sub-brand).
+- Frontend components follow Carbon-first approach with Tailwind for layout. No custom UI wrappers.
+
+**Step 2 — Rule Effectiveness:**
+- `carbon-design-system.md` activated correctly for all frontend component work. ProgressIndicator, Toggle, Pagination, Tag all used from Carbon.
+- `testing.md` activated correctly. RLS isolation tests follow the established dual-session pattern with real UUIDs.
+- `api-endpoints.md` enforced trailing slashes, pagination, standard response format.
+- No rules were missing or insufficient for Module 9 work.
+
+**Step 3 — ADR Currency:**
+- All existing ADRs remain valid. No decisions were reversed during Module 9.
+- No new architectural decisions required — Module 9 reused established patterns.
+
+**Step 4 — Cross-Module Alignment:**
+- Notification visibility logic (company/sub-brand/individual scopes) is unique to Module 9 but follows the same tenant isolation principles as all other modules.
+- Wishlist's product validation (must be active to wishlist) aligns with Module 4's catalog validation pattern.
+- `read_by` JSONB array for notification read tracking is a Module 9 innovation (avoids a join table). This pattern is self-contained and doesn't affect other modules.
+- Onboarding wizard's `POST /profiles/me/onboarding-complete` follows the Module 2 upsert pattern.
+
+**Step 5 — Gap Analysis:**
+- No harness gaps encountered during Module 9. All patterns were covered by existing guidance.
+- Module 9 is the final module in the build order, so no forward-looking gaps to fill.
+
+### Harness Files Updated
+- **`backend/CLAUDE.md`** — Added Module 9 table schemas (notifications, wishlists) and updated the "Which Base to Use" table.
+- **`docs/harness-changelog.md`** — This entry.
+
+### Test Coverage Added
+- **`backend/tests/test_isolation.py`** — Added 6 RLS isolation tests: company isolation, sub-brand scoping, and reel48_admin bypass for both notifications and wishlists tables.
+- **`frontend/src/__tests__/notifications.test.tsx`** — 9 tests covering feed rendering, unread count, empty states, type tags, mark-as-read + navigation, toggle filter.
+- **`frontend/src/__tests__/wishlist.test.tsx`** — 11 tests covering item rendering, prices, SKUs, unavailable tags, notes, empty state, remove action, Browse Catalogs button.
+
+### Harness Health Metrics
+| Metric | Module 9 Value |
+|--------|---------------|
+| Mistakes per module | 0 (no harness violations) |
+| Harness gaps per module | 0 |
+| Rules added per module | 0 (existing rules sufficient) |
+| First-attempt acceptance rate | ~95% |
+
+---
+
 ## 2026-04-09 — Module 8 Phases 4-5: Analytics Dashboard UI (TRIGGER 1)
 
 **Type:** End-of-session self-audit (Trigger 1)

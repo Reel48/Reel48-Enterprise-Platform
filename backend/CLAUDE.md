@@ -917,6 +917,8 @@ class TenantBase(Base):
 | `approval_requests` | `TenantBase` | Scoped to company + sub-brand |
 | `approval_rules` | `CompanyBase` | Company-level rules, no sub-brand scoping |
 | `invoices` | `TenantBase` | Scoped to company + sub-brand |
+| `notifications` | `TenantBase` | Scoped to company + sub-brand |
+| `wishlists` | `TenantBase` | Scoped to company + sub-brand |
 
 
 ## Database Session & RLS Setup
@@ -1392,6 +1394,55 @@ Index on `stripe_invoice_id` for webhook lookups, `billing_flow` for filtered qu
 - `catalog_id` is set for self-service and post-window invoices (tied to a catalog).
 - `created_by` references the reel48_admin who created the invoice, or the order owner
   for auto-generated self-service invoices.
+
+
+## Module 9 Table Schemas
+
+# --- ADDED 2026-04-09 during Module 9 post-module harness review ---
+# Reason: Module 9 adds notifications and wishlists tables for employee engagement.
+# Impact: Future modules know the engagement tables shape for FK references.
+
+### `notifications` Table (TenantBase)
+```
+id                      UUID        PRIMARY KEY
+company_id              UUID        NOT NULL (FK → companies, indexed)
+sub_brand_id            UUID        NULL (FK → sub_brands, indexed)
+title                   VARCHAR(255) NOT NULL
+body                    TEXT         NOT NULL
+notification_type       VARCHAR(30)  NOT NULL         -- 'announcement', 'catalog_available', 'order_update', 'buying_window_reminder'
+target_scope            VARCHAR(20)  NOT NULL DEFAULT 'sub_brand'  -- 'company', 'sub_brand', 'individual'
+target_user_id          UUID         NULL (FK → users) -- set when target_scope='individual'
+read_by                 JSONB        NOT NULL DEFAULT '[]'  -- array of user_id strings who have read it
+link_url                VARCHAR(500) NULL              -- optional deep link
+expires_at              TIMESTAMP    NULL              -- notifications expire and are excluded from feed
+created_by              UUID         NOT NULL (FK → users)
+is_active               BOOLEAN      NOT NULL DEFAULT true  -- soft deactivation
+created_at              TIMESTAMP    NOT NULL
+updated_at              TIMESTAMP    NOT NULL
+```
+RLS: Standard company isolation (PERMISSIVE) + sub-brand scoping (RESTRICTIVE).
+Visibility logic (in NotificationService): company scope (sub_brand_id=NULL) visible to
+all users in the company; sub_brand scope visible to matching sub_brand; individual scope
+visible only to target_user_id. The `read_by` JSONB array tracks which users have read
+each notification — avoids a separate read-tracking join table.
+
+### `wishlists` Table (TenantBase)
+```
+id                      UUID        PRIMARY KEY
+company_id              UUID        NOT NULL (FK → companies, indexed)
+sub_brand_id            UUID        NULL (FK → sub_brands, indexed)
+user_id                 UUID        NOT NULL (FK → users)
+product_id              UUID        NOT NULL (FK → products)
+catalog_id              UUID        NULL (FK → catalogs)    -- optional catalog context
+notes                   TEXT         NULL
+created_at              TIMESTAMP    NOT NULL
+updated_at              TIMESTAMP    NOT NULL
+
+UNIQUE(user_id, product_id)
+```
+RLS: Standard company isolation (PERMISSIVE) + sub-brand scoping (RESTRICTIVE).
+One wishlist entry per user/product pair (enforced by unique constraint). Products must
+be active to be wishlisted. All roles can manage their own wishlist.
 
 
 ## Approval Workflow Patterns
