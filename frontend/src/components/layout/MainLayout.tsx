@@ -16,7 +16,16 @@ export function MainLayout({ children }: MainLayoutProps) {
       <Header />
       <Sidebar />
       <Theme theme="g10">
-        <main className="cds--content p-6">{children}</main>
+        <main
+          className="p-6"
+          style={{
+            marginLeft: '256px',
+            paddingTop: '48px',
+            minHeight: '100vh',
+          }}
+        >
+          {children}
+        </main>
       </Theme>
     </>
   );
