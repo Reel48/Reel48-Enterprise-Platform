@@ -451,6 +451,51 @@ matches the webhook payload's `data.object.id`. Create the invoice directly in t
 database (not via API) to isolate webhook logic from creation logic.
 
 
+## Frontend Chart Component Testing
+
+# --- ADDED 2026-04-09 after Module 8 Phase 6 ---
+# Reason: @carbon/charts-react uses ResizeObserver and SVG APIs that jsdom does
+# not implement. Tests fail with "ResizeObserver is not defined" or SVG baseVal errors.
+# Impact: Future frontend tests involving chart components apply the correct mocking strategy.
+
+`@carbon/charts-react` (LineChart, DonutChart, etc.) depends on browser APIs that
+jsdom does not provide. Two complementary strategies handle this:
+
+### 1. Global ResizeObserver Polyfill (in `src/__tests__/setup.ts`)
+Add a no-op polyfill for ResizeObserver. This prevents the "ResizeObserver is not
+defined" error across all tests:
+
+```typescript
+global.ResizeObserver = class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
+```
+
+### 2. vi.mock for Chart Components (in page-level test files)
+For page-level tests that render chart components (via `next/dynamic` or direct import),
+mock the entire `@carbon/charts-react` module to replace chart components with simple
+div placeholders:
+
+```typescript
+vi.mock('@carbon/charts-react', () => ({
+  LineChart: () => <div data-testid="mock-line-chart">Chart</div>,
+  DonutChart: () => <div data-testid="mock-donut-chart">Chart</div>,
+}));
+```
+
+**When to use which:**
+- **ResizeObserver polyfill alone:** Sufficient for unit tests of simple components
+  that don't render charts directly.
+- **vi.mock + polyfill:** Required for page-level integration tests that render
+  components importing from `@carbon/charts-react`. Even with the polyfill, SVG
+  rendering in jsdom causes additional errors that the mock prevents.
+
+**Note:** Components that load charts via `next/dynamic` with `ssr: false` may still
+need the vi.mock because dynamic imports resolve in the test environment.
+
+
 ## Common Mistakes to Avoid
 - ❌ Testing only the happy path
 - ❌ Skipping isolation tests ("RLS will handle it")
