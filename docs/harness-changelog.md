@@ -2533,3 +2533,54 @@ on approval.
 ### Test Results
 - 45 bulk order tests pass (29 from Phases 2–3 + 16 new Phase 4)
 - All Phase 4 tests green on first run
+
+
+---
+
+## 2026-04-09 — Module 9 Phase 4: Enhanced Employee Dashboard (Frontend)
+
+### Session Overview
+Built the enhanced employee dashboard frontend, transforming the stub dashboard into a
+personalized engagement hub with notification and wishlist integration.
+
+### What Was Built
+- **TypeScript types:** `engagement.ts` — notification and wishlist response types
+- **React Query hooks:** `useEngagement.ts` — 8 hooks for notifications (list, mark read,
+  mark all read, unread count) and wishlists (list, add, remove, check)
+- **NotificationBell component:** Header-integrated bell icon with unread count badge,
+  dropdown panel showing recent notifications with type tags and timestamps, mark-all-read
+  action, and click-to-navigate on notifications with `link_url`
+- **Notifications page:** Full-page feed with pagination, unread/all toggle, type icons,
+  empty state messaging
+- **Wishlist page:** Product card grid with image, price, SKU, availability badges,
+  remove button, and empty state with catalog browse CTA
+- **Enhanced Dashboard:** Complete rewrite with role-aware layout:
+  - Employee: welcome + profile completeness bar, 4 KPI cards (orders, catalogs, wishlist,
+    notifications), recent orders with status badges, unread notifications, wishlist highlights
+  - Manager/Admin: team overview cards (team orders, pending approvals, analytics link)
+    rendered above the employee dashboard
+- **Sidebar:** Added Notifications and Wishlist links for all roles
+- **Header:** Integrated NotificationBell component
+
+### End-of-Session Self-Audit
+1. **New pattern?** Yes — the dashboard uses a role-aware composition pattern where the
+   manager/admin view extends the employee view with additional cards. This pattern
+   (conditionally rendering extra sections based on role) is documented implicitly by the
+   code structure. No new harness rule needed — it follows the existing role-based
+   rendering guidance in frontend CLAUDE.md.
+2. **Existing pattern violated?** No — all components use `'use client'`, Carbon components
+   for UI elements, Tailwind for layout, `next/image` for images, and the existing API
+   client + React Query patterns.
+3. **New decision?** No — all decisions follow the established Module 8 analytics dashboard
+   patterns (hooks file, Carbon Tile/Tag components, KPI cards).
+4. **Missing guidance discovered?** No gaps encountered.
+5. **Prompt template needed?** No — the engagement UI patterns are standard.
+
+### Harness Files Updated
+- **`frontend/CLAUDE.md`:** Added `notifications/page.tsx` and `wishlist/page.tsx` to the
+  routing structure. Added `engagement/NotificationBell.tsx` to the component directory listing.
+- **`docs/harness-changelog.md`:** This entry.
+
+### Verification
+- TypeScript: `npx tsc --noEmit` — exit 0, no errors
+- ESLint: `npx next lint` — exit 0, no warnings or errors
