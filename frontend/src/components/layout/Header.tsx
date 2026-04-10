@@ -29,8 +29,8 @@ export function Header() {
           <Image
             src="/reel48-logo.svg"
             alt="Reel48+"
-            width={120}
-            height={32}
+            width={72}
+            height={19}
             priority
           />
         </a>
