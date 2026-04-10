@@ -779,6 +779,80 @@ def mock_stripe() -> MockStripeService:
     app.dependency_overrides.pop(get_stripe_service, None)
 
 
+# ---------------------------------------------------------------------------
+# Mock S3 service
+# ---------------------------------------------------------------------------
+class MockS3Service:
+    """Mock S3 service that records calls without hitting AWS."""
+
+    def __init__(self) -> None:
+        self.generated_upload_urls: list[dict] = []
+        self.generated_download_urls: list[dict] = []
+
+    def generate_upload_url(
+        self, company_id, sub_brand_slug, category, content_type, file_extension
+    ) -> tuple[str, str]:
+        from app.services.s3_service import _CATEGORY_RULES
+        from app.core.exceptions import ValidationError as AppValidationError
+
+        # Normalize extension
+        ext = file_extension.lower().strip()
+        if not ext.startswith("."):
+            ext = f".{ext}"
+
+        # Validate category
+        rules = _CATEGORY_RULES.get(category)
+        if rules is None:
+            raise AppValidationError(
+                f"Invalid category '{category}'. Must be one of: {', '.join(_CATEGORY_RULES.keys())}"
+            )
+
+        # Validate content type
+        if content_type not in rules["allowed_types"]:
+            raise AppValidationError(
+                f"Content type '{content_type}' is not allowed for category '{category}'. "
+                f"Allowed: {', '.join(sorted(rules['allowed_types']))}"
+            )
+
+        # Validate file extension
+        if ext not in rules["allowed_extensions"]:
+            raise AppValidationError(
+                f"File extension '{ext}' is not allowed for category '{category}'. "
+                f"Allowed: {', '.join(sorted(rules['allowed_extensions']))}"
+            )
+
+        s3_key = f"{company_id}/{sub_brand_slug}/{category}/test-{uuid4()}{ext}"
+        url = f"https://s3.amazonaws.com/reel48-assets/{s3_key}?presigned=true"
+        self.generated_upload_urls.append({
+            "company_id": str(company_id),
+            "sub_brand_slug": sub_brand_slug,
+            "category": category,
+            "content_type": content_type,
+            "s3_key": s3_key,
+        })
+        return url, s3_key
+
+    def generate_download_url(self, s3_key: str) -> str:
+        url = f"https://s3.amazonaws.com/reel48-assets/{s3_key}?presigned=true"
+        self.generated_download_urls.append({"s3_key": s3_key})
+        return url
+
+    def generate_shared_download_url(self, company_id, file_path) -> str:
+        s3_key = f"{company_id}/shared/{file_path}"
+        return f"https://s3.amazonaws.com/reel48-assets/{s3_key}?presigned=true"
+
+
+@pytest.fixture(autouse=True)
+def mock_s3() -> MockS3Service:
+    """Auto-mock S3Service for all tests. Override get_s3_service."""
+    from app.services.s3_service import get_s3_service
+
+    mock = MockS3Service()
+    app.dependency_overrides[get_s3_service] = lambda: mock
+    yield mock
+    app.dependency_overrides.pop(get_s3_service, None)
+
+
 @pytest.fixture(autouse=True)
 def no_rate_limit():
     """Disable rate limiting for all tests by default."""
