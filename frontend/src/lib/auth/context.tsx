@@ -66,9 +66,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
         payload,
       );
 
+      const companyName =
+        (payload['custom:company_name'] as string) ||
+        (tenantContext.role === 'reel48_admin' ? 'Reel48+' : '');
+
       setUser({
         email: (payload['email'] as string) || '',
         fullName: (payload['name'] as string) || (payload['email'] as string) || '',
+        companyName,
         tenantContext,
       });
       setAuthState('authenticated');

@@ -2,7 +2,6 @@
 
 import Image from 'next/image';
 import {
-  Header as CarbonHeader,
   HeaderGlobalAction,
   HeaderGlobalBar,
   OverflowMenu,
@@ -21,9 +20,14 @@ export function Header() {
 
   return (
     <Theme theme="g100">
-      <CarbonHeader
-        aria-label="Reel48+"
-        className="bg-charcoal-900"
+      <header
+        className="fixed top-0 flex items-center bg-charcoal-900"
+        style={{
+          left: '256px',
+          right: 0,
+          height: '48px',
+          zIndex: 8000,
+        }}
       >
         <a href="/dashboard" className="flex items-center px-4 h-full">
           <Image
@@ -34,6 +38,8 @@ export function Header() {
             priority
           />
         </a>
+
+        <div className="flex-1" />
 
         <HeaderGlobalBar>
           {user && (
@@ -64,7 +70,7 @@ export function Header() {
             </OverflowMenu>
           </HeaderGlobalAction>
         </HeaderGlobalBar>
-      </CarbonHeader>
+      </header>
     </Theme>
   );
 }

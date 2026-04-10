@@ -84,6 +84,7 @@ export function Sidebar() {
 
   const role = user?.tenantContext.role ?? 'employee';
   const navItems = navByRole[role];
+  const companyName = user?.companyName || '';
 
   return (
     <Theme theme="g10">
@@ -95,11 +96,28 @@ export function Sidebar() {
         style={{
           backgroundColor: '#ffffff',
           borderRight: '1px solid var(--cds-border-subtle-01)',
-          top: '48px',
-          height: 'calc(100vh - 48px)',
+          top: 0,
+          height: '100vh',
         }}
       >
-        <SideNavItems className="pt-4">
+        {/* Company name header area */}
+        <div
+          className="flex items-center px-4"
+          style={{
+            height: '48px',
+            borderBottom: '1px solid var(--cds-border-subtle-01)',
+          }}
+        >
+          <span
+            className="text-sm font-semibold truncate"
+            style={{ color: 'var(--cds-text-primary)' }}
+            title={companyName}
+          >
+            {companyName}
+          </span>
+        </div>
+
+        <SideNavItems className="pt-2">
           {navItems.map((item) => {
             const isActive = pathname === item.href;
             const Icon = item.icon;

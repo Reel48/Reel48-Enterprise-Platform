@@ -15,6 +15,7 @@ export interface TenantContext {
 export interface AuthUser {
   email: string;
   fullName: string;
+  companyName: string;
   tenantContext: TenantContext;
 }
 
