@@ -3,16 +3,21 @@
 import { useState } from 'react';
 import {
   Button,
+  Dropdown,
   InlineNotification,
+  Modal,
+  NumberInput,
   Pagination,
   Search,
   Tag,
   Tile,
+  ToastNotification,
 } from '@carbon/react';
 import { ArrowLeft, Catalog as CatalogIcon } from '@carbon/react/icons';
 import { useQuery } from '@tanstack/react-query';
 
 import { api } from '@/lib/api/client';
+import { useCart } from '@/lib/cart/CartContext';
 import { StatusTag } from '@/components/ui/StatusTag';
 import { ProductCard } from '@/components/features/catalog/ProductCard';
 import type { ProductCardProduct } from '@/components/features/catalog/ProductCard';
@@ -79,6 +84,13 @@ function formatDate(dateString: string | null): string {
   });
 }
 
+function formatPrice(price: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(price);
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -88,6 +100,17 @@ export default function CatalogPage() {
   const [productPage, setProductPage] = useState(1);
   const [productPerPage, setProductPerPage] = useState(20);
   const [search, setSearch] = useState('');
+
+  // Cart modal state
+  const [modalProduct, setModalProduct] = useState<ProductCardProduct | null>(null);
+  const [modalSize, setModalSize] = useState<string | null>(null);
+  const [modalDecoration, setModalDecoration] = useState<string | null>(null);
+  const [modalQuantity, setModalQuantity] = useState(1);
+  const [toast, setToast] = useState<string | null>(null);
+  const [showCatalogWarning, setShowCatalogWarning] = useState(false);
+  const [pendingProduct, setPendingProduct] = useState<ProductCardProduct | null>(null);
+
+  const cart = useCart();
 
   const { data: catalogs, isLoading: catalogsLoading, isError: catalogsError } = useActiveCatalogs();
   const { data: productsData, isLoading: productsLoading } = useCatalogProducts(
@@ -100,6 +123,54 @@ export default function CatalogPage() {
   const selectedCatalog = catalogs?.find((c) => c.id === selectedCatalogId);
   const products = productsData?.data ?? [];
   const productTotal = productsData?.total ?? 0;
+
+  // -------------------------------------------------------------------------
+  // Cart modal handlers
+  // -------------------------------------------------------------------------
+
+  const openCartModal = (product: ProductCardProduct) => {
+    if (selectedCatalogId && cart.catalogMismatch(selectedCatalogId)) {
+      setPendingProduct(product);
+      setShowCatalogWarning(true);
+      return;
+    }
+    setModalProduct(product);
+    setModalSize(product.sizes && product.sizes.length > 0 ? product.sizes[0] : null);
+    setModalDecoration(
+      product.decorationOptions && product.decorationOptions.length > 0
+        ? product.decorationOptions[0]
+        : null,
+    );
+    setModalQuantity(1);
+  };
+
+  const handleCatalogWarningConfirm = () => {
+    cart.clearCart();
+    setShowCatalogWarning(false);
+    if (pendingProduct) {
+      openCartModal(pendingProduct);
+      setPendingProduct(null);
+    }
+  };
+
+  const handleAddToCart = () => {
+    if (!modalProduct || !selectedCatalogId || !selectedCatalog) return;
+
+    cart.addItem(selectedCatalogId, selectedCatalog.name, {
+      productId: modalProduct.id,
+      productName: modalProduct.name,
+      sku: modalProduct.sku,
+      unitPrice: modalProduct.unitPrice,
+      quantity: modalQuantity,
+      size: modalSize,
+      decoration: modalDecoration,
+      imageUrl: modalProduct.imageUrls?.[0] ?? null,
+    });
+
+    setModalProduct(null);
+    setToast(`${modalProduct.name} added to cart`);
+    setTimeout(() => setToast(null), 3000);
+  };
 
   // Catalog list view
   if (!selectedCatalogId) {
@@ -225,9 +296,7 @@ export default function CatalogPage() {
               key={product.id}
               product={product}
               catalogId={selectedCatalogId}
-              onAddToCart={() => {
-                // TODO: Add to cart implementation when ordering flow is wired up
-              }}
+              onAddToCart={() => openCartModal(product)}
             />
           ))}
         </div>
@@ -244,6 +313,112 @@ export default function CatalogPage() {
             setProductPerPage(pageSize);
           }}
         />
+      )}
+
+      {/* Add to Cart Modal */}
+      <Modal
+        open={modalProduct !== null}
+        modalHeading="Add to Cart"
+        primaryButtonText="Add to Cart"
+        secondaryButtonText="Cancel"
+        onRequestClose={() => setModalProduct(null)}
+        onRequestSubmit={handleAddToCart}
+        size="sm"
+      >
+        {modalProduct && (
+          <div className="flex flex-col gap-4">
+            <div>
+              <h3 className="text-base font-semibold text-text-primary">
+                {modalProduct.name}
+              </h3>
+              <p className="text-sm text-text-secondary">SKU: {modalProduct.sku}</p>
+              <p className="text-lg font-semibold text-interactive mt-1">
+                {formatPrice(modalProduct.unitPrice)}
+              </p>
+            </div>
+
+            {modalProduct.sizes && modalProduct.sizes.length > 0 && (
+              <Dropdown
+                id="cart-size"
+                titleText="Size"
+                label="Select size"
+                items={modalProduct.sizes.map((s) => ({ id: s, text: s }))}
+                itemToString={(item: { id: string; text: string } | null) => item?.text ?? ''}
+                selectedItem={
+                  modalSize
+                    ? { id: modalSize, text: modalSize }
+                    : null
+                }
+                onChange={({ selectedItem }: { selectedItem: { id: string; text: string } | null }) => {
+                  setModalSize(selectedItem?.id ?? null);
+                }}
+              />
+            )}
+
+            {modalProduct.decorationOptions && modalProduct.decorationOptions.length > 0 && (
+              <Dropdown
+                id="cart-decoration"
+                titleText="Decoration"
+                label="Select decoration"
+                items={modalProduct.decorationOptions.map((d) => ({ id: d, text: d }))}
+                itemToString={(item: { id: string; text: string } | null) => item?.text ?? ''}
+                selectedItem={
+                  modalDecoration
+                    ? { id: modalDecoration, text: modalDecoration }
+                    : null
+                }
+                onChange={({ selectedItem }: { selectedItem: { id: string; text: string } | null }) => {
+                  setModalDecoration(selectedItem?.id ?? null);
+                }}
+              />
+            )}
+
+            <NumberInput
+              id="cart-quantity"
+              label="Quantity"
+              min={1}
+              max={100}
+              value={modalQuantity}
+              onChange={(_e: unknown, { value }: { value: number | string }) => {
+                const num = typeof value === 'string' ? parseInt(value, 10) : value;
+                if (!isNaN(num) && num >= 1) setModalQuantity(num);
+              }}
+            />
+          </div>
+        )}
+      </Modal>
+
+      {/* Catalog mismatch warning */}
+      <Modal
+        open={showCatalogWarning}
+        modalHeading="Different catalog"
+        primaryButtonText="Clear cart and continue"
+        secondaryButtonText="Keep current cart"
+        onRequestClose={() => {
+          setShowCatalogWarning(false);
+          setPendingProduct(null);
+        }}
+        onRequestSubmit={handleCatalogWarningConfirm}
+        size="xs"
+        danger
+      >
+        <p className="text-sm text-text-primary">
+          Your cart has items from <strong>{cart.state.catalogName}</strong>. Adding
+          items from this catalog will clear your existing cart.
+        </p>
+      </Modal>
+
+      {/* Toast notification */}
+      {toast && (
+        <div className="fixed bottom-4 right-4 z-50">
+          <ToastNotification
+            kind="success"
+            title={toast}
+            timeout={3000}
+            onCloseButtonClick={() => setToast(null)}
+            onClose={() => setToast(null)}
+          />
+        </div>
       )}
     </div>
   );

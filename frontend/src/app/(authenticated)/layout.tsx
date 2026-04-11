@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth/hooks';
 import { ProtectedRoute } from '@/components/features/auth/ProtectedRoute';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { CartProvider } from '@/lib/cart/CartContext';
 
 export default function AuthenticatedLayout({
   children,
@@ -28,7 +29,9 @@ export default function AuthenticatedLayout({
 
   return (
     <ProtectedRoute>
-      <MainLayout>{children}</MainLayout>
+      <CartProvider>
+        <MainLayout>{children}</MainLayout>
+      </CartProvider>
     </ProtectedRoute>
   );
 }

@@ -21,6 +21,7 @@ export interface ProductCardProduct {
   unitPrice: number;
   imageUrls?: string[];
   sizes?: string[];
+  decorationOptions?: string[];
   status?: string;
 }
 

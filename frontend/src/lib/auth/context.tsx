@@ -113,6 +113,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const signOut = useCallback(async () => {
     await amplifySignOut();
+    try {
+      localStorage.removeItem('reel48_cart');
+    } catch {
+      // Storage unavailable — ignore
+    }
     setUser(null);
     setAuthState('unauthenticated');
   }, []);
