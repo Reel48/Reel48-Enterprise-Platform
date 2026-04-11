@@ -6,8 +6,6 @@ from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
-
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError, ValidationError
 from app.models.catalog import Catalog
 from app.models.catalog_product import CatalogProduct
@@ -269,13 +267,29 @@ class CatalogService:
             select(func.count()).select_from(query.subquery())
         )
         query = (
-            query.options(selectinload(CatalogProduct.product))
-            .order_by(CatalogProduct.display_order)
+            query.order_by(CatalogProduct.display_order)
             .offset((page - 1) * per_page)
             .limit(per_page)
         )
         result = await self.db.execute(query)
-        return list(result.scalars().all()), total or 0
+        catalog_products = list(result.scalars().all())
+
+        # Manually load products — selectinload was silently failing in
+        # production (product field absent from API response). Explicit
+        # loading ensures products are always populated.
+        product_ids = [cp.product_id for cp in catalog_products]
+        if product_ids:
+            product_result = await self.db.execute(
+                select(Product).where(
+                    Product.id.in_(product_ids),
+                    Product.deleted_at.is_(None),
+                )
+            )
+            products_map = {p.id: p for p in product_result.scalars().all()}
+            for cp in catalog_products:
+                cp.product = products_map.get(cp.product_id)  # type: ignore[assignment]
+
+        return catalog_products, total or 0
 
     async def list_all_catalogs(
         self,
