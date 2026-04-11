@@ -36,3 +36,36 @@ export interface Catalog {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface CatalogCreate {
+  name: string;
+  description?: string;
+  paymentModel: PaymentModel;
+  buyingWindowOpensAt?: string;
+  buyingWindowClosesAt?: string;
+}
+
+export interface CatalogUpdate {
+  name?: string;
+  description?: string;
+  buyingWindowOpensAt?: string;
+  buyingWindowClosesAt?: string;
+}
+
+export interface CatalogProductEntry {
+  id: string;
+  catalogId: string;
+  productId: string;
+  displayOrder: number;
+  priceOverride: number | null;
+  companyId: string;
+  subBrandId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CatalogProductAdd {
+  productId: string;
+  displayOrder?: number;
+  priceOverride?: number;
+}
