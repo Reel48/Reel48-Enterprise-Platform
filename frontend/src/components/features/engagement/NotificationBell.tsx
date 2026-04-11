@@ -90,7 +90,7 @@ export function NotificationBell() {
         className="flex items-center justify-center w-10 h-10 text-text-inverse hover:bg-charcoal-800 rounded transition-colors"
         aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
       >
-        <Notification size={20} />
+        <Notification size={20} className="fill-white" />
         {unreadCount > 0 && (
           <span className="absolute top-1 right-1 flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-support-error text-white text-xs font-semibold px-1">
             {unreadCount > 99 ? '99+' : unreadCount}
