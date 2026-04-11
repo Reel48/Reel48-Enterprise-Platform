@@ -227,6 +227,12 @@ import {
 Feature components in `src/components/features/` use these Carbon components
 directly. There is no intermediate wrapper layer.
 
+# --- UPDATED 2026-04-10 after full harness audit ---
+# Reason: 4 ui/ components (TenantBadge, EmptyState, PageHeader, StatusIndicator)
+# were listed as aspirational but never built. Features section listed planned
+# components that were never created as standalone files. Updated to match reality.
+# Impact: Claude Code sees the actual component inventory, not aspirational plans.
+
 ### Component Locations
 ```
 src/
@@ -234,10 +240,7 @@ src/
 │   └── carbon-theme.scss     # Carbon SCSS variable overrides (brand colors, tokens)
 ├── components/
 │   ├── ui/                    # Reel48+-specific reusable compositions
-│   │   ├── TenantBadge.tsx    #   Built FROM Carbon primitives (Tag, etc.)
-│   │   ├── EmptyState.tsx     #   For scenarios Carbon doesn't cover
-│   │   ├── PageHeader.tsx     #   Consistent page header with breadcrumbs
-│   │   ├── StatusIndicator.tsx#   Order/invoice/approval status display
+│   │   ├── StatusTag.tsx      #   Status badge with dot indicator (wraps Carbon Tag)
 │   │   └── S3Image.tsx        #   S3-backed image with pre-signed URL resolution
 │   │                          #
 │   │   NOTE: Do NOT create wrappers for Carbon components here.
@@ -245,32 +248,35 @@ src/
 │   │   COMPOSITE components that combine multiple Carbon primitives
 │   │   with Reel48+ domain logic.
 │   │
+│   │   Future candidates (build when needed, not preemptively):
+│   │   TenantBadge, EmptyState, PageHeader, StatusIndicator
+│   │
 │   ├── layout/                # App shell components
 │   │   ├── Sidebar.tsx        #   (uses Carbon SideNav)
 │   │   ├── Header.tsx         #   (uses Carbon Header/HeaderNavigation)
 │   │   └── MainLayout.tsx     #   (uses Carbon Grid + Theme provider)
-│   └── features/              # Feature-specific components
-│       ├── auth/              #   Grouped by domain module
-│       │   ├── LoginForm.tsx
-│       │   └── RoleGuard.tsx
-│       ├── profiles/
-│       │   ├── ProfileForm.tsx
-│       │   └── SizeSelector.tsx
-│       ├── catalog/
-│       │   ├── ProductCard.tsx
-│       │   └── CatalogGrid.tsx
-│       ├── orders/
-│       │   ├── OrderSummary.tsx
-│       │   └── CartDrawer.tsx
-│       ├── invoices/
-│       │   ├── InvoiceTable.tsx
-│       │   ├── InvoiceDetail.tsx
-│       │   └── CreateInvoiceForm.tsx
-│       ├── analytics/
-│       │   ├── SpendChart.tsx
-│       │   └── SizeDistribution.tsx
-│       └── engagement/
-│           └── NotificationBell.tsx  # Header notification icon with unread badge + dropdown
+│   ├── features/              # Feature-specific components
+│   │   ├── auth/
+│   │   │   └── ProtectedRoute.tsx  # Auth guard + role check wrapper
+│   │   ├── catalog/
+│   │   │   └── ProductCard.tsx     # Product display card
+│   │   ├── analytics/              # Dashboard chart/table components (Module 8)
+│   │   │   ├── ApprovalMetricsCards.tsx
+│   │   │   ├── DateRangeFilter.tsx
+│   │   │   ├── InvoiceSummaryCards.tsx
+│   │   │   ├── OrderStatusBreakdown.tsx
+│   │   │   ├── PlatformOverviewCards.tsx
+│   │   │   ├── RevenueByCompanyTable.tsx
+│   │   │   ├── SizeDistribution.tsx
+│   │   │   ├── SpendBySubBrandTable.tsx
+│   │   │   ├── SpendKPICards.tsx
+│   │   │   ├── SpendOverTimeChart.tsx
+│   │   │   ├── TopProductsTable.tsx
+│   │   │   └── index.ts
+│   │   └── engagement/
+│   │       ├── NotificationBell.tsx   # Header notification icon with unread badge
+│   │       └── OnboardingWizard.tsx   # New user onboarding flow
+│   └── ErrorBoundary.tsx      # React error boundary (class component)
 ```
 
 ### Component Conventions

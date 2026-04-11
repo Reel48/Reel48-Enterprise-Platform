@@ -57,6 +57,11 @@ log entries via `structlog.contextvars.bind_contextvars()` in the auth middlewar
 # reusable, and easier for Claude Code to generate correctly — it always knows
 # which layer a piece of logic belongs in.
 
+# --- UPDATED 2026-04-10 after full harness audit ---
+# Reason: Structure was written before modules 2–9 were built. ~28 files existed
+# but were not documented, causing the harness to underrepresent the codebase.
+# Impact: Claude Code now sees the full, accurate file inventory.
+
 ```
 backend/
 ├── app/
@@ -65,7 +70,10 @@ backend/
 │   │   ├── config.py              # Settings from environment variables (Pydantic BaseSettings)
 │   │   ├── database.py            # SQLAlchemy engine, session factory, base model
 │   │   ├── security.py            # JWT validation, password hashing utilities
-│   │   └── dependencies.py        # FastAPI dependency injection functions
+│   │   ├── dependencies.py        # FastAPI dependency injection functions
+│   │   ├── tenant.py              # TenantContext dataclass
+│   │   ├── exceptions.py          # AppException, NotFoundError, ForbiddenError, etc.
+│   │   └── rate_limit.py          # Redis-backed rate limiting dependency
 │   ├── middleware/
 │   │   ├── auth.py                # Cognito JWT validation middleware
 │   │   ├── tenant.py              # Sets PostgreSQL session variables for RLS
@@ -77,23 +85,37 @@ backend/
 │   │   ├── user.py
 │   │   ├── invite.py              # Admin invite tokens (Module 1)
 │   │   ├── org_code.py
+│   │   ├── employee_profile.py    # Employee profiles (Module 2)
 │   │   ├── product.py
+│   │   ├── catalog.py             # Catalog model (Module 3)
+│   │   ├── catalog_product.py     # Catalog ↔ Product junction (Module 3)
 │   │   ├── order.py
+│   │   ├── order_line_item.py     # Order line items (Module 4)
 │   │   ├── bulk_order.py
+│   │   ├── bulk_order_item.py     # Bulk order items (Module 5)
 │   │   ├── approval_request.py
 │   │   ├── approval_rule.py
-│   │   └── invoice.py
+│   │   ├── invoice.py
+│   │   ├── notification.py        # Notifications (Module 9)
+│   │   └── wishlist.py            # Wishlists (Module 9)
 │   ├── schemas/                   # Pydantic models for API request/response
 │   │   ├── common.py              # Shared schemas (pagination, error response)
+│   │   ├── auth.py                # Registration, org code validation schemas
 │   │   ├── company.py
+│   │   ├── sub_brand.py
+│   │   ├── user.py
 │   │   ├── invite.py              # Invite create/response schemas
-│   │   ├── product.py
-│   │   ├── order.py
-│   │   ├── invoice.py
-│   │   ├── approval.py
 │   │   ├── org_code.py
-│   │   ├── storage.py             # Upload/download URL request/response schemas
-│   │   └── user.py
+│   │   ├── employee_profile.py    # Profile create/update/response schemas
+│   │   ├── product.py
+│   │   ├── catalog.py             # Catalog create/update/response schemas
+│   │   ├── order.py
+│   │   ├── bulk_order.py          # Bulk order + item schemas
+│   │   ├── approval.py
+│   │   ├── invoice.py
+│   │   ├── notification.py        # Notification create/response schemas
+│   │   ├── wishlist.py            # Wishlist create/response schemas
+│   │   └── storage.py             # Upload/download URL request/response schemas
 │   ├── api/
 │   │   └── v1/
 │   │       ├── router.py          # Aggregates all v1 route modules
@@ -101,55 +123,93 @@ backend/
 │   │       ├── companies.py
 │   │       ├── sub_brands.py
 │   │       ├── users.py
+│   │       ├── employee_profiles.py  # Employee profile CRUD (Module 2)
 │   │       ├── products.py
+│   │       ├── catalogs.py           # Catalog CRUD + product management (Module 3)
 │   │       ├── orders.py
 │   │       ├── bulk_orders.py
-│   │       ├── approvals.py            # Unified approval queue & decisions
-│   │       ├── approval_rules.py      # Company-level approval rules (corporate_admin)
-│   │       ├── invites.py              # Invite creation and management (admin)
-│   │       ├── org_codes.py            # Org code management (corporate_admin)
+│   │       ├── approvals.py          # Unified approval queue & decisions
+│   │       ├── approval_rules.py     # Company-level approval rules (corporate_admin)
+│   │       ├── invites.py            # Invite creation and management (admin)
+│   │       ├── org_codes.py          # Org code management (corporate_admin)
 │   │       ├── invoices.py
-│   │       ├── storage.py             # Pre-signed URL generation (upload/download)
-│   │       ├── webhooks.py            # Stripe webhook receiver
-│   │       ├── analytics.py
-│   │       └── platform/              # Reel48 admin endpoints (cross-company)
-│   │           ├── approval_rules.py  # Cross-company approval rules visibility
-│   │           ├── approvals.py       # Cross-company approval dashboard & decisions
-│   │           ├── bulk_orders.py     # Cross-company bulk order visibility
-│   │           ├── catalogs.py        # Catalog management, pricing, approval
-│   │           ├── invoices.py        # Invoice creation for client companies
-│   │           ├── analytics.py       # Cross-company analytics (reel48_admin)
-│   │           └── companies.py       # Client company management
+│   │       ├── notifications.py      # Notification feed & management (Module 9)
+│   │       ├── wishlists.py          # Wishlist management (Module 9)
+│   │       ├── analytics.py          # Tenant-scoped analytics (Module 8)
+│   │       ├── storage.py            # Pre-signed URL generation (upload/download)
+│   │       ├── webhooks.py           # Stripe webhook receiver
+│   │       └── platform/             # Reel48 admin endpoints (cross-company)
+│   │           ├── companies.py      # Client company management + nested sub-resources
+│   │           ├── products.py       # Cross-company product visibility & approval
+│   │           ├── catalogs.py       # Catalog management, pricing, approval
+│   │           ├── orders.py         # Cross-company order visibility
+│   │           ├── bulk_orders.py    # Cross-company bulk order visibility
+│   │           ├── approvals.py      # Cross-company approval dashboard & decisions
+│   │           ├── approval_rules.py # Cross-company approval rules visibility
+│   │           ├── invoices.py       # Invoice creation for client companies
+│   │           └── analytics.py      # Cross-company analytics (reel48_admin)
 │   └── services/                  # Business logic (called by routes)
+│       ├── helpers.py             # Shared utilities (resolve_current_user_id)
 │       ├── company_service.py
 │       ├── sub_brand_service.py
 │       ├── user_service.py
+│       ├── cognito_service.py     # AWS Cognito user management
+│       ├── registration_service.py # Invite + org code registration orchestration
+│       ├── invite_service.py      # Invite creation, token generation, consumption
+│       ├── org_code_service.py    # Org code generation, validation
+│       ├── employee_profile_service.py  # Profile upsert and queries
 │       ├── product_service.py
+│       ├── catalog_service.py     # Catalog CRUD, product management, slug generation
 │       ├── order_service.py
 │       ├── bulk_order_service.py
 │       ├── approval_service.py
-│       ├── invite_service.py      # Invite creation, token generation, consumption
-│       ├── org_code_service.py    # Org code generation, validation, registration
+│       ├── invoice_service.py     # Stripe invoice lifecycle
+│       ├── notification_service.py # Notification creation, feed, read tracking
+│       ├── wishlist_service.py    # Wishlist add/remove/list
 │       ├── analytics_service.py
 │       ├── email_service.py       # SES integration
-│       ├── invoice_service.py     # Stripe invoice lifecycle
 │       ├── s3_service.py          # S3 pre-signed URL generation + file validation
 │       └── stripe_service.py      # Stripe API client wrapper
 ├── migrations/
 │   ├── env.py
-│   └── versions/                  # Alembic migration files
+│   └── versions/                  # Alembic migration files (9 migrations)
+│       ├── 001_create_module1_identity_tables.py   # companies, sub_brands, org_codes, users, invites
+│       ├── 002_create_employee_profiles_table.py   # employee_profiles
+│       ├── 003_create_module3_catalog_tables.py    # products, catalogs, catalog_products
+│       ├── 004_create_module4_order_tables.py      # orders, order_line_items
+│       ├── 005_create_module5_bulk_order_tables.py # bulk_orders, bulk_order_items
+│       ├── 006_create_module6_approval_tables.py   # approval_requests, approval_rules
+│       ├── 007_create_module7_invoice_tables.py    # invoices
+│       └── 009_create_notifications_and_wishlists_tables.py  # notifications, wishlists
 ├── tests/
-│   ├── conftest.py                # Shared fixtures (test DB, test tenants, auth tokens)
+│   ├── conftest.py                # Shared fixtures (test DB, test tenants, auth tokens, mocks)
 │   ├── test_auth.py
+│   ├── test_registration.py       # Org code + invite registration, rate limiting
+│   ├── test_companies.py
+│   ├── test_sub_brands.py
+│   ├── test_users.py
+│   ├── test_invites.py
+│   ├── test_org_codes.py
+│   ├── test_employee_profiles.py
 │   ├── test_products.py
+│   ├── test_catalogs.py
 │   ├── test_orders.py
+│   ├── test_bulk_orders.py
+│   ├── test_approvals.py          # Approval service unit tests
+│   ├── test_approval_endpoints.py # Approval API endpoint tests
+│   ├── test_approval_notifications.py  # Approval email notification tests
+│   ├── test_platform_approvals.py
+│   ├── test_platform_bulk_orders.py
+│   ├── test_platform_catalog.py
+│   ├── test_platform_companies.py
+│   ├── test_platform_orders.py
 │   ├── test_invoices.py
-│   ├── test_self_registration.py  # Org code registration, rate limiting, isolation
+│   ├── test_notifications.py
+│   ├── test_wishlists.py
+│   ├── test_analytics.py
 │   ├── test_storage.py            # S3 pre-signed URL generation, tenant isolation
-│   ├── test_isolation.py          # Cross-tenant and cross-sub-brand access tests
-│   └── factories/                 # Test data factories
-│       ├── company_factory.py
-│       └── user_factory.py
+│   ├── test_isolation.py          # Cross-tenant and cross-sub-brand RLS tests
+│   └── factories/                 # Test data factories (currently empty — inline setup used)
 ├── pyproject.toml
 └── alembic.ini
 ```

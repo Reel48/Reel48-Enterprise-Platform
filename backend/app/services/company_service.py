@@ -119,3 +119,10 @@ class CompanyService:
         await self.db.flush()
         await self.db.refresh(company)
         return company
+
+    async def reactivate_company(self, company_id: UUID) -> Company:
+        company = await self.get_company(company_id)
+        company.is_active = True  # type: ignore[assignment]
+        await self.db.flush()
+        await self.db.refresh(company)
+        return company

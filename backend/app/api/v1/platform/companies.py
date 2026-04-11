@@ -13,7 +13,13 @@ from app.core.dependencies import get_db_session, require_reel48_admin
 from app.core.tenant import TenantContext
 from app.schemas.common import ApiListResponse, ApiResponse, PaginationMeta
 from app.schemas.company import CompanyCreate, CompanyResponse, CompanyUpdate
+from app.schemas.org_code import OrgCodeResponse
+from app.schemas.sub_brand import SubBrandResponse
+from app.schemas.user import UserResponse
 from app.services.company_service import CompanyService
+from app.services.org_code_service import OrgCodeService
+from app.services.sub_brand_service import SubBrandService
+from app.services.user_service import UserService
 
 router = APIRouter(prefix="/platform/companies", tags=["platform-companies"])
 
@@ -97,3 +103,79 @@ async def deactivate_company(
     service = CompanyService(db)
     company = await service.deactivate_company(company_id)
     return ApiResponse(data=CompanyResponse.model_validate(company))
+
+
+@router.post(
+    "/{company_id}/reactivate",
+    response_model=ApiResponse[CompanyResponse],
+)
+async def reactivate_company(
+    company_id: UUID,
+    context: TenantContext = Depends(require_reel48_admin),
+    db: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[CompanyResponse]:
+    """Re-activate a previously deactivated company (sets is_active=true)."""
+    service = CompanyService(db)
+    company = await service.reactivate_company(company_id)
+    return ApiResponse(data=CompanyResponse.model_validate(company))
+
+
+@router.get(
+    "/{company_id}/sub_brands/",
+    response_model=ApiListResponse[SubBrandResponse],
+)
+async def list_company_sub_brands(
+    company_id: UUID,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    context: TenantContext = Depends(require_reel48_admin),
+    db: AsyncSession = Depends(get_db_session),
+) -> ApiListResponse[SubBrandResponse]:
+    """List all sub-brands for a specific company."""
+    service = SubBrandService(db)
+    sub_brands, total = await service.list_sub_brands(
+        company_id=company_id, sub_brand_id=None, page=page, per_page=per_page
+    )
+    return ApiListResponse(
+        data=[SubBrandResponse.model_validate(sb) for sb in sub_brands],
+        meta=PaginationMeta(page=page, per_page=per_page, total=total),
+    )
+
+
+@router.get(
+    "/{company_id}/users/",
+    response_model=ApiListResponse[UserResponse],
+)
+async def list_company_users(
+    company_id: UUID,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    context: TenantContext = Depends(require_reel48_admin),
+    db: AsyncSession = Depends(get_db_session),
+) -> ApiListResponse[UserResponse]:
+    """List all users for a specific company."""
+    service = UserService(db)
+    users, total = await service.list_users(
+        company_id=company_id, sub_brand_id=None, page=page, per_page=per_page
+    )
+    return ApiListResponse(
+        data=[UserResponse.model_validate(u) for u in users],
+        meta=PaginationMeta(page=page, per_page=per_page, total=total),
+    )
+
+
+@router.get(
+    "/{company_id}/org_code/",
+    response_model=ApiResponse[OrgCodeResponse | None],
+)
+async def get_company_org_code(
+    company_id: UUID,
+    context: TenantContext = Depends(require_reel48_admin),
+    db: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[OrgCodeResponse | None]:
+    """Get the current active org code for a company, or null if none exists."""
+    service = OrgCodeService(db)
+    org_code = await service.get_current(company_id)
+    return ApiResponse(
+        data=OrgCodeResponse.model_validate(org_code) if org_code else None
+    )
