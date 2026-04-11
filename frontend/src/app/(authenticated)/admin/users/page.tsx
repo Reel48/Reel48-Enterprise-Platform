@@ -24,9 +24,10 @@ import {
   Tabs,
   Tag,
   TextInput,
+  Toggle,
   ToastNotification,
 } from '@carbon/react';
-import { UserProfile, Add, Copy, TrashCan } from '@carbon/react/icons';
+import { UserProfile, Add, Copy, Edit, TrashCan } from '@carbon/react/icons';
 
 import { useAuth } from '@/lib/auth/hooks';
 import { StatusTag } from '@/components/ui/StatusTag';
@@ -42,6 +43,7 @@ import {
   useGenerateOrgCode,
   useInvites,
   useSubBrands,
+  useUpdateUser,
   useUsers,
 } from './_hooks';
 
@@ -102,26 +104,94 @@ const INVITE_ROLE_OPTIONS = [
 
 const CAN_MANAGE_USERS: UserRole[] = ['corporate_admin', 'sub_brand_admin'];
 
+const EDIT_ROLE_OPTIONS = [
+  { id: 'employee', text: 'Employee' },
+  { id: 'regional_manager', text: 'Regional Manager' },
+  { id: 'sub_brand_admin', text: 'Sub-Brand Admin' },
+  { id: 'corporate_admin', text: 'Corporate Admin' },
+];
+
 // ---------------------------------------------------------------------------
 // Users Tab
 // ---------------------------------------------------------------------------
 
 function UsersTab({
   canManage,
+  subBrands,
   onToast,
 }: {
   canManage: boolean;
+  subBrands: SubBrand[];
   onToast: (kind: 'success' | 'error', message: string) => void;
 }) {
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(20);
   const [roleFilter, setRoleFilter] = useState('all');
 
+  // Edit modal state
+  const [editUser, setEditUser] = useState<User | null>(null);
+  const [editFullName, setEditFullName] = useState('');
+  const [editRole, setEditRole] = useState('');
+  const [editSubBrandId, setEditSubBrandId] = useState<string | null>(null);
+  const [editIsActive, setEditIsActive] = useState(true);
+
   const { data, isLoading, isError } = useUsers(page, perPage, roleFilter);
   const deactivateUser = useDeactivateUser();
+  const updateUser = useUpdateUser();
 
   const users: User[] = data?.data ?? [];
   const total = Number(data?.meta?.total ?? 0);
+
+  const activeSubBrands = subBrands.filter((sb) => sb.isActive);
+
+  const openEditModal = (user: User) => {
+    setEditUser(user);
+    setEditFullName(user.fullName);
+    setEditRole(user.role);
+    setEditSubBrandId(user.subBrandId);
+    setEditIsActive(user.isActive);
+  };
+
+  const closeEditModal = () => {
+    setEditUser(null);
+  };
+
+  const handleEditSubmit = () => {
+    if (!editUser) return;
+
+    const changes: Record<string, unknown> = {};
+    if (editFullName !== editUser.fullName) changes.fullName = editFullName;
+    if (editRole !== editUser.role) changes.role = editRole;
+    if (editSubBrandId !== editUser.subBrandId) changes.subBrandId = editSubBrandId;
+    if (editIsActive !== editUser.isActive) changes.isActive = editIsActive;
+
+    if (Object.keys(changes).length === 0) {
+      closeEditModal();
+      return;
+    }
+
+    updateUser.mutate(
+      { userId: editUser.id, data: changes },
+      {
+        onSuccess: () => {
+          onToast('success', 'User updated successfully');
+          closeEditModal();
+        },
+        onError: () => onToast('error', 'Failed to update user'),
+      },
+    );
+  };
+
+  const handleRoleChange = (role: string) => {
+    setEditRole(role);
+    if (role === 'corporate_admin') {
+      setEditSubBrandId(null);
+    } else if (editSubBrandId === null && activeSubBrands.length > 0) {
+      // Switching from corporate_admin to another role — pick first sub-brand
+      const defaultSb = activeSubBrands.find((sb) => sb.isDefault);
+      setEditSubBrandId(defaultSb?.id ?? activeSubBrands[0].id);
+    }
+  };
 
   const tableHeaders = [
     { key: 'fullName', header: 'Name' },
@@ -149,6 +219,12 @@ function UsersTab({
       onError: () => onToast('error', 'Failed to deactivate user'),
     });
   };
+
+  const editSubBrandRequired = editRole !== 'corporate_admin';
+  const editSubmitDisabled =
+    updateUser.isPending ||
+    !editFullName.trim() ||
+    (editSubBrandRequired && !editSubBrandId);
 
   return (
     <>
@@ -228,15 +304,27 @@ function UsersTab({
                               </StatusTag>
                             ) : cell.info.header === 'createdAt' && original ? (
                               formatDate(original.createdAt)
-                            ) : cell.info.header === 'actions' && original && canManage && original.isActive ? (
-                              <Button
-                                kind="danger--ghost"
-                                size="sm"
-                                onClick={() => handleDeactivate(original.id)}
-                                disabled={deactivateUser.isPending}
-                              >
-                                Deactivate
-                              </Button>
+                            ) : cell.info.header === 'actions' && original && canManage ? (
+                              <div className="flex gap-1">
+                                <Button
+                                  kind="ghost"
+                                  size="sm"
+                                  renderIcon={Edit}
+                                  hasIconOnly
+                                  iconDescription="Edit user"
+                                  onClick={() => openEditModal(original)}
+                                />
+                                {original.isActive && (
+                                  <Button
+                                    kind="danger--ghost"
+                                    size="sm"
+                                    onClick={() => handleDeactivate(original.id)}
+                                    disabled={deactivateUser.isPending}
+                                  >
+                                    Deactivate
+                                  </Button>
+                                )}
+                              </div>
                             ) : (
                               cell.value
                             )}
@@ -264,6 +352,73 @@ function UsersTab({
           }}
         />
       )}
+
+      {/* Edit User Modal */}
+      <Modal
+        open={editUser !== null}
+        onRequestClose={closeEditModal}
+        onRequestSubmit={handleEditSubmit}
+        modalHeading="Edit User"
+        primaryButtonText={updateUser.isPending ? 'Saving...' : 'Save Changes'}
+        secondaryButtonText="Cancel"
+        primaryButtonDisabled={editSubmitDisabled}
+      >
+        {editUser && (
+          <div className="flex flex-col gap-4 mt-2">
+            <TextInput
+              id="edit-full-name"
+              labelText="Full Name"
+              value={editFullName}
+              onChange={(e) => setEditFullName(e.target.value)}
+            />
+            <TextInput
+              id="edit-email"
+              labelText="Email"
+              value={editUser.email}
+              readOnly
+              helperText="Email cannot be changed"
+            />
+            <Dropdown
+              id="edit-role"
+              titleText="Role"
+              label="Select role"
+              items={EDIT_ROLE_OPTIONS}
+              itemToString={(item) => item?.text ?? ''}
+              selectedItem={EDIT_ROLE_OPTIONS.find((r) => r.id === editRole) ?? null}
+              onChange={({ selectedItem }) => {
+                if (selectedItem) handleRoleChange(selectedItem.id);
+              }}
+            />
+            {editRole === 'corporate_admin' ? (
+              <TextInput
+                id="edit-sub-brand-display"
+                labelText="Sub-Brand"
+                value="All Sub-Brands (Company-wide)"
+                readOnly
+                helperText="Corporate admins operate across all sub-brands"
+              />
+            ) : (
+              <Dropdown
+                id="edit-sub-brand"
+                titleText="Sub-Brand"
+                label="Select sub-brand"
+                items={activeSubBrands}
+                itemToString={(item) => item?.name ?? ''}
+                selectedItem={activeSubBrands.find((sb) => sb.id === editSubBrandId) ?? null}
+                onChange={({ selectedItem }) => setEditSubBrandId(selectedItem?.id ?? null)}
+              />
+            )}
+            <Toggle
+              id="edit-active"
+              labelText="Active"
+              labelA="Inactive"
+              labelB="Active"
+              toggled={editIsActive}
+              onToggle={(checked) => setEditIsActive(checked)}
+            />
+          </div>
+        )}
+      </Modal>
     </>
   );
 }
@@ -611,7 +766,7 @@ export default function UsersPage() {
         <TabPanels>
           <TabPanel>
             <div className="pt-4">
-              <UsersTab canManage={canManage} onToast={showToast} />
+              <UsersTab canManage={canManage} subBrands={subBrands} onToast={showToast} />
             </div>
           </TabPanel>
           <TabPanel>

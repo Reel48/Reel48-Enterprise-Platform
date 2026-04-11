@@ -31,6 +31,17 @@ export function useDeactivateUser() {
   });
 }
 
+export function useUpdateUser() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, data }: { userId: string; data: Record<string, unknown> }) =>
+      api.patch<User>(`/api/v1/users/${userId}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Sub-Brands (for invite modal dropdown)
 // ---------------------------------------------------------------------------
