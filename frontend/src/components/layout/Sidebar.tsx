@@ -14,6 +14,7 @@ import {
   UserProfile,
   GroupResource,
   Task,
+  Policy,
   Analytics,
   Receipt,
   Enterprise,
@@ -61,6 +62,7 @@ const subBrandAdminNav: NavItem[] = [
 const corporateAdminNav: NavItem[] = [
   ...subBrandAdminNav,
   { label: 'All Sub-Brands', href: '/admin/brands', icon: Store },
+  { label: 'Approval Rules', href: '/admin/approval-rules', icon: Policy },
   { label: 'Invoices', href: '/invoices', icon: Receipt },
 ];
 
