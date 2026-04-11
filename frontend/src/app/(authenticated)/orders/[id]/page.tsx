@@ -1,23 +1,35 @@
 'use client';
 
+import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import {
   Breadcrumb,
   BreadcrumbItem,
   Button,
   InlineNotification,
+  Modal,
   Tile,
+  ToastNotification,
 } from '@carbon/react';
 import { ShoppingCart } from '@carbon/react/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
+import { useAuth } from '@/lib/auth/hooks';
 import { api } from '@/lib/api/client';
 import { StatusTag } from '@/components/ui/StatusTag';
-import type { OrderWithItems } from '@/types/orders';
+import type { Order, OrderWithItems, OrderStatus } from '@/types/orders';
+import type { UserRole } from '@/types/auth';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+const MANAGER_AND_ABOVE: UserRole[] = [
+  'reel48_admin',
+  'corporate_admin',
+  'sub_brand_admin',
+  'regional_manager',
+];
 
 function formatPrice(price: number): string {
   return new Intl.NumberFormat('en-US', {
@@ -61,6 +73,20 @@ function useOrder(orderId: string) {
   });
 }
 
+function useOrderTransition(action: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (orderId: string) => {
+      const res = await api.post<Order>(`/api/v1/orders/${orderId}/${action}`);
+      return res.data;
+    },
+    onSuccess: (_data, orderId) => {
+      queryClient.invalidateQueries({ queryKey: ['order', orderId] });
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+  });
+}
+
 function useCancelOrder() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -75,13 +101,79 @@ function useCancelOrder() {
 }
 
 // ---------------------------------------------------------------------------
+// Action button config per status
+// ---------------------------------------------------------------------------
+
+interface ActionConfig {
+  label: string;
+  action: string;
+  needsConfirm: boolean;
+  managerOnly: boolean;
+}
+
+const STATUS_ACTIONS: Partial<Record<OrderStatus, ActionConfig>> = {
+  pending: { label: 'Approve', action: 'approve', needsConfirm: true, managerOnly: true },
+  approved: { label: 'Process', action: 'process', needsConfirm: false, managerOnly: true },
+  processing: { label: 'Ship', action: 'ship', needsConfirm: false, managerOnly: true },
+  shipped: { label: 'Deliver', action: 'deliver', needsConfirm: false, managerOnly: true },
+};
+
+function canCancel(status: OrderStatus, isManager: boolean): boolean {
+  if (status === 'pending') return true;
+  if (status === 'approved' && isManager) return true;
+  return false;
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 export default function OrderDetailPage() {
   const params = useParams<{ id: string }>();
+  const { user } = useAuth();
   const { data: order, isLoading, isError } = useOrder(params.id);
+
+  const role = user?.tenantContext.role ?? 'employee';
+  const isManager = MANAGER_AND_ABOVE.includes(role);
+
+  const approveOrder = useOrderTransition('approve');
+  const processOrder = useOrderTransition('process');
+  const shipOrder = useOrderTransition('ship');
+  const deliverOrder = useOrderTransition('deliver');
   const cancelOrder = useCancelOrder();
+
+  const transitionMutations: Record<string, ReturnType<typeof useOrderTransition>> = {
+    approve: approveOrder,
+    process: processOrder,
+    ship: shipOrder,
+    deliver: deliverOrder,
+  };
+
+  const [confirmModal, setConfirmModal] = useState<'approve' | 'cancel' | null>(null);
+  const [toast, setToast] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
+
+  function showToast(kind: 'success' | 'error', message: string) {
+    setToast({ kind, message });
+    setTimeout(() => setToast(null), 3000);
+  }
+
+  function handleTransition(action: string) {
+    if (!order) return;
+    const mutation = transitionMutations[action];
+    if (!mutation) return;
+    mutation.mutate(order.id, {
+      onSuccess: () => showToast('success', `Order ${action}${action.endsWith('e') ? 'd' : 'ed'} successfully`),
+      onError: () => showToast('error', `Failed to ${action} order`),
+    });
+  }
+
+  function handleCancel() {
+    if (!order) return;
+    cancelOrder.mutate(order.id, {
+      onSuccess: () => showToast('success', 'Order cancelled successfully'),
+      onError: () => showToast('error', 'Failed to cancel order'),
+    });
+  }
 
   if (isLoading) {
     return (
@@ -102,8 +194,25 @@ export default function OrderDetailPage() {
     );
   }
 
+  const primaryAction = STATUS_ACTIONS[order.status];
+  const showPrimary = primaryAction && (!primaryAction.managerOnly || isManager);
+  const showCancel = canCancel(order.status, isManager);
+  const anyMutationPending =
+    approveOrder.isPending || processOrder.isPending || shipOrder.isPending ||
+    deliverOrder.isPending || cancelOrder.isPending;
+
   return (
     <div className="flex flex-col gap-6">
+      {toast && (
+        <ToastNotification
+          kind={toast.kind}
+          title={toast.kind === 'success' ? 'Success' : 'Error'}
+          subtitle={toast.message}
+          onClose={() => setToast(null)}
+          timeout={3000}
+        />
+      )}
+
       <Breadcrumb noTrailingSlash>
         <BreadcrumbItem href="/orders">Orders</BreadcrumbItem>
         <BreadcrumbItem isCurrentPage>{order.orderNumber}</BreadcrumbItem>
@@ -120,15 +229,35 @@ export default function OrderDetailPage() {
             {order.status}
           </StatusTag>
         </div>
-        {order.status === 'pending' && (
-          <Button
-            kind="danger--ghost"
-            size="sm"
-            onClick={() => cancelOrder.mutate(order.id)}
-            disabled={cancelOrder.isPending}
-          >
-            Cancel Order
-          </Button>
+        {(showPrimary || showCancel) && (
+          <div className="flex gap-3">
+            {showPrimary && (
+              <Button
+                kind="primary"
+                size="sm"
+                disabled={anyMutationPending}
+                onClick={() => {
+                  if (primaryAction.needsConfirm) {
+                    setConfirmModal('approve');
+                  } else {
+                    handleTransition(primaryAction.action);
+                  }
+                }}
+              >
+                {primaryAction.label}
+              </Button>
+            )}
+            {showCancel && (
+              <Button
+                kind="danger--ghost"
+                size="sm"
+                disabled={anyMutationPending}
+                onClick={() => setConfirmModal('cancel')}
+              >
+                Cancel Order
+              </Button>
+            )}
+          </div>
         )}
       </div>
 
@@ -188,6 +317,44 @@ export default function OrderDetailPage() {
           </div>
         </Tile>
       )}
+
+      {/* Approve confirmation modal */}
+      <Modal
+        open={confirmModal === 'approve'}
+        modalHeading="Approve Order"
+        primaryButtonText="Approve"
+        secondaryButtonText="Go back"
+        onRequestClose={() => setConfirmModal(null)}
+        onRequestSubmit={() => {
+          setConfirmModal(null);
+          handleTransition('approve');
+        }}
+      >
+        <p>
+          Are you sure you want to approve order <strong>{order.orderNumber}</strong>?
+          This will move it to the processing queue.
+        </p>
+      </Modal>
+
+      {/* Cancel confirmation modal */}
+      <Modal
+        open={confirmModal === 'cancel'}
+        modalHeading="Cancel Order"
+        primaryButtonText="Cancel Order"
+        primaryButtonDisabled={cancelOrder.isPending}
+        secondaryButtonText="Go back"
+        danger
+        onRequestClose={() => setConfirmModal(null)}
+        onRequestSubmit={() => {
+          setConfirmModal(null);
+          handleCancel();
+        }}
+      >
+        <p>
+          Are you sure you want to cancel order <strong>{order.orderNumber}</strong>?
+          This action cannot be undone.
+        </p>
+      </Modal>
     </div>
   );
 }
