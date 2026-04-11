@@ -19,7 +19,7 @@ import {
   TextInput,
   ToastNotification,
 } from '@carbon/react';
-import { Store, Add } from '@carbon/react/icons';
+import { Store, Add, Edit, TrashCan } from '@carbon/react/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api/client';
@@ -80,6 +80,31 @@ function useCreateSubBrand() {
   });
 }
 
+function useUpdateSubBrand() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: { name: string } }) => {
+      const res = await api.patch<SubBrand>(`/api/v1/sub_brands/${id}`, data);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sub-brands'] });
+    },
+  });
+}
+
+function useDeleteSubBrand() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/api/v1/sub_brands/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sub-brands'] });
+    },
+  });
+}
+
 function useDeactivateSubBrand() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -103,8 +128,19 @@ export default function BrandsPage() {
   const [brandName, setBrandName] = useState('');
   const [toast, setToast] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
 
+  // Edit modal state
+  const [editOpen, setEditOpen] = useState(false);
+  const [editBrand, setEditBrand] = useState<SubBrand | null>(null);
+  const [editName, setEditName] = useState('');
+
+  // Delete modal state
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteBrand, setDeleteBrand] = useState<SubBrand | null>(null);
+
   const { data, isLoading, isError } = useSubBrands(page, perPage);
   const createSubBrand = useCreateSubBrand();
+  const updateSubBrand = useUpdateSubBrand();
+  const deleteSubBrand = useDeleteSubBrand();
   const deactivateSubBrand = useDeactivateSubBrand();
 
   const brands = data?.data ?? [];
@@ -128,29 +164,68 @@ export default function BrandsPage() {
     createdAt: b.createdAt,
   }));
 
+  const showToast = (kind: 'success' | 'error', message: string) => {
+    setToast({ kind, message });
+    setTimeout(() => setToast(null), 3000);
+  };
+
   const handleCreate = () => {
     createSubBrand.mutate(
       { name: brandName.trim() },
       {
         onSuccess: () => {
-          setToast({ kind: 'success', message: 'Sub-brand created' });
+          showToast('success', 'Sub-brand created');
           setCreateOpen(false);
           setBrandName('');
-          setTimeout(() => setToast(null), 3000);
         },
         onError: () => {
-          setToast({ kind: 'error', message: 'Failed to create sub-brand' });
-          setTimeout(() => setToast(null), 3000);
+          showToast('error', 'Failed to create sub-brand');
         },
       },
     );
   };
 
+  const openEdit = (brand: SubBrand) => {
+    setEditBrand(brand);
+    setEditName(brand.name);
+    setEditOpen(true);
+  };
+
+  const handleEdit = () => {
+    if (!editBrand || !editName.trim()) return;
+    updateSubBrand.mutate(
+      { id: editBrand.id, data: { name: editName.trim() } },
+      {
+        onSuccess: () => {
+          showToast('success', 'Sub-brand updated');
+          setEditOpen(false);
+          setEditBrand(null);
+        },
+        onError: () => {
+          showToast('error', 'Failed to update sub-brand');
+        },
+      },
+    );
+  };
+
+  const handleDelete = () => {
+    if (!deleteBrand) return;
+    deleteSubBrand.mutate(deleteBrand.id, {
+      onSuccess: () => {
+        showToast('success', 'Sub-brand deleted');
+        setDeleteOpen(false);
+        setDeleteBrand(null);
+      },
+      onError: () => {
+        showToast('error', 'Failed to delete sub-brand');
+      },
+    });
+  };
+
   const handleDeactivate = (id: string) => {
     deactivateSubBrand.mutate(id, {
       onSuccess: () => {
-        setToast({ kind: 'success', message: 'Sub-brand deactivated' });
-        setTimeout(() => setToast(null), 3000);
+        showToast('success', 'Sub-brand deactivated');
       },
     });
   };
@@ -230,15 +305,40 @@ export default function BrandsPage() {
                               </StatusTag>
                             ) : cell.info.header === 'createdAt' && original ? (
                               formatDate(original.createdAt)
-                            ) : cell.info.header === 'actions' && original && original.isActive && !original.isDefault ? (
-                              <Button
-                                kind="danger--ghost"
-                                size="sm"
-                                onClick={() => handleDeactivate(original.id)}
-                                disabled={deactivateSubBrand.isPending}
-                              >
-                                Deactivate
-                              </Button>
+                            ) : cell.info.header === 'actions' && original ? (
+                              <div className="flex gap-2">
+                                <Button
+                                  kind="ghost"
+                                  size="sm"
+                                  renderIcon={Edit}
+                                  iconDescription="Edit"
+                                  hasIconOnly
+                                  onClick={() => openEdit(original)}
+                                />
+                                {original.isActive && !original.isDefault && (
+                                  <Button
+                                    kind="danger--ghost"
+                                    size="sm"
+                                    onClick={() => handleDeactivate(original.id)}
+                                    disabled={deactivateSubBrand.isPending}
+                                  >
+                                    Deactivate
+                                  </Button>
+                                )}
+                                {!original.isDefault && (
+                                  <Button
+                                    kind="danger--ghost"
+                                    size="sm"
+                                    renderIcon={TrashCan}
+                                    iconDescription="Delete"
+                                    hasIconOnly
+                                    onClick={() => {
+                                      setDeleteBrand(original);
+                                      setDeleteOpen(true);
+                                    }}
+                                  />
+                                )}
+                              </div>
                             ) : (
                               cell.value
                             )}
@@ -288,6 +388,53 @@ export default function BrandsPage() {
             helperText="A URL-safe slug will be generated automatically"
           />
         </div>
+      </Modal>
+
+      {/* Edit Modal */}
+      <Modal
+        open={editOpen}
+        onRequestClose={() => {
+          setEditOpen(false);
+          setEditBrand(null);
+        }}
+        onRequestSubmit={handleEdit}
+        modalHeading="Edit Sub-Brand"
+        primaryButtonText={updateSubBrand.isPending ? 'Saving...' : 'Save'}
+        secondaryButtonText="Cancel"
+        primaryButtonDisabled={!editName.trim() || updateSubBrand.isPending}
+      >
+        <div className="flex flex-col gap-4 mt-2">
+          <TextInput
+            id="edit-brand-name"
+            labelText="Sub-Brand Name"
+            placeholder="e.g., North Division"
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            required
+          />
+        </div>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        open={deleteOpen}
+        onRequestClose={() => {
+          setDeleteOpen(false);
+          setDeleteBrand(null);
+        }}
+        onRequestSubmit={handleDelete}
+        modalHeading="Delete Sub-Brand"
+        primaryButtonText={deleteSubBrand.isPending ? 'Deleting...' : 'Delete'}
+        secondaryButtonText="Cancel"
+        danger
+        primaryButtonDisabled={deleteSubBrand.isPending}
+      >
+        {deleteBrand && (
+          <p>
+            Are you sure you want to delete <strong>{deleteBrand.name}</strong>? This cannot be
+            undone.
+          </p>
+        )}
       </Modal>
 
       {/* Toast */}
