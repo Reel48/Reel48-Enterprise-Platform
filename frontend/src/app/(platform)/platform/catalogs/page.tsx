@@ -4,8 +4,11 @@ import { useState } from 'react';
 import {
   Button,
   DataTable,
+  DatePicker,
+  DatePickerInput,
   Dropdown,
   InlineNotification,
+  Modal,
   Pagination,
   Table,
   TableBody,
@@ -16,14 +19,17 @@ import {
   TableRow,
   TableToolbar,
   TableToolbarContent,
+  TextArea,
+  TextInput,
   ToastNotification,
 } from '@carbon/react';
-import { Catalog as CatalogIcon } from '@carbon/react/icons';
+import { Add, Catalog as CatalogIcon } from '@carbon/react/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api/client';
 import { StatusTag } from '@/components/ui/StatusTag';
-import type { Catalog, CatalogStatus } from '@/types/catalogs';
+import type { Catalog, CatalogStatus, PaymentModel, PlatformCatalogCreate } from '@/types/catalogs';
+import type { Company } from '@/types/companies';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -35,6 +41,10 @@ function formatDate(dateString: string): string {
     day: 'numeric',
     year: 'numeric',
   });
+}
+
+function toISODate(date: Date): string {
+  return date.toISOString().split('T')[0];
 }
 
 function statusColor(status: string): 'teal' | 'blue' | 'purple' | 'gray' | 'green' | 'red' {
@@ -63,6 +73,11 @@ const STATUS_OPTIONS = [
   { id: 'closed', text: 'Closed' },
 ];
 
+const PAYMENT_MODEL_ITEMS = [
+  { id: 'self_service', text: 'Self-Service' },
+  { id: 'invoice_after_close', text: 'Invoice After Close' },
+];
+
 // ---------------------------------------------------------------------------
 // Data hooks
 // ---------------------------------------------------------------------------
@@ -85,6 +100,31 @@ function usePlatformCatalogs(page: number, perPage: number, status: string) {
   });
 }
 
+function usePlatformCompanies() {
+  return useQuery({
+    queryKey: ['platform-companies'],
+    queryFn: async () => {
+      const res = await api.get<Company[]>('/api/v1/platform/companies/', {
+        per_page: '100',
+      });
+      return res.data;
+    },
+  });
+}
+
+function useCreatePlatformCatalog() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: PlatformCatalogCreate) => {
+      const res = await api.post<Catalog>('/api/v1/platform/catalogs/', data);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['platform-catalogs'] });
+    },
+  });
+}
+
 function useCatalogAction(action: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -103,7 +143,7 @@ function useCatalogAction(action: string) {
 
 const tableHeaders = [
   { key: 'name', header: 'Catalog Name' },
-  { key: 'companyId', header: 'Company' },
+  { key: 'companyName', header: 'Company' },
   { key: 'status', header: 'Status' },
   { key: 'paymentModel', header: 'Payment Model' },
   { key: 'createdAt', header: 'Created' },
@@ -120,7 +160,18 @@ export default function PlatformCatalogsPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [toast, setToast] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
 
+  // Create modal state
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newCompanyId, setNewCompanyId] = useState('');
+  const [newName, setNewName] = useState('');
+  const [newDescription, setNewDescription] = useState('');
+  const [newPaymentModel, setNewPaymentModel] = useState<PaymentModel | ''>('');
+  const [newWindowOpens, setNewWindowOpens] = useState('');
+  const [newWindowCloses, setNewWindowCloses] = useState('');
+
   const { data, isLoading, isError } = usePlatformCatalogs(page, perPage, statusFilter);
+  const { data: companies } = usePlatformCompanies();
+  const createCatalog = useCreatePlatformCatalog();
   const approveAction = useCatalogAction('approve');
   const rejectAction = useCatalogAction('reject');
   const activateAction = useCatalogAction('activate');
@@ -129,10 +180,67 @@ export default function PlatformCatalogsPage() {
   const catalogs = data?.data ?? [];
   const total = data?.total ?? 0;
 
+  const companyItems = (companies ?? []).map((c) => ({ id: c.id, text: c.name }));
+  const companyNameMap = new Map(companyItems.map((c) => [c.id, c.text]));
+
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
+
+  function showToast(kind: 'success' | 'error', message: string) {
+    setToast({ kind, message });
+    setTimeout(() => setToast(null), 3000);
+  }
+
+  function resetCreateForm() {
+    setNewCompanyId('');
+    setNewName('');
+    setNewDescription('');
+    setNewPaymentModel('');
+    setNewWindowOpens('');
+    setNewWindowCloses('');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Create handler
+  // ---------------------------------------------------------------------------
+
+  function handleCreate() {
+    if (!newCompanyId || !newName.trim() || !newPaymentModel) return;
+
+    const isInvoice = newPaymentModel === 'invoice_after_close';
+    if (isInvoice && (!newWindowOpens || !newWindowCloses)) return;
+    if (isInvoice && newWindowOpens >= newWindowCloses) return;
+
+    const payload: PlatformCatalogCreate = {
+      companyId: newCompanyId,
+      name: newName.trim(),
+      description: newDescription.trim() || undefined,
+      paymentModel: newPaymentModel,
+      buyingWindowOpensAt: isInvoice ? newWindowOpens : undefined,
+      buyingWindowClosesAt: isInvoice ? newWindowCloses : undefined,
+    };
+
+    createCatalog.mutate(payload, {
+      onSuccess: () => {
+        showToast('success', 'Catalog created');
+        setCreateOpen(false);
+        resetCreateForm();
+      },
+      onError: () => {
+        showToast('error', 'Failed to create catalog');
+      },
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Action handlers
+  // ---------------------------------------------------------------------------
+
   const rows = catalogs.map((c) => ({
     id: c.id,
     name: c.name,
-    companyId: c.companyId ?? '—',
+    companyName: companyNameMap.get(c.companyId) ?? c.companyId,
     status: c.status,
     paymentModel: c.paymentModel === 'self_service' ? 'Self-Service' : 'Invoice After Close',
     createdAt: c.createdAt,
@@ -140,14 +248,8 @@ export default function PlatformCatalogsPage() {
 
   const handleAction = (action: ReturnType<typeof useCatalogAction>, id: string, label: string) => {
     action.mutate(id, {
-      onSuccess: () => {
-        setToast({ kind: 'success', message: `Catalog ${label} successfully` });
-        setTimeout(() => setToast(null), 3000);
-      },
-      onError: () => {
-        setToast({ kind: 'error', message: `Failed to ${label.toLowerCase()} catalog` });
-        setTimeout(() => setToast(null), 3000);
-      },
+      onSuccess: () => showToast('success', `Catalog ${label} successfully`),
+      onError: () => showToast('error', `Failed to ${label.toLowerCase()} catalog`),
     });
   };
 
@@ -164,11 +266,23 @@ export default function PlatformCatalogsPage() {
     }
   };
 
+  const isInvoiceModel = newPaymentModel === 'invoice_after_close';
+
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold text-text-primary">
-        Catalog Management
-      </h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold text-text-primary">
+          Catalog Management
+        </h1>
+        <Button
+          kind="primary"
+          size="sm"
+          renderIcon={Add}
+          onClick={() => setCreateOpen(true)}
+        >
+          Create Catalog
+        </Button>
+      </div>
 
       {isError && (
         <InlineNotification
@@ -330,6 +444,109 @@ export default function PlatformCatalogsPage() {
           }}
         />
       )}
+
+      {/* Create Catalog Modal */}
+      <Modal
+        open={createOpen}
+        onRequestClose={() => {
+          setCreateOpen(false);
+          resetCreateForm();
+        }}
+        onRequestSubmit={handleCreate}
+        modalHeading="Create Catalog"
+        primaryButtonText={createCatalog.isPending ? 'Creating...' : 'Create'}
+        secondaryButtonText="Cancel"
+        primaryButtonDisabled={
+          !newCompanyId ||
+          !newName.trim() ||
+          !newPaymentModel ||
+          (isInvoiceModel && (!newWindowOpens || !newWindowCloses)) ||
+          (isInvoiceModel && newWindowOpens >= newWindowCloses) ||
+          createCatalog.isPending
+        }
+      >
+        <div className="flex flex-col gap-4 mt-2">
+          <Dropdown
+            id="create-catalog-company"
+            titleText="Company"
+            label="Select a company"
+            items={companyItems}
+            itemToString={(item: { id: string; text: string } | null) => item?.text ?? ''}
+            selectedItem={companyItems.find((c) => c.id === newCompanyId) ?? null}
+            onChange={({ selectedItem }: { selectedItem: { id: string; text: string } | null }) =>
+              setNewCompanyId(selectedItem?.id ?? '')
+            }
+          />
+          <TextInput
+            id="create-catalog-name"
+            labelText="Name"
+            placeholder="e.g., Spring 2026 Collection"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            required
+          />
+          <TextArea
+            id="create-catalog-description"
+            labelText="Description"
+            placeholder="Optional catalog description"
+            value={newDescription}
+            onChange={(e) => setNewDescription(e.target.value)}
+          />
+          <Dropdown
+            id="create-catalog-payment-model"
+            titleText="Payment Model"
+            label="Select payment model"
+            items={PAYMENT_MODEL_ITEMS}
+            itemToString={(item: { id: string; text: string } | null) => item?.text ?? ''}
+            selectedItem={PAYMENT_MODEL_ITEMS.find((p) => p.id === newPaymentModel) ?? null}
+            onChange={({ selectedItem }: { selectedItem: { id: string; text: string } | null }) => {
+              const model = (selectedItem?.id ?? '') as PaymentModel | '';
+              setNewPaymentModel(model);
+              if (model !== 'invoice_after_close') {
+                setNewWindowOpens('');
+                setNewWindowCloses('');
+              }
+            }}
+          />
+          {isInvoiceModel && (
+            <>
+              <DatePicker
+                datePickerType="single"
+                onChange={(dates: Date[]) => {
+                  if (dates[0]) setNewWindowOpens(toISODate(dates[0]));
+                }}
+              >
+                <DatePickerInput
+                  id="create-window-opens"
+                  labelText="Buying Window Opens"
+                  placeholder="mm/dd/yyyy"
+                />
+              </DatePicker>
+              <DatePicker
+                datePickerType="single"
+                onChange={(dates: Date[]) => {
+                  if (dates[0]) setNewWindowCloses(toISODate(dates[0]));
+                }}
+              >
+                <DatePickerInput
+                  id="create-window-closes"
+                  labelText="Buying Window Closes"
+                  placeholder="mm/dd/yyyy"
+                />
+              </DatePicker>
+              {newWindowOpens && newWindowCloses && newWindowOpens >= newWindowCloses && (
+                <InlineNotification
+                  kind="error"
+                  title="Invalid dates"
+                  subtitle="Opening date must be before closing date."
+                  hideCloseButton
+                  lowContrast
+                />
+              )}
+            </>
+          )}
+        </div>
+      </Modal>
 
       {/* Toast */}
       {toast && (

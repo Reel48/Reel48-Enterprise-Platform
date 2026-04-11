@@ -48,6 +48,7 @@ const regionalManagerNav: NavItem[] = [
   ...employeeNav,
   { label: 'Bulk Orders', href: '/bulk-orders', icon: GroupResource },
   { label: 'Approvals', href: '/admin/approvals', icon: Task },
+  { label: 'Invoices', href: '/invoices', icon: Receipt },
 ];
 
 const subBrandAdminNav: NavItem[] = [
@@ -61,9 +62,8 @@ const subBrandAdminNav: NavItem[] = [
 
 const corporateAdminNav: NavItem[] = [
   ...subBrandAdminNav,
-  { label: 'All Sub-Brands', href: '/admin/brands', icon: Store },
+  { label: 'Sub-Brands', href: '/admin/brands', icon: Enterprise },
   { label: 'Approval Rules', href: '/admin/approval-rules', icon: Policy },
-  { label: 'Invoices', href: '/invoices', icon: Receipt },
 ];
 
 const platformAdminNav: NavItem[] = [
