@@ -6,6 +6,7 @@ from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError, ValidationError
 from app.models.catalog import Catalog
@@ -221,6 +222,8 @@ class CatalogService:
         self.db.add(catalog_product)
         await self.db.flush()
         await self.db.refresh(catalog_product)
+        # Eagerly set the product relationship for response serialization
+        catalog_product.product = product  # type: ignore[assignment]
         return catalog_product
 
     async def remove_product_from_catalog(
@@ -265,9 +268,12 @@ class CatalogService:
         total = await self.db.scalar(
             select(func.count()).select_from(query.subquery())
         )
-        query = query.order_by(CatalogProduct.display_order).offset(
-            (page - 1) * per_page
-        ).limit(per_page)
+        query = (
+            query.options(selectinload(CatalogProduct.product))
+            .order_by(CatalogProduct.display_order)
+            .offset((page - 1) * per_page)
+            .limit(per_page)
+        )
         result = await self.db.execute(query)
         return list(result.scalars().all()), total or 0
 

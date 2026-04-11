@@ -81,8 +81,24 @@ class CatalogProductAdd(BaseModel):
     price_override: float | None = None
 
 
+class CatalogProductProductDetail(BaseModel):
+    """Nested product detail within a catalog-product response."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str
+    description: str | None
+    sku: str
+    unit_price: float
+    sizes: list
+    decoration_options: list
+    image_urls: list
+    status: str
+
+
 class CatalogProductResponse(BaseModel):
-    """Response for catalog-product junction entries."""
+    """Response for catalog-product junction entries with nested product details."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -95,3 +111,4 @@ class CatalogProductResponse(BaseModel):
     sub_brand_id: UUID | None
     created_at: datetime
     updated_at: datetime
+    product: CatalogProductProductDetail | None = None

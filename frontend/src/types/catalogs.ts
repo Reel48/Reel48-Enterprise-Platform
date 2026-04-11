@@ -62,6 +62,18 @@ export interface CatalogUpdate {
   buyingWindowClosesAt?: string;
 }
 
+export interface CatalogProductDetail {
+  id: string;
+  name: string;
+  description: string | null;
+  sku: string;
+  unitPrice: number;
+  sizes: string[];
+  decorationOptions: string[];
+  imageUrls: string[];
+  status: string;
+}
+
 export interface CatalogProductEntry {
   id: string;
   catalogId: string;
@@ -72,6 +84,7 @@ export interface CatalogProductEntry {
   subBrandId: string | null;
   createdAt: string;
   updatedAt: string;
+  product?: CatalogProductDetail;
 }
 
 export interface CatalogProductAdd {

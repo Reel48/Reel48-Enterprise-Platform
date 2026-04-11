@@ -1,5 +1,6 @@
 from sqlalchemy import Column, ForeignKey, Integer, Numeric
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 
 from app.models.base import TenantBase
 
@@ -25,3 +26,5 @@ class CatalogProduct(TenantBase):
     )
     display_order = Column(Integer, nullable=False, server_default="0")
     price_override = Column(Numeric(10, 2), nullable=True)
+
+    product = relationship("Product", lazy="noload")

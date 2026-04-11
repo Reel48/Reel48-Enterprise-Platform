@@ -300,7 +300,7 @@ export default function CatalogDetailPage() {
   ];
 
   const productTableRows = catalogProducts.map((cp) => {
-    const product = productMap.get(cp.productId);
+    const product = cp.product ?? productMap.get(cp.productId);
     return {
       id: cp.productId,
       name: product?.name ?? cp.productId,

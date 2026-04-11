@@ -41,6 +41,25 @@ function useActiveCatalogs() {
   });
 }
 
+interface CatalogProductApiEntry {
+  id: string;
+  catalogId: string;
+  productId: string;
+  displayOrder: number;
+  priceOverride: number | null;
+  product?: {
+    id: string;
+    name: string;
+    description: string | null;
+    sku: string;
+    unitPrice: number;
+    sizes: string[];
+    decorationOptions: string[];
+    imageUrls: string[];
+    status: string;
+  };
+}
+
 function useCatalogProducts(
   catalogId: string | null,
   page: number,
@@ -50,7 +69,7 @@ function useCatalogProducts(
   return useQuery({
     queryKey: ['catalog-products', catalogId, page, perPage, search],
     queryFn: async () => {
-      if (!catalogId) return { data: [], total: 0 };
+      if (!catalogId) return { data: [] as ProductCardProduct[], total: 0 };
       const params: Record<string, string> = {
         page: String(page),
         per_page: String(perPage),
@@ -58,12 +77,25 @@ function useCatalogProducts(
       if (search) {
         params.search = search;
       }
-      const res = await api.get<ProductCardProduct[]>(
+      const res = await api.get<CatalogProductApiEntry[]>(
         `/api/v1/catalogs/${catalogId}/products/`,
         params,
       );
+      // Flatten nested product details into ProductCardProduct shape
+      const products: ProductCardProduct[] = (res.data ?? [])
+        .filter((cp) => cp.product)
+        .map((cp) => ({
+          id: cp.product!.id,
+          name: cp.product!.name,
+          sku: cp.product!.sku,
+          unitPrice: cp.priceOverride ?? cp.product!.unitPrice,
+          imageUrls: cp.product!.imageUrls,
+          sizes: cp.product!.sizes,
+          decorationOptions: cp.product!.decorationOptions,
+          status: cp.product!.status,
+        }));
       return {
-        data: res.data,
+        data: products,
         total: (res.meta as { total?: number })?.total ?? 0,
       };
     },
