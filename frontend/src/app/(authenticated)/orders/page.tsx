@@ -18,6 +18,7 @@ import {
   TableToolbar,
   TableToolbarContent,
   Tile,
+  ToastNotification,
 } from '@carbon/react';
 import { ShoppingCart } from '@carbon/react/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -82,6 +83,14 @@ const STATUS_OPTIONS = [
   { id: 'cancelled', text: 'Cancelled' },
 ];
 
+/** Map each status to the next forward-progress action for managers. */
+const NEXT_ACTION: Partial<Record<OrderStatus, { label: string; action: string }>> = {
+  pending: { label: 'Approve', action: 'approve' },
+  approved: { label: 'Process', action: 'process' },
+  processing: { label: 'Ship', action: 'ship' },
+  shipped: { label: 'Deliver', action: 'deliver' },
+};
+
 // ---------------------------------------------------------------------------
 // Data hooks
 // ---------------------------------------------------------------------------
@@ -108,6 +117,19 @@ function useOrders(
         data: res.data,
         total: (res.meta as { total?: number })?.total ?? 0,
       };
+    },
+  });
+}
+
+function useOrderTransition(action: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (orderId: string) => {
+      const res = await api.post<Order>(`/api/v1/orders/${orderId}/${action}`);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
     },
   });
 }
@@ -146,7 +168,20 @@ export default function OrdersPage() {
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(20);
   const [statusFilter, setStatusFilter] = useState('all');
+  const [toast, setToast] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
+
   const cancelOrder = useCancelOrder();
+  const approveOrder = useOrderTransition('approve');
+  const processOrder = useOrderTransition('process');
+  const shipOrder = useOrderTransition('ship');
+  const deliverOrder = useOrderTransition('deliver');
+
+  const transitionMutations: Record<string, ReturnType<typeof useOrderTransition>> = {
+    approve: approveOrder,
+    process: processOrder,
+    ship: shipOrder,
+    deliver: deliverOrder,
+  };
 
   const role = user?.tenantContext.role ?? 'employee';
   const isManager = MANAGER_AND_ABOVE.includes(role);
@@ -165,8 +200,43 @@ export default function OrdersPage() {
     createdAt: order.createdAt,
   }));
 
+  function showToast(kind: 'success' | 'error', message: string) {
+    setToast({ kind, message });
+    setTimeout(() => setToast(null), 3000);
+  }
+
+  function handleTransition(orderId: string, action: string) {
+    const mutation = transitionMutations[action];
+    if (!mutation) return;
+    mutation.mutate(orderId, {
+      onSuccess: () => showToast('success', `Order ${action}${action.endsWith('e') ? 'd' : 'ed'} successfully`),
+      onError: () => showToast('error', `Failed to ${action} order`),
+    });
+  }
+
+  function handleCancel(orderId: string) {
+    cancelOrder.mutate(orderId, {
+      onSuccess: () => showToast('success', 'Order cancelled successfully'),
+      onError: () => showToast('error', 'Failed to cancel order'),
+    });
+  }
+
+  const anyMutationPending =
+    cancelOrder.isPending || approveOrder.isPending || processOrder.isPending ||
+    shipOrder.isPending || deliverOrder.isPending;
+
   return (
     <div className="flex flex-col gap-6">
+      {toast && (
+        <ToastNotification
+          kind={toast.kind}
+          title={toast.kind === 'success' ? 'Success' : 'Error'}
+          subtitle={toast.message}
+          onClose={() => setToast(null)}
+          timeout={3000}
+        />
+      )}
+
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-text-primary">
           {isManager ? 'All Orders' : 'My Orders'}
@@ -249,6 +319,11 @@ export default function OrdersPage() {
                   tableRows.map((row) => {
                     const { key: rowKey, ...rowProps } = getRowProps({ row });
                     const order = orders.find((o) => o.id === row.id);
+                    const nextAction = order ? NEXT_ACTION[order.status] : undefined;
+                    const showCancelBtn = order && (
+                      order.status === 'pending' ||
+                      (order.status === 'approved' && isManager)
+                    );
                     return (
                       <TableRow key={String(rowKey)} {...rowProps}>
                         {row.cells.map((cell) => {
@@ -286,12 +361,22 @@ export default function OrdersPage() {
                                   >
                                     View
                                   </Button>
-                                  {order?.status === 'pending' && (
+                                  {isManager && nextAction && (
+                                    <Button
+                                      kind="primary"
+                                      size="sm"
+                                      disabled={anyMutationPending}
+                                      onClick={() => handleTransition(row.id, nextAction.action)}
+                                    >
+                                      {nextAction.label}
+                                    </Button>
+                                  )}
+                                  {showCancelBtn && (
                                     <Button
                                       kind="danger--ghost"
                                       size="sm"
-                                      onClick={() => cancelOrder.mutate(row.id)}
-                                      disabled={cancelOrder.isPending}
+                                      disabled={anyMutationPending}
+                                      onClick={() => handleCancel(row.id)}
                                     >
                                       Cancel
                                     </Button>
