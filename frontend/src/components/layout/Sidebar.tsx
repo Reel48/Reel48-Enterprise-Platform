@@ -51,6 +51,7 @@ const regionalManagerNav: NavItem[] = [
 
 const subBrandAdminNav: NavItem[] = [
   ...regionalManagerNav,
+  { label: 'Manage Products', href: '/catalog/manage', icon: Catalog },
   { label: 'Users', href: '/admin/users', icon: UserProfile },
   { label: 'Analytics', href: '/admin/analytics', icon: Analytics },
   { label: 'Brand Settings', href: '/settings', icon: Settings },
