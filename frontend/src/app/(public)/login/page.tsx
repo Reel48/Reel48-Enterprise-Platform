@@ -46,8 +46,8 @@ export default function LoginPage() {
         <Image
           src="/reel48-logo-black.svg"
           alt="Reel48+"
-          width={140}
-          height={35}
+          width={170}
+          height={43}
           priority
           className="mx-auto mb-4"
         />
