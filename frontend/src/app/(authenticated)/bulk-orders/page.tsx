@@ -16,13 +16,13 @@ import {
   TableRow,
   TableToolbar,
   TableToolbarContent,
-  Tag,
 } from '@carbon/react';
 import { Add, GroupResource } from '@carbon/react/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { useAuth } from '@/lib/auth/hooks';
 import { api } from '@/lib/api/client';
+import { StatusTag } from '@/components/ui/StatusTag';
 import type { BulkOrder } from '@/types/bulk-orders';
 import type { UserRole } from '@/types/auth';
 
@@ -214,19 +214,22 @@ export default function BulkOrdersPage() {
           <TableContainer>
             <TableToolbar>
               <TableToolbarContent>
-                <Dropdown
-                  id="bulk-status-filter"
-                  titleText=""
-                  label="Filter by status"
-                  items={STATUS_OPTIONS}
-                  itemToString={(item: { id: string; text: string } | null) => item?.text ?? ''}
-                  selectedItem={STATUS_OPTIONS.find((s) => s.id === statusFilter) ?? STATUS_OPTIONS[0]}
-                  onChange={({ selectedItem }: { selectedItem: { id: string; text: string } | null }) => {
-                    setStatusFilter(selectedItem?.id ?? 'all');
-                    setPage(1);
-                  }}
-                  size="sm"
-                />
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-medium" style={{ color: 'var(--cds-text-secondary)' }}>Filter:</span>
+                  <Dropdown
+                    id="bulk-status-filter"
+                    titleText=""
+                    label="Filter by status"
+                    items={STATUS_OPTIONS}
+                    itemToString={(item: { id: string; text: string } | null) => item?.text ?? ''}
+                    selectedItem={STATUS_OPTIONS.find((s) => s.id === statusFilter) ?? STATUS_OPTIONS[0]}
+                    onChange={({ selectedItem }: { selectedItem: { id: string; text: string } | null }) => {
+                      setStatusFilter(selectedItem?.id ?? 'all');
+                      setPage(1);
+                    }}
+                    size="sm"
+                  />
+                </div>
               </TableToolbarContent>
             </TableToolbar>
             <Table {...getTableProps()}>
@@ -277,9 +280,9 @@ export default function BulkOrdersPage() {
                           if (cell.info.header === 'status') {
                             return (
                               <TableCell key={cell.id}>
-                                <Tag type={statusColor(cell.value as string)} size="sm">
+                                <StatusTag type={statusColor(cell.value as string)}>
                                   {cell.value as string}
-                                </Tag>
+                                </StatusTag>
                               </TableCell>
                             );
                           }

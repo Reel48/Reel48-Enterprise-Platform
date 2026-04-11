@@ -6,13 +6,13 @@ import {
   BreadcrumbItem,
   Button,
   InlineNotification,
-  Tag,
   Tile,
 } from '@carbon/react';
 import { GroupResource } from '@carbon/react/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api/client';
+import { StatusTag } from '@/components/ui/StatusTag';
 import type { BulkOrderWithItems } from '@/types/bulk-orders';
 
 // ---------------------------------------------------------------------------
@@ -120,9 +120,9 @@ export default function BulkOrderDetailPage() {
           <h1 className="text-2xl font-semibold text-text-primary">
             {bulkOrder.title ?? 'Bulk Order'}
           </h1>
-          <Tag type={statusColor(bulkOrder.status)} size="sm">
+          <StatusTag type={statusColor(bulkOrder.status)}>
             {bulkOrder.status}
-          </Tag>
+          </StatusTag>
         </div>
         <div className="flex gap-2">
           {bulkOrder.status === 'draft' && (

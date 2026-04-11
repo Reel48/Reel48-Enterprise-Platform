@@ -5,12 +5,12 @@ import Image from 'next/image';
 import {
   Button,
   Pagination,
-  Tag,
   Tile,
 } from '@carbon/react';
 import { TrashCan, FavoriteFilled, Catalog } from '@carbon/react/icons';
 
 import { useWishlist, useRemoveFromWishlist } from '@/hooks/useEngagement';
+import { StatusTag } from '@/components/ui/StatusTag';
 import type { WishlistItem } from '@/types/engagement';
 
 function formatPrice(price: number): string {
@@ -46,9 +46,9 @@ function WishlistCard({ item, onRemove }: { item: WishlistItem; onRemove: () => 
             {item.productName}
           </h3>
           {!isAvailable && (
-            <Tag type="red" size="sm">
+            <StatusTag type="red">
               Unavailable
-            </Tag>
+            </StatusTag>
           )}
         </div>
 

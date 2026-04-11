@@ -26,6 +26,7 @@ import { Checkmark, Close, Task } from '@carbon/react/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api/client';
+import { StatusTag } from '@/components/ui/StatusTag';
 import type { ApprovalRequest } from '@/types/approvals';
 
 // ---------------------------------------------------------------------------
@@ -400,9 +401,9 @@ export default function ApprovalsPage() {
                                 if (cell.info.header === 'status') {
                                   return (
                                     <TableCell key={cell.id}>
-                                      <Tag type={statusColor(cell.value as string)} size="sm">
+                                      <StatusTag type={statusColor(cell.value as string)}>
                                         {cell.value as string}
-                                      </Tag>
+                                      </StatusTag>
                                     </TableCell>
                                   );
                                 }

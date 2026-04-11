@@ -6,7 +6,6 @@ import {
   ActionableNotification,
   Button,
   ProgressBar,
-  Tag,
   Tile,
   ClickableTile,
 } from '@carbon/react';
@@ -24,6 +23,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { useAuth } from '@/lib/auth/hooks';
 import { api } from '@/lib/api/client';
+import { StatusTag } from '@/components/ui/StatusTag';
 import {
   useNotifications,
   useUnreadNotificationCount,
@@ -330,9 +330,9 @@ function EmployeeDashboard({ fullName }: { fullName: string }) {
                     <span className="text-sm font-medium">
                       {formatPrice(order.totalAmount)}
                     </span>
-                    <Tag type={statusColor(order.status)} size="sm">
+                    <StatusTag type={statusColor(order.status)}>
                       {order.status}
-                    </Tag>
+                    </StatusTag>
                   </div>
                 </Link>
               ))}

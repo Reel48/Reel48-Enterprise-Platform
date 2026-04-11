@@ -16,7 +16,6 @@ import {
   TableRow,
   TableToolbar,
   TableToolbarContent,
-  Tag,
   TextInput,
   ToastNotification,
 } from '@carbon/react';
@@ -24,6 +23,7 @@ import { Store, Add } from '@carbon/react/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api/client';
+import { StatusTag } from '@/components/ui/StatusTag';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -220,14 +220,14 @@ export default function BrandsPage() {
                           <TableCell key={cell.id}>
                             {cell.info.header === 'isDefault' && original ? (
                               original.isDefault ? (
-                                <Tag type="blue" size="sm">Default</Tag>
+                                <StatusTag type="blue">Default</StatusTag>
                               ) : (
                                 '—'
                               )
                             ) : cell.info.header === 'status' && original ? (
-                              <Tag type={original.isActive ? 'green' : 'red'} size="sm">
+                              <StatusTag type={original.isActive ? 'green' : 'red'}>
                                 {original.isActive ? 'Active' : 'Inactive'}
-                              </Tag>
+                              </StatusTag>
                             ) : cell.info.header === 'createdAt' && original ? (
                               formatDate(original.createdAt)
                             ) : cell.info.header === 'actions' && original && original.isActive && !original.isDefault ? (

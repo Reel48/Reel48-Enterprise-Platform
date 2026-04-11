@@ -16,13 +16,13 @@ import {
   TableRow,
   TableToolbar,
   TableToolbarContent,
-  Tag,
   ToastNotification,
 } from '@carbon/react';
 import { Catalog as CatalogIcon } from '@carbon/react/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api/client';
+import { StatusTag } from '@/components/ui/StatusTag';
 import type { Catalog, CatalogStatus } from '@/types/catalogs';
 
 // ---------------------------------------------------------------------------
@@ -183,19 +183,22 @@ export default function PlatformCatalogsPage() {
           <TableContainer>
             <TableToolbar>
               <TableToolbarContent>
-                <Dropdown
-                  id="catalog-status-filter"
-                  titleText=""
-                  label="Filter by status"
-                  items={STATUS_OPTIONS}
-                  itemToString={(item: { id: string; text: string } | null) => item?.text ?? ''}
-                  selectedItem={STATUS_OPTIONS.find((s) => s.id === statusFilter) ?? STATUS_OPTIONS[0]}
-                  onChange={({ selectedItem }: { selectedItem: { id: string; text: string } | null }) => {
-                    setStatusFilter(selectedItem?.id ?? 'all');
-                    setPage(1);
-                  }}
-                  size="sm"
-                />
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-medium" style={{ color: 'var(--cds-text-secondary)' }}>Filter:</span>
+                  <Dropdown
+                    id="catalog-status-filter"
+                    titleText=""
+                    label="Filter by status"
+                    items={STATUS_OPTIONS}
+                    itemToString={(item: { id: string; text: string } | null) => item?.text ?? ''}
+                    selectedItem={STATUS_OPTIONS.find((s) => s.id === statusFilter) ?? STATUS_OPTIONS[0]}
+                    onChange={({ selectedItem }: { selectedItem: { id: string; text: string } | null }) => {
+                      setStatusFilter(selectedItem?.id ?? 'all');
+                      setPage(1);
+                    }}
+                    size="sm"
+                  />
+                </div>
               </TableToolbarContent>
             </TableToolbar>
             <Table {...getTableProps()}>
@@ -242,9 +245,9 @@ export default function PlatformCatalogsPage() {
                           if (cell.info.header === 'status') {
                             return (
                               <TableCell key={cell.id}>
-                                <Tag type={statusColor(cell.value as string)} size="sm">
+                                <StatusTag type={statusColor(cell.value as string)}>
                                   {cell.value as string}
-                                </Tag>
+                                </StatusTag>
                               </TableCell>
                             );
                           }

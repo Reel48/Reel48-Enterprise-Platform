@@ -29,6 +29,7 @@ import {
 import { UserProfile, Add, Copy, TrashCan } from '@carbon/react/icons';
 
 import { useAuth } from '@/lib/auth/hooks';
+import { StatusTag } from '@/components/ui/StatusTag';
 import type { UserRole } from '@/types/auth';
 
 import type { Invite, SubBrand, User } from './_types';
@@ -165,11 +166,12 @@ function UsersTab({
           <TableContainer>
             <TableToolbar>
               <TableToolbarContent>
-                <div className="flex gap-4 items-end">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-medium" style={{ color: 'var(--cds-text-secondary)' }}>Filter:</span>
                   <Dropdown
                     id="role-filter"
-                    titleText="Filter by Role"
-                    label="Select role"
+                    titleText=""
+                    label="All Roles"
                     items={ROLE_FILTER_OPTIONS}
                     itemToString={(item) => item?.text ?? ''}
                     initialSelectedItem={ROLE_FILTER_OPTIONS[0]}
@@ -221,9 +223,9 @@ function UsersTab({
                                 {roleLabel(original.role)}
                               </Tag>
                             ) : cell.info.header === 'status' && original ? (
-                              <Tag type={original.isActive ? 'green' : 'red'} size="sm">
+                              <StatusTag type={original.isActive ? 'green' : 'red'}>
                                 {original.isActive ? 'Active' : 'Inactive'}
-                              </Tag>
+                              </StatusTag>
                             ) : cell.info.header === 'createdAt' && original ? (
                               formatDate(original.createdAt)
                             ) : cell.info.header === 'actions' && original && canManage && original.isActive ? (
@@ -369,9 +371,9 @@ function InvitesTab({
                                 {roleLabel(original.role)}
                               </Tag>
                             ) : cell.info.header === 'status' ? (
-                              <Tag type={inviteStatusColor(status)} size="sm">
+                              <StatusTag type={inviteStatusColor(status)}>
                                 {status}
-                              </Tag>
+                              </StatusTag>
                             ) : cell.info.header === 'token' && original ? (
                               <code className="text-xs">{original.token}</code>
                             ) : cell.info.header === 'createdAt' && original ? (

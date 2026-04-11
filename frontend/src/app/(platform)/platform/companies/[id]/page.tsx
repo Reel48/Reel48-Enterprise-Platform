@@ -7,7 +7,6 @@ import {
   BreadcrumbItem,
   Button,
   InlineNotification,
-  Tag,
   TextInput,
   Tile,
   ToastNotification,
@@ -16,6 +15,7 @@ import { Enterprise, Save } from '@carbon/react/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api/client';
+import { StatusTag } from '@/components/ui/StatusTag';
 import type { Company } from '@/types/companies';
 
 // ---------------------------------------------------------------------------
@@ -182,9 +182,9 @@ export default function CompanyDetailPage() {
           <h1 className="text-2xl font-semibold text-text-primary">
             {company.name}
           </h1>
-          <Tag type={company.isActive ? 'green' : 'red'} size="sm">
+          <StatusTag type={company.isActive ? 'green' : 'red'}>
             {company.isActive ? 'Active' : 'Inactive'}
-          </Tag>
+          </StatusTag>
         </div>
         <div className="flex gap-2">
           <Button
@@ -277,11 +277,11 @@ export default function CompanyDetailPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   {sb.isDefault && (
-                    <Tag type="blue" size="sm">Default</Tag>
+                    <StatusTag type="blue">Default</StatusTag>
                   )}
-                  <Tag type={sb.isActive ? 'green' : 'red'} size="sm">
+                  <StatusTag type={sb.isActive ? 'green' : 'red'}>
                     {sb.isActive ? 'Active' : 'Inactive'}
-                  </Tag>
+                  </StatusTag>
                 </div>
               </div>
             ))}

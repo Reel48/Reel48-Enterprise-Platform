@@ -6,13 +6,13 @@ import {
   BreadcrumbItem,
   Button,
   InlineNotification,
-  Tag,
   Tile,
 } from '@carbon/react';
 import { ShoppingCart } from '@carbon/react/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api/client';
+import { StatusTag } from '@/components/ui/StatusTag';
 import type { OrderWithItems } from '@/types/orders';
 
 // ---------------------------------------------------------------------------
@@ -116,9 +116,9 @@ export default function OrderDetailPage() {
           <h1 className="text-2xl font-semibold text-text-primary">
             {order.orderNumber}
           </h1>
-          <Tag type={statusColor(order.status)} size="sm">
+          <StatusTag type={statusColor(order.status)}>
             {order.status}
-          </Tag>
+          </StatusTag>
         </div>
         {order.status === 'pending' && (
           <Button

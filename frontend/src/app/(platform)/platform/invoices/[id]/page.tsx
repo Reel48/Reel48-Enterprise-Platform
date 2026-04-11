@@ -15,6 +15,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api/client';
+import { StatusTag } from '@/components/ui/StatusTag';
 import type { Invoice, InvoiceStatus } from '@/types/invoices';
 
 // ---------------------------------------------------------------------------
@@ -160,9 +161,9 @@ export default function InvoiceDetailPage() {
           <h1 className="text-2xl font-semibold text-text-primary">
             {invoice.invoiceNumber ?? 'Draft Invoice'}
           </h1>
-          <Tag type={statusColor(invoice.status)} size="sm">
+          <StatusTag type={statusColor(invoice.status)}>
             {invoice.status.replace('_', ' ')}
-          </Tag>
+          </StatusTag>
           <Tag type="gray" size="sm">
             {billingFlowLabel(invoice.billingFlow)}
           </Tag>

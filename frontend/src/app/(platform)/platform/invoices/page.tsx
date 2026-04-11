@@ -25,6 +25,7 @@ import { Add, Receipt } from '@carbon/react/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api/client';
+import { StatusTag } from '@/components/ui/StatusTag';
 import type { Invoice, InvoiceStatus } from '@/types/invoices';
 
 // ---------------------------------------------------------------------------
@@ -281,32 +282,35 @@ export default function PlatformInvoicesPage() {
           <TableContainer>
             <TableToolbar>
               <TableToolbarContent>
-                <Dropdown
-                  id="invoice-status-filter"
-                  titleText=""
-                  label="Status"
-                  items={STATUS_OPTIONS}
-                  itemToString={(item: { id: string; text: string } | null) => item?.text ?? ''}
-                  selectedItem={STATUS_OPTIONS.find((s) => s.id === statusFilter) ?? STATUS_OPTIONS[0]}
-                  onChange={({ selectedItem }: { selectedItem: { id: string; text: string } | null }) => {
-                    setStatusFilter(selectedItem?.id ?? 'all');
-                    setPage(1);
-                  }}
-                  size="sm"
-                />
-                <Dropdown
-                  id="invoice-flow-filter"
-                  titleText=""
-                  label="Billing Flow"
-                  items={FLOW_OPTIONS}
-                  itemToString={(item: { id: string; text: string } | null) => item?.text ?? ''}
-                  selectedItem={FLOW_OPTIONS.find((f) => f.id === flowFilter) ?? FLOW_OPTIONS[0]}
-                  onChange={({ selectedItem }: { selectedItem: { id: string; text: string } | null }) => {
-                    setFlowFilter(selectedItem?.id ?? 'all');
-                    setPage(1);
-                  }}
-                  size="sm"
-                />
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-medium" style={{ color: 'var(--cds-text-secondary)' }}>Filter:</span>
+                  <Dropdown
+                    id="invoice-status-filter"
+                    titleText=""
+                    label="Status"
+                    items={STATUS_OPTIONS}
+                    itemToString={(item: { id: string; text: string } | null) => item?.text ?? ''}
+                    selectedItem={STATUS_OPTIONS.find((s) => s.id === statusFilter) ?? STATUS_OPTIONS[0]}
+                    onChange={({ selectedItem }: { selectedItem: { id: string; text: string } | null }) => {
+                      setStatusFilter(selectedItem?.id ?? 'all');
+                      setPage(1);
+                    }}
+                    size="sm"
+                  />
+                  <Dropdown
+                    id="invoice-flow-filter"
+                    titleText=""
+                    label="Billing Flow"
+                    items={FLOW_OPTIONS}
+                    itemToString={(item: { id: string; text: string } | null) => item?.text ?? ''}
+                    selectedItem={FLOW_OPTIONS.find((f) => f.id === flowFilter) ?? FLOW_OPTIONS[0]}
+                    onChange={({ selectedItem }: { selectedItem: { id: string; text: string } | null }) => {
+                      setFlowFilter(selectedItem?.id ?? 'all');
+                      setPage(1);
+                    }}
+                    size="sm"
+                  />
+                </div>
               </TableToolbarContent>
             </TableToolbar>
             <Table {...getTableProps()}>
@@ -353,9 +357,9 @@ export default function PlatformInvoicesPage() {
                           if (cell.info.header === 'status') {
                             return (
                               <TableCell key={cell.id}>
-                                <Tag type={statusColor(cell.value as string)} size="sm">
+                                <StatusTag type={statusColor(cell.value as string)}>
                                   {(cell.value as string).replace('_', ' ')}
-                                </Tag>
+                                </StatusTag>
                               </TableCell>
                             );
                           }

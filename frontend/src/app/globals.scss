@@ -24,7 +24,85 @@
 }
 
 .cds--side-nav__link:hover {
-  background-color: #f4f4f4 !important;
+  background-color: #f2f4f8 !important;
+}
+
+// =============================================================================
+// Table container elevation — crisp white surface on the cooler page background
+// =============================================================================
+.cds--data-table-container {
+  background-color: #ffffff;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  border: 1px solid var(--cds-border-subtle-01);
+}
+
+// =============================================================================
+// Status dot + label pattern
+// Adds a small glowing dot before Tag text for status-type tags.
+// Applied via data-status-dot attribute on the parent span wrapping the Tag.
+// =============================================================================
+.status-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  &::before {
+    content: '';
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  &--green::before {
+    background-color: #198038;
+    box-shadow: 0 0 4px rgba(25, 128, 56, 0.4);
+  }
+
+  &--red::before {
+    background-color: #da1e28;
+    box-shadow: 0 0 4px rgba(218, 30, 40, 0.35);
+  }
+
+  &--teal::before {
+    background-color: #0a6b6b;
+    box-shadow: 0 0 4px rgba(10, 107, 107, 0.35);
+  }
+
+  &--blue::before {
+    background-color: #1192e8;
+    box-shadow: 0 0 4px rgba(17, 146, 232, 0.35);
+  }
+
+  &--purple::before {
+    background-color: #6929c4;
+    box-shadow: 0 0 4px rgba(105, 41, 196, 0.35);
+  }
+
+  &--gray::before {
+    background-color: #8d8d8d;
+    box-shadow: 0 0 4px rgba(141, 141, 141, 0.25);
+  }
+}
+
+// =============================================================================
+// Toolbar / filter bar refinements
+// Tighter spacing, compact filter area that reads as a unified bar
+// =============================================================================
+.cds--table-toolbar {
+  background-color: #ffffff;
+  border-bottom: 1px solid var(--cds-border-subtle-01);
+}
+
+.cds--toolbar-content {
+  padding: 0.5rem 1rem;
+}
+
+// Constrain dropdown width inside toolbars so filters don't stretch full-width
+.cds--table-toolbar .cds--dropdown--sm {
+  max-width: 220px;
 }
 
 // Pagination and other interactive element focus rings

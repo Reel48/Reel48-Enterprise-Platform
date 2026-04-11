@@ -22,6 +22,7 @@ import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 
 import { api } from '@/lib/api/client';
+import { StatusTag } from '@/components/ui/StatusTag';
 import type { Invoice, InvoiceStatus } from '@/types/invoices';
 
 // ---------------------------------------------------------------------------
@@ -148,10 +149,11 @@ export default function InvoicesPage() {
           <TableContainer>
             <TableToolbar>
               <TableToolbarContent>
-                <div className="flex gap-4 items-end">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-medium" style={{ color: 'var(--cds-text-secondary)' }}>Filter:</span>
                   <Dropdown
                     id="status-filter"
-                    titleText="Status"
+                    titleText=""
                     label="Select status"
                     items={STATUS_FILTER_OPTIONS}
                     itemToString={(item) => item?.text ?? ''}
@@ -207,9 +209,9 @@ export default function InvoicesPage() {
                                 {original.invoiceNumber ?? 'Draft'}
                               </Link>
                             ) : cell.info.header === 'status' && original ? (
-                              <Tag type={statusColor(original.status)} size="sm">
+                              <StatusTag type={statusColor(original.status)}>
                                 {original.status.replace('_', ' ')}
-                              </Tag>
+                              </StatusTag>
                             ) : cell.info.header === 'billingFlow' && original ? (
                               <Tag type="gray" size="sm">
                                 {billingFlowLabel(original.billingFlow)}

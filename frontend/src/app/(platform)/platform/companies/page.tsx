@@ -18,7 +18,6 @@ import {
   TableRow,
   TableToolbar,
   TableToolbarContent,
-  Tag,
   TextInput,
   ToastNotification,
 } from '@carbon/react';
@@ -26,6 +25,7 @@ import { Add, Enterprise } from '@carbon/react/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api/client';
+import { StatusTag } from '@/components/ui/StatusTag';
 import type { Company } from '@/types/companies';
 
 // ---------------------------------------------------------------------------
@@ -194,19 +194,22 @@ export default function PlatformCompaniesPage() {
                   }}
                   size="sm"
                 />
-                <Dropdown
-                  id="company-status-filter"
-                  titleText=""
-                  label="Status"
-                  items={STATUS_OPTIONS}
-                  itemToString={(item: { id: string; text: string } | null) => item?.text ?? ''}
-                  selectedItem={STATUS_OPTIONS.find((s) => s.id === statusFilter) ?? STATUS_OPTIONS[0]}
-                  onChange={({ selectedItem }: { selectedItem: { id: string; text: string } | null }) => {
-                    setStatusFilter(selectedItem?.id ?? 'all');
-                    setPage(1);
-                  }}
-                  size="sm"
-                />
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-medium" style={{ color: 'var(--cds-text-secondary)' }}>Filter:</span>
+                  <Dropdown
+                    id="company-status-filter"
+                    titleText=""
+                    label="Status"
+                    items={STATUS_OPTIONS}
+                    itemToString={(item: { id: string; text: string } | null) => item?.text ?? ''}
+                    selectedItem={STATUS_OPTIONS.find((s) => s.id === statusFilter) ?? STATUS_OPTIONS[0]}
+                    onChange={({ selectedItem }: { selectedItem: { id: string; text: string } | null }) => {
+                      setStatusFilter(selectedItem?.id ?? 'all');
+                      setPage(1);
+                    }}
+                    size="sm"
+                  />
+                </div>
               </TableToolbarContent>
             </TableToolbar>
             <Table {...getTableProps()}>
@@ -252,9 +255,9 @@ export default function PlatformCompaniesPage() {
                           if (cell.info.header === 'isActive') {
                             return (
                               <TableCell key={cell.id}>
-                                <Tag type={cell.value ? 'green' : 'red'} size="sm">
+                                <StatusTag type={cell.value ? 'green' : 'red'}>
                                   {cell.value ? 'Active' : 'Inactive'}
-                                </Tag>
+                                </StatusTag>
                               </TableCell>
                             );
                           }

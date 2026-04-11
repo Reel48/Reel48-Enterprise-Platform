@@ -13,6 +13,7 @@ import { ArrowLeft, Catalog as CatalogIcon } from '@carbon/react/icons';
 import { useQuery } from '@tanstack/react-query';
 
 import { api } from '@/lib/api/client';
+import { StatusTag } from '@/components/ui/StatusTag';
 import { ProductCard } from '@/components/features/catalog/ProductCard';
 import type { ProductCardProduct } from '@/components/features/catalog/ProductCard';
 import type { Catalog } from '@/types/catalogs';
@@ -159,9 +160,9 @@ export default function CatalogPage() {
                     {catalog.paymentModel === 'self_service' ? 'Self-Service' : 'Invoice'}
                   </Tag>
                   {catalog.paymentModel === 'invoice_after_close' && catalog.buyingWindowClosesAt && (
-                    <Tag type="purple" size="sm">
+                    <StatusTag type="purple">
                       Closes {formatDate(catalog.buyingWindowClosesAt)}
-                    </Tag>
+                    </StatusTag>
                   )}
                 </div>
               </Tile>
