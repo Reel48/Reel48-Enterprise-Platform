@@ -45,6 +45,16 @@ export interface CatalogCreate {
   buyingWindowClosesAt?: string;
 }
 
+export interface PlatformCatalogCreate {
+  companyId: string;
+  subBrandId?: string;
+  name: string;
+  description?: string;
+  paymentModel: PaymentModel;
+  buyingWindowOpensAt?: string;
+  buyingWindowClosesAt?: string;
+}
+
 export interface CatalogUpdate {
   name?: string;
   description?: string;
