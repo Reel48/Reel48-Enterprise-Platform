@@ -94,6 +94,18 @@ function useDeactivateCompany() {
   });
 }
 
+function useReactivateCompany() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (companyId: string) => {
+      await api.post(`/api/v1/platform/companies/${companyId}/reactivate`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['platform-companies'] });
+    },
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Table config
 // ---------------------------------------------------------------------------
@@ -123,6 +135,7 @@ export default function PlatformCompaniesPage() {
   const { data, isLoading, isError } = useCompanies(page, perPage, search, statusFilter);
   const createCompany = useCreateCompany();
   const deactivateCompany = useDeactivateCompany();
+  const reactivateCompany = useReactivateCompany();
 
   const companies = data?.data ?? [];
   const total = data?.total ?? 0;
@@ -275,7 +288,7 @@ export default function PlatformCompaniesPage() {
                                   <Button kind="ghost" size="sm" href={`/platform/companies/${row.id}`}>
                                     View
                                   </Button>
-                                  {company?.isActive && (
+                                  {company?.isActive ? (
                                     <Button
                                       kind="danger--ghost"
                                       size="sm"
@@ -283,6 +296,15 @@ export default function PlatformCompaniesPage() {
                                       disabled={deactivateCompany.isPending}
                                     >
                                       Deactivate
+                                    </Button>
+                                  ) : (
+                                    <Button
+                                      kind="ghost"
+                                      size="sm"
+                                      onClick={() => reactivateCompany.mutate(row.id)}
+                                      disabled={reactivateCompany.isPending}
+                                    >
+                                      Reactivate
                                     </Button>
                                   )}
                                 </div>
