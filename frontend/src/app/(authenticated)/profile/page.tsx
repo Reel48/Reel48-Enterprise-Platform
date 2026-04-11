@@ -252,7 +252,7 @@ export default function ProfilePage() {
               </Button>
               <input
                 type="file"
-                accept="image/png,image/jpeg,image/webp"
+                accept="image/png,image/jpeg"
                 onChange={handlePhotoUpload}
                 className="hidden"
               />

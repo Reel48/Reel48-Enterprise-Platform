@@ -85,6 +85,7 @@ export function S3Image({
       height={height}
       className={className}
       unoptimized
+      onError={() => setResolvedUrl(null)}
     />
   );
 }

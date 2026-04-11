@@ -133,11 +133,9 @@ class S3Service:
         """Generate a pre-signed GET URL for file download.
 
         - Pre-signed URL expires in 1 hour (3600 seconds)
-        - If cloudfront_domain is configured, generates a CloudFront URL instead
+        - TODO: Implement CloudFront signed URLs when key pair is configured.
+          Plain CloudFront URLs don't work with private S3 buckets.
         """
-        if self._cloudfront_domain:
-            return f"https://{self._cloudfront_domain}/{s3_key}"
-
         url = self._client.generate_presigned_url(
             "get_object",
             Params={"Bucket": self._bucket_name, "Key": s3_key},
