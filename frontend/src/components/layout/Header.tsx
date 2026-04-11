@@ -50,7 +50,7 @@ export function Header() {
       >
         <a href="/dashboard" className="flex items-center px-4 h-full">
           <Image
-            src="/reel48-logo.svg"
+            src="/reel48-logo-white.svg"
             alt="Reel48+"
             width={86}
             height={23}

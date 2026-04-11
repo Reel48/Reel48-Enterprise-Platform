@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import {
   Button,
   InlineNotification,
@@ -42,9 +43,14 @@ export default function LoginPage() {
   return (
     <div className="w-full max-w-sm">
       <div className="mb-8 text-center">
-        <h1 className="mb-2 text-3xl font-semibold text-text-primary">
-          Reel48+
-        </h1>
+        <Image
+          src="/reel48-logo-black.svg"
+          alt="Reel48+"
+          width={200}
+          height={50}
+          priority
+          className="mx-auto mb-4"
+        />
         <p className="text-text-secondary">
           Sign in to your account
         </p>
