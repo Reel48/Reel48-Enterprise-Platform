@@ -30,6 +30,61 @@
 
 ---
 
+## 2026-04-13 — Corporate Admin Sidebar Redesign (Session Audit)
+
+**Type:** End-of-session audit (Trigger 1) — redesigned sidebar navigation for
+the corporate_admin role.
+**Session:** Frontend-only session to restructure corporate admin navigation.
+
+### Changes Made
+
+- **File changed:** `frontend/src/components/layout/Sidebar.tsx`
+- **Change:** Replaced inherited `corporateAdminNav` (spread from subBrandAdminNav)
+  with a flat 13-item array. Added bottom profile section with initials/S3 photo,
+  user name, role label, and link to /profile. Profile data fetched via React Query
+  `['my-profile']` cache. New icons imported: `Product`, `Idea`, `AiGenerate`,
+  `ArrowsHorizontal`.
+- **Reason:** Sidebar needed a curated, intentional ordering for corporate admins
+  rather than the accumulated inheritance from lower roles.
+- **Impact:** Corporate admin sidebar now shows exactly 13 items in a specific order
+  with a profile section at the bottom. Other roles unchanged.
+
+- **Files created:** `frontend/src/app/(authenticated)/inside/page.tsx`,
+  `frontend/src/app/(authenticated)/ai/page.tsx`,
+  `frontend/src/app/(authenticated)/products/page.tsx`
+- **Change:** Three new placeholder pages for InsideReel48+, Reel48+ AI, and Products.
+- **Reason:** New sidebar items needed corresponding routes.
+
+- **Files changed:** `frontend/src/app/(authenticated)/catalog/page.tsx`,
+  `frontend/src/app/(authenticated)/admin/approvals/page.tsx`,
+  `frontend/src/app/(authenticated)/settings/page.tsx`
+- **Change:** Added in-page subpage buttons (Manage Catalogs, Approval Rules,
+  Sub-Brands) to their respective parent pages, visible only to appropriate roles.
+  Settings page title changed to "Brand Settings".
+- **Reason:** These subpages were removed from the sidebar and made accessible
+  via buttons within their parent pages instead.
+
+### New Pattern: Flat Role-Specific Navigation Arrays
+
+The `corporateAdminNav` is now a flat, non-inherited array rather than spreading
+from lower-role arrays. This allows curated ordering and item selection per role.
+Other roles still use the inheritance model — the flat approach will be applied
+to them in future sessions.
+
+### New Pattern: Subpage Buttons Instead of Sidebar Items
+
+Some pages (Manage Catalogs, Approval Rules, Sub-Brands) are accessed via
+buttons within their parent pages rather than as dedicated sidebar items.
+These buttons use `useHasRole()` for role-gated visibility.
+
+### Reviewed — No Additional Harness Updates Needed
+
+- No new patterns that need CLAUDE.md or rule file updates beyond this changelog
+- No ADR needed (UI-only change, no architectural decision)
+- No missing guidance discovered
+
+---
+
 ## 2026-04-10 — User Management Page Enhancement (Session Audit)
 
 **Type:** End-of-session audit (Trigger 1) — enhanced admin/users page with full
