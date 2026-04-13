@@ -11,6 +11,7 @@ from app.models.company import Company
 from app.schemas.common import ApiListResponse, ApiResponse, PaginationMeta
 from app.schemas.user import UserCreate, UserResponse, UserUpdate
 from app.services.cognito_service import CognitoService, get_cognito_service
+from app.services.helpers import resolve_current_user_id
 from app.services.user_service import UserService
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -113,25 +114,48 @@ async def create_user(
     return ApiResponse(data=UserResponse.model_validate(user))
 
 
+@router.patch("/me", response_model=ApiResponse[UserResponse])
+async def update_current_user(
+    data: UserUpdate,
+    context: TenantContext = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db_session),
+    cognito_service: CognitoService = Depends(get_cognito_service),
+) -> ApiResponse[UserResponse]:
+    """Update the authenticated user's own name and/or email."""
+    user_id = await resolve_current_user_id(db, context.user_id)
+
+    # Non-admins can only update full_name and email
+    if not context.is_admin:
+        allowed = data.model_dump(exclude_unset=True)
+        disallowed = set(allowed.keys()) - {"full_name", "email"}
+        if disallowed:
+            raise ForbiddenError("You can only update your name and email")
+
+    service = UserService(db, cognito_service)
+    updated = await service.update_user(user_id, context.company_id, data, context.role)
+    return ApiResponse(data=UserResponse.model_validate(updated))
+
+
 @router.patch("/{user_id}", response_model=ApiResponse[UserResponse])
 async def update_user(
     user_id: UUID,
     data: UserUpdate,
     context: TenantContext = Depends(get_tenant_context),
     db: AsyncSession = Depends(get_db_session),
+    cognito_service: CognitoService = Depends(get_cognito_service),
 ) -> ApiResponse[UserResponse]:
-    service = UserService(db)
+    service = UserService(db, cognito_service)
     user = await service.get_user(user_id, context.company_id)
 
-    # Employees can only update their own full_name
+    # Employees can only update their own full_name and email
     if not context.is_admin:
         if user.cognito_sub != context.user_id:
             raise ForbiddenError("You can only update your own profile")
-        # Only allow full_name updates for employees
+        # Only allow full_name and email updates for employees
         allowed = data.model_dump(exclude_unset=True)
-        disallowed = set(allowed.keys()) - {"full_name"}
+        disallowed = set(allowed.keys()) - {"full_name", "email"}
         if disallowed:
-            raise ForbiddenError("Employees can only update their full_name")
+            raise ForbiddenError("Employees can only update their name and email")
 
     # Sub-brand-scoped admins can only update users in their sub-brand
     if (

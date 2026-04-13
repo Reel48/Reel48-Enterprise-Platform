@@ -18,9 +18,17 @@ class UserCreate(BaseModel):
 
 class UserUpdate(BaseModel):
     full_name: str | None = None
+    email: str | None = None
     role: str | None = None
     sub_brand_id: UUID | None = None
     is_active: bool | None = None
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, v: str | None) -> str | None:
+        if v is not None:
+            return v.strip().lower()
+        return v
 
 
 class UserResponse(BaseModel):

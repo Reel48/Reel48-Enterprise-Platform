@@ -163,10 +163,32 @@ class UserService:
                     "sub_brand_id does not belong to this company", field="sub_brand_id"
                 )
 
+        # Email uniqueness check
+        if "email" in update_data:
+            new_email = update_data["email"]
+            existing = await self.db.execute(
+                select(User).where(User.email == new_email, User.id != user_id)
+            )
+            if existing.scalar_one_or_none() is not None:
+                raise ConflictError(f"Email '{new_email}' is already in use")
+
         for field, value in update_data.items():
             setattr(user, field, value)
         await self.db.flush()
         await self.db.refresh(user)
+
+        # Sync updated attributes to Cognito
+        if self.cognito_service is not None:
+            cognito_attrs: dict[str, str] = {}
+            if "full_name" in update_data:
+                cognito_attrs["name"] = update_data["full_name"]
+            if "email" in update_data:
+                cognito_attrs["email"] = update_data["email"]
+            if cognito_attrs:
+                await self.cognito_service.update_cognito_attributes(
+                    user.cognito_sub, cognito_attrs  # type: ignore[arg-type]
+                )
+
         return user
 
     async def soft_delete_user(self, user_id: UUID, company_id: UUID) -> User:

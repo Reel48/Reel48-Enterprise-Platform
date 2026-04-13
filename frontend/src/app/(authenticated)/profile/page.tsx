@@ -58,6 +58,15 @@ function useDeleteProfilePhoto() {
   });
 }
 
+function useUpdateMyUser() {
+  return useMutation({
+    mutationFn: async (data: { fullName?: string; email?: string }) => {
+      const res = await api.patch<{ id: string }>('/api/v1/users/me', data);
+      return res.data;
+    },
+  });
+}
+
 function useSetProfilePhoto() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -101,16 +110,21 @@ function toDropdownItem(value: string) {
 // ---------------------------------------------------------------------------
 
 export default function ProfilePage() {
-  const { user } = useAuth();
+  const { user, refreshSession } = useAuth();
   const { data: profile, isLoading, isError } = useMyProfile();
   const updateProfile = useUpdateProfile();
+  const updateMyUser = useUpdateMyUser();
   const deletePhoto = useDeleteProfilePhoto();
   const fileUpload = useFileUpload();
   const setProfilePhoto = useSetProfilePhoto();
 
   const [toast, setToast] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
 
-  // Form state — initialized from profile
+  // Form state — user fields (name, email)
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+
+  // Form state — profile fields
   const [department, setDepartment] = useState('');
   const [jobTitle, setJobTitle] = useState('');
   const [shirtSize, setShirtSize] = useState('');
@@ -123,8 +137,10 @@ export default function ProfilePage() {
   const [zip, setZip] = useState('');
   const [initialized, setInitialized] = useState(false);
 
-  // Sync form state from profile data on first load
+  // Sync form state from profile + user data on first load
   if (profile && !initialized) {
+    setFullName(user?.fullName ?? '');
+    setEmail(user?.email ?? '');
     setDepartment(profile.department ?? '');
     setJobTitle(profile.jobTitle ?? '');
     setShirtSize(profile.shirtSize ?? '');
@@ -138,31 +154,58 @@ export default function ProfilePage() {
     setInitialized(true);
   }
 
-  const handleSave = () => {
-    updateProfile.mutate(
-      {
-        department: department || null,
-        jobTitle: jobTitle || null,
-        shirtSize: shirtSize || null,
-        pantSize: pantSize || null,
-        shoeSize: shoeSize || null,
-        deliveryAddressLine1: addressLine1 || null,
-        deliveryAddressLine2: addressLine2 || null,
-        deliveryCity: city || null,
-        deliveryState: state || null,
-        deliveryZip: zip || null,
-      },
-      {
-        onSuccess: () => {
-          setToast({ kind: 'success', message: 'Profile updated successfully' });
-          setTimeout(() => setToast(null), 3000);
+  const isSaving = updateProfile.isPending || updateMyUser.isPending;
+
+  const handleSave = async () => {
+    try {
+      // 1. Update name/email if changed (via user endpoint)
+      const nameChanged = fullName !== (user?.fullName ?? '');
+      const emailChanged = email !== (user?.email ?? '');
+
+      if (nameChanged || emailChanged) {
+        await updateMyUser.mutateAsync({
+          ...(nameChanged ? { fullName } : {}),
+          ...(emailChanged ? { email } : {}),
+        });
+      }
+
+      // 2. Update profile fields (sizing, address, etc.)
+      updateProfile.mutate(
+        {
+          department: department || null,
+          jobTitle: jobTitle || null,
+          shirtSize: shirtSize || null,
+          pantSize: pantSize || null,
+          shoeSize: shoeSize || null,
+          deliveryAddressLine1: addressLine1 || null,
+          deliveryAddressLine2: addressLine2 || null,
+          deliveryCity: city || null,
+          deliveryState: state || null,
+          deliveryZip: zip || null,
         },
-        onError: () => {
-          setToast({ kind: 'error', message: 'Failed to update profile' });
-          setTimeout(() => setToast(null), 3000);
+        {
+          onSuccess: async () => {
+            // Refresh JWT so updated name/email appear in header
+            if (nameChanged || emailChanged) {
+              try {
+                await refreshSession();
+              } catch {
+                // Session refresh failed — user will see new values on next login
+              }
+            }
+            setToast({ kind: 'success', message: 'Profile updated successfully' });
+            setTimeout(() => setToast(null), 3000);
+          },
+          onError: () => {
+            setToast({ kind: 'error', message: 'Failed to update profile' });
+            setTimeout(() => setToast(null), 3000);
+          },
         },
-      },
-    );
+      );
+    } catch {
+      setToast({ kind: 'error', message: 'Failed to update name or email' });
+      setTimeout(() => setToast(null), 3000);
+    }
   };
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -240,9 +283,9 @@ export default function ProfilePage() {
           kind="primary"
           renderIcon={Save}
           onClick={handleSave}
-          disabled={updateProfile.isPending}
+          disabled={isSaving}
         >
-          {updateProfile.isPending ? 'Saving...' : 'Save Changes'}
+          {isSaving ? 'Saving...' : 'Save Changes'}
         </Button>
       </div>
 
@@ -303,16 +346,14 @@ export default function ProfilePage() {
           <TextInput
             id="fullName"
             labelText="Full Name"
-            value={user?.fullName ?? ''}
-            readOnly
-            disabled
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
           />
           <TextInput
             id="email"
             labelText="Email"
-            value={user?.email ?? ''}
-            readOnly
-            disabled
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
           />
           <TextInput
             id="department"
