@@ -58,6 +58,19 @@ function useDeleteProfilePhoto() {
   });
 }
 
+function useSetProfilePhoto() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (s3Key: string) => {
+      const res = await api.post<Profile>('/api/v1/profiles/me/photo', { s3Key });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-profile'] });
+    },
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -93,7 +106,7 @@ export default function ProfilePage() {
   const updateProfile = useUpdateProfile();
   const deletePhoto = useDeleteProfilePhoto();
   const fileUpload = useFileUpload();
-  const queryClient = useQueryClient();
+  const setProfilePhoto = useSetProfilePhoto();
 
   const [toast, setToast] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
 
@@ -159,18 +172,27 @@ export default function ProfilePage() {
     fileUpload.mutate(
       { file, category: 'profiles' },
       {
-        onSuccess: async (s3Key) => {
-          await api.post('/api/v1/profiles/me/photo', { s3Key });
-          queryClient.invalidateQueries({ queryKey: ['my-profile'] });
-          setToast({ kind: 'success', message: 'Photo uploaded successfully' });
-          setTimeout(() => setToast(null), 3000);
+        onSuccess: (s3Key) => {
+          setProfilePhoto.mutate(s3Key, {
+            onSuccess: () => {
+              setToast({ kind: 'success', message: 'Photo uploaded successfully' });
+              setTimeout(() => setToast(null), 3000);
+            },
+            onError: () => {
+              setToast({ kind: 'error', message: 'Failed to save profile photo' });
+              setTimeout(() => setToast(null), 3000);
+            },
+          });
         },
-        onError: () => {
-          setToast({ kind: 'error', message: 'Failed to upload photo' });
+        onError: (err) => {
+          setToast({ kind: 'error', message: err.message || 'Failed to upload photo' });
           setTimeout(() => setToast(null), 3000);
         },
       },
     );
+
+    // Reset the file input so the same file can be re-selected
+    e.target.value = '';
   };
 
   const handleDeletePhoto = () => {
@@ -246,9 +268,9 @@ export default function ProfilePage() {
                 size="sm"
                 renderIcon={Upload}
                 as="span"
-                disabled={fileUpload.isPending}
+                disabled={fileUpload.isPending || setProfilePhoto.isPending}
               >
-                {fileUpload.isPending ? 'Uploading...' : 'Upload Photo'}
+                {fileUpload.isPending || setProfilePhoto.isPending ? 'Uploading...' : 'Upload Photo'}
               </Button>
               <input
                 type="file"
