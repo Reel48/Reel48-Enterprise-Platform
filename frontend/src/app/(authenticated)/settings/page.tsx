@@ -69,7 +69,7 @@ export default function SettingsPage() {
         </h1>
         {isCorporateAdmin && (
           <Link href="/admin/brands">
-            <Button kind="secondary" size="sm" renderIcon={Enterprise}>
+            <Button kind="tertiary" size="sm" renderIcon={Enterprise}>
               Sub-Brands
             </Button>
           </Link>

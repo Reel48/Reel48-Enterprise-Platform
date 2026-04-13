@@ -213,7 +213,7 @@ export default function ApprovalsPage() {
         </h1>
         {isCorporateAdmin && (
           <Link href="/admin/approval-rules">
-            <Button kind="secondary" size="sm" renderIcon={Policy}>
+            <Button kind="tertiary" size="sm" renderIcon={Policy}>
               Approval Rules
             </Button>
           </Link>
