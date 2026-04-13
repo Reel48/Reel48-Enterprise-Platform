@@ -13,11 +13,13 @@ import {
   Tile,
   ToastNotification,
 } from '@carbon/react';
-import { ArrowLeft, Catalog as CatalogIcon } from '@carbon/react/icons';
+import { ArrowLeft, Catalog as CatalogIcon, Store } from '@carbon/react/icons';
 import { useQuery } from '@tanstack/react-query';
+import Link from 'next/link';
 
 import { api } from '@/lib/api/client';
 import { useCart } from '@/lib/cart/CartContext';
+import { useHasRole } from '@/lib/auth/hooks';
 import { StatusTag } from '@/components/ui/StatusTag';
 import { ProductCard } from '@/components/features/catalog/ProductCard';
 import type { ProductCardProduct } from '@/components/features/catalog/ProductCard';
@@ -128,6 +130,7 @@ function formatPrice(price: number): string {
 // ---------------------------------------------------------------------------
 
 export default function CatalogPage() {
+  const canManageCatalogs = useHasRole(['corporate_admin', 'sub_brand_admin']);
   const [selectedCatalogId, setSelectedCatalogId] = useState<string | null>(null);
   const [productPage, setProductPage] = useState(1);
   const [productPerPage, setProductPerPage] = useState(20);
@@ -208,9 +211,18 @@ export default function CatalogPage() {
   if (!selectedCatalogId) {
     return (
       <div className="flex flex-col gap-6">
-        <h1 className="text-2xl font-semibold text-text-primary">
-          Browse Catalogs
-        </h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-semibold text-text-primary">
+            Browse Catalogs
+          </h1>
+          {canManageCatalogs && (
+            <Link href="/catalog/manage/catalogs">
+              <Button kind="secondary" size="sm" renderIcon={Store}>
+                Manage Catalogs
+              </Button>
+            </Link>
+          )}
+        </div>
 
         {catalogsError && (
           <InlineNotification

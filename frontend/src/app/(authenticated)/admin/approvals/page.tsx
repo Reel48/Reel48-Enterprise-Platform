@@ -22,10 +22,12 @@ import {
   Tag,
   TextArea,
 } from '@carbon/react';
-import { Checkmark, Close, Task } from '@carbon/react/icons';
+import { Checkmark, Close, Policy, Task } from '@carbon/react/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
 
 import { api } from '@/lib/api/client';
+import { useHasRole } from '@/lib/auth/hooks';
 import { StatusTag } from '@/components/ui/StatusTag';
 import type { ApprovalRequest } from '@/types/approvals';
 
@@ -153,6 +155,7 @@ const historyHeaders = [
 // ---------------------------------------------------------------------------
 
 export default function ApprovalsPage() {
+  const isCorporateAdmin = useHasRole(['corporate_admin']);
   const [pendingPage, setPendingPage] = useState(1);
   const [pendingPerPage, setPendingPerPage] = useState(20);
   const [historyPage, setHistoryPage] = useState(1);
@@ -204,9 +207,18 @@ export default function ApprovalsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold text-text-primary">
-        Approval Queue
-      </h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold text-text-primary">
+          Approval Queue
+        </h1>
+        {isCorporateAdmin && (
+          <Link href="/admin/approval-rules">
+            <Button kind="secondary" size="sm" renderIcon={Policy}>
+              Approval Rules
+            </Button>
+          </Link>
+        )}
+      </div>
 
       <Tabs>
         <TabList aria-label="Approval tabs">

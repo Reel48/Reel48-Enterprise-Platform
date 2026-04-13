@@ -8,9 +8,10 @@ import {
   Tile,
   ToastNotification,
 } from '@carbon/react';
-import { Password, Save } from '@carbon/react/icons';
+import { Enterprise, Password, Save } from '@carbon/react/icons';
+import Link from 'next/link';
 
-import { useAuth } from '@/lib/auth/hooks';
+import { useAuth, useHasRole } from '@/lib/auth/hooks';
 
 // ---------------------------------------------------------------------------
 // Component
@@ -18,6 +19,7 @@ import { useAuth } from '@/lib/auth/hooks';
 
 export default function SettingsPage() {
   const { user } = useAuth();
+  const isCorporateAdmin = useHasRole(['corporate_admin']);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -61,9 +63,18 @@ export default function SettingsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold text-text-primary">
-        Settings
-      </h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold text-text-primary">
+          Brand Settings
+        </h1>
+        {isCorporateAdmin && (
+          <Link href="/admin/brands">
+            <Button kind="secondary" size="sm" renderIcon={Enterprise}>
+              Sub-Brands
+            </Button>
+          </Link>
+        )}
+      </div>
 
       {/* Account Info */}
       <Tile>
