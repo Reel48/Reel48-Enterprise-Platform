@@ -217,7 +217,7 @@ export default function CatalogPage() {
           </h1>
           {canManageCatalogs && (
             <Link href="/catalog/manage/catalogs">
-              <Button kind="tertiary" size="sm" renderIcon={Store}>
+              <Button kind="primary" size="sm" renderIcon={Store}>
                 Manage Catalogs
               </Button>
             </Link>
