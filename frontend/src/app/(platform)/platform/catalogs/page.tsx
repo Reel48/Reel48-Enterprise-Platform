@@ -462,7 +462,7 @@ export default function PlatformCatalogsPage() {
             items={companyItems}
             itemToString={(item: { id: string; text: string } | null) => item?.text ?? ''}
             selectedItem={companyItems.find((c) => c.id === newCompanyId) ?? null}
-            onChange={({ selectedItem }: { selectedItem: { id: string; text: string } | null }) =>
+            onChange={({ selectedItem }: { selectedItem: { id: string; text: string } | null | undefined }) =>
               setNewCompanyId(selectedItem?.id ?? '')
             }
           />

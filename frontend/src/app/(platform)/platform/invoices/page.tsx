@@ -507,7 +507,7 @@ export default function PlatformInvoicesPage() {
             items={companyItems}
             itemToString={(item: { id: string; text: string } | null) => item?.text ?? ''}
             selectedItem={companyItems.find((c) => c.id === linkCompanyId) ?? null}
-            onChange={({ selectedItem }: { selectedItem: { id: string; text: string } | null }) => {
+            onChange={({ selectedItem }: { selectedItem: { id: string; text: string } | null | undefined }) => {
               setLinkCompanyId(selectedItem?.id ?? '');
               setLinkSubBrandId('');
             }}
@@ -520,7 +520,7 @@ export default function PlatformInvoicesPage() {
               items={subBrandItems}
               itemToString={(item: { id: string; text: string } | null) => item?.text ?? ''}
               selectedItem={subBrandItems.find((sb) => sb.id === linkSubBrandId) ?? null}
-              onChange={({ selectedItem }: { selectedItem: { id: string; text: string } | null }) =>
+              onChange={({ selectedItem }: { selectedItem: { id: string; text: string } | null | undefined }) =>
                 setLinkSubBrandId(selectedItem?.id ?? '')
               }
             />
