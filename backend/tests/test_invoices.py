@@ -1067,3 +1067,248 @@ class TestInvoiceIsolation:
         ids = {inv["id"] for inv in data}
         assert str(inv_a.id) in ids
         assert str(inv_b.id) in ids
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Link Invoice Flow (billing_flow = 'linked')
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestLinkInvoice:
+    """Tests for POST /api/v1/platform/invoices/link — import existing Stripe invoices."""
+
+    async def test_link_invoice_successfully(
+        self,
+        client: AsyncClient,
+        company_a,
+        reel48_admin_user,
+        reel48_admin_user_token,
+        mock_stripe,
+    ):
+        """Link a Stripe invoice to a company — happy path."""
+        company, brand_a1, _ = company_a
+
+        response = await client.post(
+            "/api/v1/platform/invoices/link",
+            json={
+                "stripe_invoice_id": "in_link_test_001",
+                "company_id": str(company.id),
+            },
+            headers={"Authorization": f"Bearer {reel48_admin_user_token}"},
+        )
+        assert response.status_code == 201
+        data = response.json()["data"]
+        assert data["billingFlow"] == "linked"
+        assert data["stripeInvoiceId"] == "in_link_test_001"
+        assert data["companyId"] == str(company.id)
+        assert data["status"] == "paid"
+        assert data["totalAmount"] == 150.0
+        assert data["invoiceNumber"] == "INV-0042"
+        assert data["stripeInvoiceUrl"] is not None
+        assert data["stripePdfUrl"] is not None
+        assert data["paidAt"] is not None
+        assert len(mock_stripe.retrieved_invoices) == 1
+
+    async def test_link_invoice_with_sub_brand(
+        self,
+        client: AsyncClient,
+        company_a,
+        reel48_admin_user,
+        reel48_admin_user_token,
+    ):
+        """Link invoice with explicit sub-brand assignment."""
+        company, brand_a1, _ = company_a
+
+        response = await client.post(
+            "/api/v1/platform/invoices/link",
+            json={
+                "stripe_invoice_id": "in_link_sub_brand_001",
+                "company_id": str(company.id),
+                "sub_brand_id": str(brand_a1.id),
+            },
+            headers={"Authorization": f"Bearer {reel48_admin_user_token}"},
+        )
+        assert response.status_code == 201
+        data = response.json()["data"]
+        assert data["subBrandId"] == str(brand_a1.id)
+        assert data["billingFlow"] == "linked"
+
+    async def test_link_duplicate_stripe_id_rejected(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        company_a,
+        reel48_admin_user,
+        reel48_admin_user_token,
+    ):
+        """Duplicate stripe_invoice_id should return 409 Conflict."""
+        company, brand_a1, _ = company_a
+
+        # Create an existing invoice with this Stripe ID
+        await _create_invoice_directly(
+            admin_db_session, company.id, brand_a1.id, reel48_admin_user.id,
+            stripe_invoice_id="in_duplicate_test",
+        )
+
+        response = await client.post(
+            "/api/v1/platform/invoices/link",
+            json={
+                "stripe_invoice_id": "in_duplicate_test",
+                "company_id": str(company.id),
+            },
+            headers={"Authorization": f"Bearer {reel48_admin_user_token}"},
+        )
+        assert response.status_code == 409
+
+    async def test_link_invalid_stripe_id_prefix(
+        self,
+        client: AsyncClient,
+        company_a,
+        reel48_admin_user_token,
+    ):
+        """Stripe invoice ID not starting with 'in_' should return 422."""
+        company, _, _ = company_a
+
+        response = await client.post(
+            "/api/v1/platform/invoices/link",
+            json={
+                "stripe_invoice_id": "ch_not_an_invoice",
+                "company_id": str(company.id),
+            },
+            headers={"Authorization": f"Bearer {reel48_admin_user_token}"},
+        )
+        assert response.status_code == 422
+
+    async def test_link_nonexistent_company(
+        self,
+        client: AsyncClient,
+        reel48_admin_user_token,
+    ):
+        """Non-existent company_id should return 404."""
+        response = await client.post(
+            "/api/v1/platform/invoices/link",
+            json={
+                "stripe_invoice_id": "in_nocompany_001",
+                "company_id": str(uuid4()),
+            },
+            headers={"Authorization": f"Bearer {reel48_admin_user_token}"},
+        )
+        assert response.status_code == 404
+
+    async def test_link_sub_brand_from_wrong_company(
+        self,
+        client: AsyncClient,
+        company_a,
+        company_b,
+        reel48_admin_user_token,
+    ):
+        """Sub-brand from Company B cannot be assigned to Company A's invoice."""
+        company_a_obj, _, _ = company_a
+        _, brand_b1 = company_b
+
+        response = await client.post(
+            "/api/v1/platform/invoices/link",
+            json={
+                "stripe_invoice_id": "in_wrongbrand_001",
+                "company_id": str(company_a_obj.id),
+                "sub_brand_id": str(brand_b1.id),
+            },
+            headers={"Authorization": f"Bearer {reel48_admin_user_token}"},
+        )
+        assert response.status_code == 422
+
+    async def test_link_requires_reel48_admin(
+        self,
+        client: AsyncClient,
+        company_a,
+        user_a_corporate_admin_token,
+    ):
+        """Only reel48_admin can link invoices — corporate_admin gets 403."""
+        company, _, _ = company_a
+
+        response = await client.post(
+            "/api/v1/platform/invoices/link",
+            json={
+                "stripe_invoice_id": "in_auth_test_001",
+                "company_id": str(company.id),
+            },
+            headers={"Authorization": f"Bearer {user_a_corporate_admin_token}"},
+        )
+        assert response.status_code == 403
+
+    async def test_linked_invoice_visible_to_company(
+        self,
+        client: AsyncClient,
+        company_a,
+        company_b,
+        reel48_admin_user,
+        reel48_admin_user_token,
+        user_a_corporate_admin,
+        user_a_corporate_admin_token,
+    ):
+        """Linked invoice should be visible to the assigned company's admin."""
+        company_a_obj, brand_a1, _ = company_a
+
+        # Link an invoice to Company A
+        link_response = await client.post(
+            "/api/v1/platform/invoices/link",
+            json={
+                "stripe_invoice_id": "in_isolation_test_001",
+                "company_id": str(company_a_obj.id),
+                "sub_brand_id": str(brand_a1.id),
+            },
+            headers={"Authorization": f"Bearer {reel48_admin_user_token}"},
+        )
+        assert link_response.status_code == 201
+
+        # Company A corporate admin can see it
+        list_response = await client.get(
+            "/api/v1/invoices/",
+            headers={"Authorization": f"Bearer {user_a_corporate_admin_token}"},
+        )
+        assert list_response.status_code == 200
+        ids = [inv["id"] for inv in list_response.json()["data"]]
+        assert link_response.json()["data"]["id"] in ids
+
+    async def test_webhook_updates_linked_invoice(
+        self,
+        client: AsyncClient,
+        admin_db_session: AsyncSession,
+        company_a,
+        reel48_admin_user,
+    ):
+        """Webhook events should update linked invoices just like other flows."""
+        company, brand_a1, _ = company_a
+        stripe_id = f"in_webhook_linked_{uuid4().hex[:6]}"
+
+        # Create a linked invoice directly (status=sent to test paid transition)
+        invoice = await _create_invoice_directly(
+            admin_db_session, company.id, brand_a1.id, reel48_admin_user.id,
+            billing_flow="linked", status="sent",
+            stripe_invoice_id=stripe_id,
+        )
+
+        # Send a paid webhook
+        webhook_payload = json.dumps({
+            "type": "invoice.paid",
+            "data": {
+                "object": {
+                    "id": stripe_id,
+                    "status": "paid",
+                    "number": "INV-LINKED-001",
+                    "hosted_invoice_url": "https://stripe.com/test",
+                    "invoice_pdf": "https://stripe.com/test.pdf",
+                },
+            },
+        }).encode()
+
+        response = await client.post(
+            "/api/v1/webhooks/stripe",
+            content=webhook_payload,
+            headers={"stripe-signature": "test_sig"},
+        )
+        assert response.status_code == 200
+
+        # Verify local invoice updated to paid
+        await admin_db_session.refresh(invoice)
+        assert invoice.status == "paid"
+        assert invoice.paid_at is not None

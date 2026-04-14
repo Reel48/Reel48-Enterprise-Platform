@@ -16,12 +16,13 @@ import structlog
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import ForbiddenError, NotFoundError, ValidationError
+from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError, ValidationError
 from app.models.bulk_order import BulkOrder
 from app.models.bulk_order_item import BulkOrderItem
 from app.models.catalog import Catalog
 from app.models.company import Company
 from app.models.invoice import Invoice
+from app.models.sub_brand import SubBrand
 from app.models.order import Order
 from app.models.order_line_item import OrderLineItem
 from app.services.stripe_service import StripeService
@@ -335,6 +336,114 @@ class InvoiceService:
             total_amount=str(order.total_amount),
         )
         return invoice
+
+    async def link_invoice(
+        self,
+        stripe_invoice_id: str,
+        company_id: UUID,
+        created_by: UUID,
+        sub_brand_id: UUID | None = None,
+    ) -> Invoice:
+        """Link an existing Stripe invoice to a client company.
+
+        Fetches invoice details from Stripe and creates a local record.
+        Supports historical invoices (any Stripe status — draft, open, paid, void, etc.).
+        Webhooks will keep the status updated going forward.
+        """
+        # 1. Check for duplicate
+        existing = await self._find_invoice_by_stripe_id(stripe_invoice_id)
+        if existing is not None:
+            raise ConflictError(
+                f"An invoice with Stripe ID '{stripe_invoice_id}' already exists"
+            )
+
+        # 2. Validate company
+        company = await self._get_company(company_id)
+
+        # 3. Validate sub-brand belongs to company (if provided)
+        if sub_brand_id is not None:
+            result = await self.db.execute(
+                select(SubBrand).where(
+                    SubBrand.id == sub_brand_id,
+                    SubBrand.company_id == company_id,
+                )
+            )
+            if result.scalar_one_or_none() is None:
+                raise ValidationError(
+                    "Sub-brand does not exist or does not belong to the specified company"
+                )
+
+        # 4. Fetch from Stripe
+        stripe_data = await self._stripe.get_invoice(stripe_invoice_id)
+
+        # 5. Map Stripe status to local status
+        stripe_status = stripe_data.get("status", "draft")
+        status = self._map_stripe_status(stripe_status)
+
+        # 6. Extract amounts (Stripe uses cents)
+        raw_total = stripe_data.get("total") or stripe_data.get("amount_due") or 0
+        total_amount = Decimal(raw_total) / Decimal(100)
+        currency = stripe_data.get("currency", "usd")
+
+        # 7. Extract due_date (Stripe sends Unix timestamp or None)
+        raw_due_date = stripe_data.get("due_date")
+        due_date = (
+            datetime.fromtimestamp(raw_due_date, tz=timezone.utc).date()
+            if raw_due_date
+            else None
+        )
+
+        # 8. Extract paid_at from status_transitions
+        paid_at = None
+        if status == "paid":
+            transitions = stripe_data.get("status_transitions") or {}
+            raw_paid_at = transitions.get("paid_at")
+            if raw_paid_at:
+                paid_at = datetime.fromtimestamp(raw_paid_at, tz=timezone.utc)
+            else:
+                paid_at = datetime.now(timezone.utc)
+
+        # 9. Create local record
+        invoice = Invoice(
+            company_id=company.id,
+            sub_brand_id=sub_brand_id,
+            stripe_invoice_id=stripe_invoice_id,
+            stripe_invoice_url=stripe_data.get("hosted_invoice_url"),
+            stripe_pdf_url=stripe_data.get("invoice_pdf"),
+            invoice_number=stripe_data.get("number"),
+            billing_flow="linked",
+            status=status,
+            total_amount=total_amount,
+            currency=currency,
+            due_date=due_date,
+            created_by=created_by,
+            paid_at=paid_at,
+        )
+        self.db.add(invoice)
+        await self.db.flush()
+        await self.db.refresh(invoice)
+
+        logger.info(
+            "invoice_linked",
+            invoice_id=str(invoice.id),
+            stripe_invoice_id=stripe_invoice_id,
+            company_id=str(company_id),
+            status=status,
+            total_amount=str(total_amount),
+        )
+        return invoice
+
+    @staticmethod
+    def _map_stripe_status(stripe_status: str) -> str:
+        """Map Stripe invoice status to local status."""
+        mapping = {
+            "draft": "draft",
+            "open": "sent",
+            "paid": "paid",
+            "void": "voided",
+            "uncollectible": "payment_failed",
+        }
+        return mapping.get(stripe_status, "draft")
 
     async def finalize_invoice(self, invoice_id: UUID) -> Invoice:
         """Finalize a draft invoice. Stripe assigns an invoice number."""

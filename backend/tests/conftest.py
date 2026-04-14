@@ -689,6 +689,7 @@ class MockStripeService:
         self.finalized_invoices: list[str] = []
         self.sent_invoices: list[str] = []
         self.voided_invoices: list[str] = []
+        self.retrieved_invoices: list[str] = []
         self._invoice_counter = 0
 
     async def get_or_create_customer(
@@ -756,10 +757,18 @@ class MockStripeService:
         return {"id": stripe_invoice_id, "status": "void"}
 
     async def get_invoice(self, stripe_invoice_id: str) -> dict:
+        self.retrieved_invoices.append(stripe_invoice_id)
         return {
             "id": stripe_invoice_id,
-            "status": "draft",
+            "status": "paid",
+            "total": 15000,
+            "amount_due": 15000,
+            "currency": "usd",
+            "number": "INV-0042",
+            "hosted_invoice_url": f"https://invoice.stripe.com/i/{stripe_invoice_id}",
             "invoice_pdf": f"https://invoice.stripe.com/i/{stripe_invoice_id}/pdf",
+            "due_date": 1712188800,
+            "status_transitions": {"paid_at": 1712275200},
         }
 
     def construct_webhook_event(self, payload: bytes, sig_header: str) -> dict:

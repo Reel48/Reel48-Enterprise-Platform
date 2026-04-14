@@ -3084,3 +3084,35 @@ None.
 
 ### Test Results
 - Backend: 37 product tests passed (24 existing + 13 new image tests), 0 failed
+
+
+## 2026-04-13 — Link Stripe Invoice Flow + Searchable Company Selection
+
+### Files Changed
+- **`.claude/rules/stripe-invoicing.md`** — Added `linked` billing flow documentation
+- **`backend/migrations/versions/010_add_linked_billing_flow.py`** — New migration adding `linked` to billing_flow CHECK constraint
+- **`backend/app/schemas/invoice.py`** — Added `InvoiceLinkRequest` schema
+- **`backend/app/services/invoice_service.py`** — Added `link_invoice()` method and `_map_stripe_status()` helper
+- **`backend/app/api/v1/platform/invoices.py`** — Added `POST /link` endpoint
+- **`frontend/src/hooks/usePlatformData.ts`** — New shared hooks for platform company/sub-brand queries
+- **`frontend/src/app/(platform)/platform/catalogs/page.tsx`** — Replaced company Dropdown with searchable ComboBox
+- **`frontend/src/app/(platform)/platform/invoices/page.tsx`** — Replaced Create Invoice modal with Link Invoice modal using searchable ComboBox
+- **`frontend/src/types/invoices.ts`** — Added `linked` to BillingFlow type
+- **`frontend/src/app/(platform)/platform/invoices/[id]/page.tsx`** — Updated billingFlowLabel
+- **`frontend/src/app/(authenticated)/invoices/page.tsx`** — Updated billingFlowLabel
+- **`frontend/src/app/(authenticated)/invoices/[id]/page.tsx`** — Updated billingFlowLabel
+- **`backend/tests/test_invoices.py`** — Added TestLinkInvoice test class (9 tests)
+- **`backend/tests/conftest.py`** — Enhanced MockStripeService.get_invoice() with richer data
+
+### Changes
+1. **New `linked` billing flow:** Allows reel48_admin to import existing Stripe invoices (including historical) into the platform by entering the Stripe invoice ID. System auto-fetches amount, status, URLs, and invoice number from Stripe.
+2. **Searchable company selection:** Replaced all company selection dropdowns with Carbon ComboBox (searchable typeahead). Extracted `usePlatformCompanies()` and `usePlatformCompanySubBrands()` to shared hooks.
+3. **Stripe status mapping:** Maps Stripe statuses (draft, open, paid, void, uncollectible) to local statuses. Supports historical invoices by extracting `paid_at` from `status_transitions`.
+
+### Reason
+User needs a simpler way to track invoices — entering a Stripe ID and assigning to a company, rather than building invoices from orders. Searchable company selection needed for scalability as the customer base grows.
+
+### Impact
+- Fourth billing flow available alongside assigned/self_service/post_window
+- All platform admin company pickers are now searchable
+- Historical invoice data can be imported for existing customers

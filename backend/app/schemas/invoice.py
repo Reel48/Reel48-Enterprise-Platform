@@ -31,6 +31,21 @@ class InvoiceCreate(BaseModel):
         return v
 
 
+class InvoiceLinkRequest(BaseModel):
+    """Used by reel48_admin to link an existing Stripe invoice to a company."""
+
+    stripe_invoice_id: str
+    company_id: UUID
+    sub_brand_id: UUID | None = None
+
+    @field_validator("stripe_invoice_id")
+    @classmethod
+    def stripe_invoice_id_must_start_with_in(cls, v: str) -> str:
+        if not v.startswith("in_"):
+            raise ValueError("stripe_invoice_id must start with 'in_'")
+        return v
+
+
 class InvoiceResponse(BaseModel):
     """Full invoice representation for API responses."""
 

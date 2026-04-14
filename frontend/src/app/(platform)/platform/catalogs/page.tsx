@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import {
   Button,
+  ComboBox,
   DataTable,
   DatePicker,
   DatePickerInput,
@@ -28,8 +29,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api/client';
 import { StatusTag } from '@/components/ui/StatusTag';
+import { usePlatformCompanies } from '@/hooks/usePlatformData';
 import type { Catalog, CatalogStatus, PaymentModel, PlatformCatalogCreate } from '@/types/catalogs';
-import type { Company } from '@/types/companies';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -96,18 +97,6 @@ function usePlatformCatalogs(page: number, perPage: number, status: string) {
         data: res.data,
         total: (res.meta as { total?: number })?.total ?? 0,
       };
-    },
-  });
-}
-
-function usePlatformCompanies() {
-  return useQuery({
-    queryKey: ['platform-companies'],
-    queryFn: async () => {
-      const res = await api.get<Company[]>('/api/v1/platform/companies/', {
-        per_page: '100',
-      });
-      return res.data;
     },
   });
 }
@@ -466,10 +455,10 @@ export default function PlatformCatalogsPage() {
         }
       >
         <div className="flex flex-col gap-4 mt-2">
-          <Dropdown
+          <ComboBox
             id="create-catalog-company"
             titleText="Company"
-            label="Select a company"
+            placeholder="Search companies..."
             items={companyItems}
             itemToString={(item: { id: string; text: string } | null) => item?.text ?? ''}
             selectedItem={companyItems.find((c) => c.id === newCompanyId) ?? null}

@@ -61,6 +61,7 @@ function billingFlowLabel(flow: string): string {
     case 'assigned': return 'Assigned';
     case 'self_service': return 'Self-Service';
     case 'post_window': return 'Post-Window';
+    case 'linked': return 'Linked';
     default: return flow;
   }
 }

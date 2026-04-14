@@ -328,6 +328,48 @@ The `StripeService` sets `stripe.api_version` from `settings.STRIPE_API_VERSION`
 changes when Stripe rolls out new versions. The version should only be updated
 deliberately after reviewing Stripe's changelog.
 
+## Flow 4: Linked Invoices (Importing Existing Stripe Invoices)
+
+# --- ADDED 2026-04-13 ---
+# Reason: Users need to import existing Stripe invoices (including historical) into
+# Reel48+ without going through the order/catalog creation flows.
+# Impact: Fourth billing flow enables simple invoice tracking via Stripe ID entry.
+
+### How Linked Invoices Work
+A `reel48_admin` enters an existing Stripe invoice ID (e.g., `in_1ABC...`), selects a
+company (and optionally a sub-brand), and the system:
+1. Fetches invoice details from Stripe via `StripeService.get_invoice()`
+2. Maps Stripe status to local status (see mapping below)
+3. Extracts amount, currency, invoice number, URLs, due_date, and paid_at
+4. Creates a local Invoice record with `billing_flow = "linked"`
+5. No order/bulk_order/catalog FKs are set (linked invoices have no internal order references)
+
+### Stripe Status Mapping
+| Stripe Status | Local Status | Notes |
+|-------------|-------------|-------|
+| `draft` | `draft` | Stripe draft invoice |
+| `open` | `sent` | Finalized and awaiting payment |
+| `paid` | `paid` | Payment completed |
+| `void` | `voided` | Invoice cancelled |
+| `uncollectible` | `payment_failed` | Payment attempts exhausted |
+
+### Historical Invoice Support
+Linked invoices support any Stripe invoice regardless of age or status:
+- `paid_at` is extracted from `stripe_invoice.status_transitions.paid_at` (Unix timestamp)
+- `due_date` is extracted from `stripe_invoice.due_date` (Unix timestamp)
+- `total_amount` is `stripe_invoice.total / 100` (Stripe uses cents)
+
+### Endpoint
+`POST /api/v1/platform/invoices/link` — Requires `reel48_admin`.
+Request: `{ stripe_invoice_id: str, company_id: UUID, sub_brand_id?: UUID }`
+Response: `ApiResponse[InvoiceResponse]` (201 Created)
+
+### Webhook Compatibility
+Linked invoices work with the existing webhook handler automatically. The webhook
+looks up invoices by `stripe_invoice_id` (which is populated during linking), so
+future status changes in Stripe (e.g., a linked draft invoice getting paid) will
+update the local record via the same idempotent webhook processing.
+
 ## Common Mistakes to Avoid
 - ❌ Allowing client admins to create invoices (only `reel48_admin` creates invoices)
 - ❌ Accepting Stripe customer IDs from request parameters (look up from the target company)

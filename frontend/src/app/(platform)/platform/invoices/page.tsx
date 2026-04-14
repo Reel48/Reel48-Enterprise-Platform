@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import {
   Button,
+  ComboBox,
   DataTable,
   Dropdown,
   InlineNotification,
@@ -21,11 +22,12 @@ import {
   TextInput,
   ToastNotification,
 } from '@carbon/react';
-import { Add, Receipt } from '@carbon/react/icons';
+import { Link as LinkIcon, Receipt } from '@carbon/react/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api/client';
 import { StatusTag } from '@/components/ui/StatusTag';
+import { usePlatformCompanies, usePlatformCompanySubBrands } from '@/hooks/usePlatformData';
 import type { Invoice, InvoiceStatus } from '@/types/invoices';
 
 // ---------------------------------------------------------------------------
@@ -74,6 +76,8 @@ function billingFlowLabel(flow: string): string {
       return 'Self-Service';
     case 'post_window':
       return 'Post-Window';
+    case 'linked':
+      return 'Linked';
     default:
       return flow;
   }
@@ -94,6 +98,7 @@ const FLOW_OPTIONS = [
   { id: 'assigned', text: 'Assigned' },
   { id: 'self_service', text: 'Self-Service' },
   { id: 'post_window', text: 'Post-Window' },
+  { id: 'linked', text: 'Linked' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -124,11 +129,15 @@ function usePlatformInvoices(
   });
 }
 
-function useCreateInvoice() {
+function useLinkInvoice() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: { companyId: string; billingFlow: string }) => {
-      const res = await api.post<Invoice>('/api/v1/platform/invoices/', data);
+    mutationFn: async (data: {
+      stripeInvoiceId: string;
+      companyId: string;
+      subBrandId?: string;
+    }) => {
+      const res = await api.post<Invoice>('/api/v1/platform/invoices/link', data);
       return res.data;
     },
     onSuccess: () => {
@@ -174,13 +183,16 @@ export default function PlatformInvoicesPage() {
   const [flowFilter, setFlowFilter] = useState('all');
   const [toast, setToast] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
 
-  // Create invoice modal state
-  const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [newCompanyId, setNewCompanyId] = useState('');
-  const [newBillingFlow, setNewBillingFlow] = useState('assigned');
+  // Link invoice modal state
+  const [linkModalOpen, setLinkModalOpen] = useState(false);
+  const [linkStripeId, setLinkStripeId] = useState('');
+  const [linkCompanyId, setLinkCompanyId] = useState('');
+  const [linkSubBrandId, setLinkSubBrandId] = useState('');
 
   const { data, isLoading, isError } = usePlatformInvoices(page, perPage, statusFilter, flowFilter);
-  const createInvoice = useCreateInvoice();
+  const { data: companies } = usePlatformCompanies();
+  const { data: subBrands } = usePlatformCompanySubBrands(linkCompanyId || null);
+  const linkInvoice = useLinkInvoice();
   const finalizeAction = useInvoiceAction('finalize');
   const sendAction = useInvoiceAction('send');
   const voidAction = useInvoiceAction('void');
@@ -191,27 +203,36 @@ export default function PlatformInvoicesPage() {
   const rows = invoices.map((inv) => ({
     id: inv.id,
     invoiceNumber: inv.invoiceNumber ?? 'Draft',
-    companyId: inv.companyId ?? '—',
+    companyId: companyNameMap.get(inv.companyId) ?? inv.companyId ?? '—',
     billingFlow: inv.billingFlow,
     status: inv.status,
     totalAmount: inv.totalAmount,
     createdAt: inv.createdAt,
   }));
 
-  const handleCreate = () => {
-    if (!newCompanyId.trim()) return;
-    createInvoice.mutate(
-      { companyId: newCompanyId, billingFlow: newBillingFlow },
+  const companyItems = (companies ?? []).map((c) => ({ id: c.id, text: c.name }));
+  const companyNameMap = new Map(companyItems.map((c) => [c.id, c.text]));
+  const subBrandItems = (subBrands ?? []).map((sb) => ({ id: sb.id, text: sb.name }));
+
+  const handleLink = () => {
+    if (!linkStripeId.trim() || !linkCompanyId) return;
+    linkInvoice.mutate(
+      {
+        stripeInvoiceId: linkStripeId,
+        companyId: linkCompanyId,
+        ...(linkSubBrandId ? { subBrandId: linkSubBrandId } : {}),
+      },
       {
         onSuccess: () => {
-          setCreateModalOpen(false);
-          setNewCompanyId('');
-          setNewBillingFlow('assigned');
-          setToast({ kind: 'success', message: 'Draft invoice created' });
+          setLinkModalOpen(false);
+          setLinkStripeId('');
+          setLinkCompanyId('');
+          setLinkSubBrandId('');
+          setToast({ kind: 'success', message: 'Invoice linked successfully' });
           setTimeout(() => setToast(null), 3000);
         },
         onError: () => {
-          setToast({ kind: 'error', message: 'Failed to create invoice' });
+          setToast({ kind: 'error', message: 'Failed to link invoice' });
           setTimeout(() => setToast(null), 3000);
         },
       },
@@ -248,11 +269,6 @@ export default function PlatformInvoicesPage() {
     }
   };
 
-  const CREATE_FLOW_OPTIONS = [
-    { id: 'assigned', text: 'Assigned' },
-    { id: 'post_window', text: 'Post-Window' },
-  ];
-
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
@@ -262,10 +278,10 @@ export default function PlatformInvoicesPage() {
         <Button
           kind="primary"
           size="sm"
-          renderIcon={Add}
-          onClick={() => setCreateModalOpen(true)}
+          renderIcon={LinkIcon}
+          onClick={() => setLinkModalOpen(true)}
         >
-          Create Invoice
+          Link Invoice
         </Button>
       </div>
 
@@ -452,40 +468,63 @@ export default function PlatformInvoicesPage() {
         />
       )}
 
-      {/* Create Invoice Modal */}
+      {/* Link Invoice Modal */}
       <Modal
-        open={createModalOpen}
-        modalHeading="Create Draft Invoice"
-        primaryButtonText="Create"
+        open={linkModalOpen}
+        modalHeading="Link Stripe Invoice"
+        primaryButtonText="Link Invoice"
         secondaryButtonText="Cancel"
-        onRequestSubmit={handleCreate}
+        onRequestSubmit={handleLink}
         onRequestClose={() => {
-          setCreateModalOpen(false);
-          setNewCompanyId('');
-          setNewBillingFlow('assigned');
+          setLinkModalOpen(false);
+          setLinkStripeId('');
+          setLinkCompanyId('');
+          setLinkSubBrandId('');
         }}
-        primaryButtonDisabled={!newCompanyId.trim() || createInvoice.isPending}
+        primaryButtonDisabled={
+          !linkStripeId.trim() ||
+          !linkStripeId.startsWith('in_') ||
+          !linkCompanyId ||
+          linkInvoice.isPending
+        }
       >
         <div className="flex flex-col gap-4">
           <TextInput
-            id="invoice-company-id"
-            labelText="Company ID"
-            placeholder="Enter the target company's UUID"
-            value={newCompanyId}
-            onChange={(e) => setNewCompanyId(e.target.value)}
+            id="link-stripe-invoice-id"
+            labelText="Stripe Invoice ID"
+            placeholder="in_1ABC..."
+            helperText="The Stripe invoice ID starts with 'in_'"
+            value={linkStripeId}
+            onChange={(e) => setLinkStripeId(e.target.value)}
+            invalid={linkStripeId.length > 0 && !linkStripeId.startsWith('in_')}
+            invalidText="Must start with 'in_'"
             required
           />
-          <Dropdown
-            id="invoice-billing-flow"
-            titleText="Billing Flow"
-            label="Select billing flow"
-            items={CREATE_FLOW_OPTIONS}
+          <ComboBox
+            id="link-invoice-company"
+            titleText="Company"
+            placeholder="Search companies..."
+            items={companyItems}
             itemToString={(item: { id: string; text: string } | null) => item?.text ?? ''}
-            selectedItem={CREATE_FLOW_OPTIONS.find((f) => f.id === newBillingFlow) ?? CREATE_FLOW_OPTIONS[0]}
-            onChange={({ selectedItem }: { selectedItem: { id: string; text: string } | null }) =>
-              setNewBillingFlow(selectedItem?.id ?? 'assigned')
-            }
+            selectedItem={companyItems.find((c) => c.id === linkCompanyId) ?? null}
+            onChange={({ selectedItem }: { selectedItem: { id: string; text: string } | null }) => {
+              setLinkCompanyId(selectedItem?.id ?? '');
+              setLinkSubBrandId('');
+            }}
           />
+          {linkCompanyId && subBrandItems.length > 0 && (
+            <ComboBox
+              id="link-invoice-sub-brand"
+              titleText="Sub-brand (optional)"
+              placeholder="Search sub-brands..."
+              items={subBrandItems}
+              itemToString={(item: { id: string; text: string } | null) => item?.text ?? ''}
+              selectedItem={subBrandItems.find((sb) => sb.id === linkSubBrandId) ?? null}
+              onChange={({ selectedItem }: { selectedItem: { id: string; text: string } | null }) =>
+                setLinkSubBrandId(selectedItem?.id ?? '')
+              }
+            />
+          )}
         </div>
       </Modal>
 

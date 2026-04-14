@@ -6,7 +6,7 @@ export type InvoiceStatus =
   | 'payment_failed'
   | 'voided';
 
-export type BillingFlow = 'assigned' | 'self_service' | 'post_window';
+export type BillingFlow = 'assigned' | 'self_service' | 'post_window' | 'linked';
 
 export interface Invoice {
   id: string;

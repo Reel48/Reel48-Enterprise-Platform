@@ -13,7 +13,7 @@ from app.core.dependencies import get_db_session, require_reel48_admin
 from app.core.exceptions import ValidationError
 from app.core.tenant import TenantContext
 from app.schemas.common import ApiListResponse, ApiResponse, PaginationMeta
-from app.schemas.invoice import InvoiceCreate, InvoiceResponse, InvoiceSummary
+from app.schemas.invoice import InvoiceCreate, InvoiceLinkRequest, InvoiceResponse, InvoiceSummary
 from app.services.helpers import resolve_current_user_id
 from app.services.invoice_service import InvoiceService
 from app.services.stripe_service import StripeService, get_stripe_service
@@ -67,6 +67,32 @@ async def create_invoice(
         invoice.due_date = body.due_date
         await db.flush()
         await db.refresh(invoice)
+
+    return ApiResponse(data=InvoiceResponse.model_validate(invoice))
+
+
+@router.post("/link", response_model=ApiResponse[InvoiceResponse], status_code=201)
+async def link_invoice(
+    body: InvoiceLinkRequest,
+    context: TenantContext = Depends(require_reel48_admin),
+    db: AsyncSession = Depends(get_db_session),
+    stripe_service: StripeService = Depends(get_stripe_service),
+) -> ApiResponse[InvoiceResponse]:
+    """Link an existing Stripe invoice to a client company.
+
+    Fetches invoice details from Stripe automatically. Supports historical
+    invoices (any status — draft, paid, void, etc.). The invoice becomes
+    visible to the appropriate client users based on company/sub-brand RLS.
+    """
+    created_by = await resolve_current_user_id(db, context.user_id)
+    service = InvoiceService(db, stripe_service=stripe_service)
+
+    invoice = await service.link_invoice(
+        stripe_invoice_id=body.stripe_invoice_id,
+        company_id=body.company_id,
+        created_by=created_by,
+        sub_brand_id=body.sub_brand_id,
+    )
 
     return ApiResponse(data=InvoiceResponse.model_validate(invoice))
 
