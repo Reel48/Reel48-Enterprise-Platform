@@ -5,8 +5,6 @@ export interface User {
   email: string;
   fullName: string;
   role: UserRole;
-  subBrandId: string | null;
-  subBrandName?: string;
   isActive: boolean;
   createdAt: string;
 }
@@ -14,7 +12,6 @@ export interface User {
 export interface Invite {
   id: string;
   companyId: string;
-  targetSubBrandId: string;
   email: string;
   role: string;
   token: string;
@@ -31,13 +28,4 @@ export interface OrgCode {
   isActive: boolean;
   createdBy: string;
   createdAt: string;
-}
-
-export interface SubBrand {
-  id: string;
-  companyId: string;
-  name: string;
-  slug: string;
-  isDefault: boolean;
-  isActive: boolean;
 }

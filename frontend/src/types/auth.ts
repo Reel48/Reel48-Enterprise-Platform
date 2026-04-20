@@ -1,14 +1,12 @@
 export type UserRole =
   | 'reel48_admin'
-  | 'corporate_admin'
-  | 'sub_brand_admin'
-  | 'regional_manager'
+  | 'company_admin'
+  | 'manager'
   | 'employee';
 
 export interface TenantContext {
   userId: string;
   companyId: string | null;
-  subBrandId: string | null;
   role: UserRole;
 }
 

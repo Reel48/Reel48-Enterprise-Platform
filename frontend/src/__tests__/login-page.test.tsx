@@ -21,6 +21,12 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/login',
 }));
 
+vi.mock('@/lib/api/client', () => ({
+  api: {
+    get: vi.fn().mockResolvedValue({ data: null, meta: {}, errors: [] }),
+  },
+}));
+
 import { AuthProvider } from '@/lib/auth/context';
 import LoginPage from '@/app/(public)/login/page';
 
@@ -86,7 +92,6 @@ describe('Login Page', () => {
             email: 'test@example.com',
             name: 'Test User',
             'custom:company_id': 'comp-123',
-            'custom:sub_brand_id': 'sb-456',
             'custom:role': 'employee',
           },
         },

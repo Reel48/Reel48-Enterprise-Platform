@@ -6,13 +6,7 @@ import { api } from '@/lib/api/client';
 import type {
   NotificationListMeta,
   NotificationSummary,
-  WishlistItem,
 } from '@/types/engagement';
-import type { PaginationMeta } from '@/types/api';
-
-// ---------------------------------------------------------------------------
-// Notifications
-// ---------------------------------------------------------------------------
 
 interface NotificationListResult {
   data: NotificationSummary[];
@@ -76,77 +70,5 @@ export function useMarkAllNotificationsRead() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
     },
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Wishlists
-// ---------------------------------------------------------------------------
-
-interface WishlistListResult {
-  data: WishlistItem[];
-  meta: PaginationMeta;
-}
-
-export function useWishlist(params?: { page?: number; perPage?: number }) {
-  return useQuery({
-    queryKey: ['wishlist', params],
-    queryFn: async (): Promise<WishlistListResult> => {
-      const qp: Record<string, string> = {};
-      if (params?.page) qp.page = String(params.page);
-      if (params?.perPage) qp.per_page = String(params.perPage);
-
-      const res = await api.get<WishlistItem[]>('/api/v1/wishlists/', qp);
-      return {
-        data: res.data,
-        meta: res.meta as unknown as PaginationMeta,
-      };
-    },
-  });
-}
-
-export function useAddToWishlist() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (body: {
-      productId: string;
-      catalogId?: string;
-      notes?: string;
-    }) => {
-      const res = await api.post<WishlistItem>('/api/v1/wishlists/', body);
-      return res.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['wishlist'] });
-      queryClient.invalidateQueries({ queryKey: ['wishlist-check'] });
-    },
-  });
-}
-
-export function useRemoveFromWishlist() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (wishlistId: string) => {
-      await api.delete<void>(`/api/v1/wishlists/${wishlistId}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['wishlist'] });
-      queryClient.invalidateQueries({ queryKey: ['wishlist-check'] });
-    },
-  });
-}
-
-export function useCheckWishlist(productIds: string[]) {
-  return useQuery({
-    queryKey: ['wishlist-check', productIds],
-    queryFn: async () => {
-      if (productIds.length === 0) return {};
-      const res = await api.post<Record<string, boolean>>(
-        '/api/v1/wishlists/check',
-        { productIds },
-      );
-      return res.data;
-    },
-    enabled: productIds.length > 0,
   });
 }

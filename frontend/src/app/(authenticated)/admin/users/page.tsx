@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   Button,
   DataTable,
@@ -33,7 +33,7 @@ import { useAuth } from '@/lib/auth/hooks';
 import { StatusTag } from '@/components/ui/StatusTag';
 import type { UserRole } from '@/types/auth';
 
-import type { Invite, SubBrand, User } from './_types';
+import type { Invite, User } from './_types';
 import {
   useCreateInvite,
   useCurrentOrgCode,
@@ -42,7 +42,6 @@ import {
   useDeleteInvite,
   useGenerateOrgCode,
   useInvites,
-  useSubBrands,
   useUpdateUser,
   useUsers,
 } from './_hooks';
@@ -65,9 +64,8 @@ function roleLabel(role: string): string {
 
 function roleColor(role: string): 'purple' | 'teal' | 'blue' | 'green' | 'gray' {
   switch (role) {
-    case 'corporate_admin': return 'purple';
-    case 'sub_brand_admin': return 'teal';
-    case 'regional_manager': return 'blue';
+    case 'company_admin': return 'purple';
+    case 'manager': return 'blue';
     case 'employee': return 'green';
     default: return 'gray';
   }
@@ -90,26 +88,18 @@ function inviteStatusColor(status: string): 'teal' | 'red' | 'gray' {
 
 const ROLE_FILTER_OPTIONS = [
   { id: 'all', text: 'All Roles' },
-  { id: 'corporate_admin', text: 'Corporate Admin' },
-  { id: 'sub_brand_admin', text: 'Sub-Brand Admin' },
-  { id: 'regional_manager', text: 'Regional Manager' },
+  { id: 'company_admin', text: 'Company Admin' },
+  { id: 'manager', text: 'Manager' },
   { id: 'employee', text: 'Employee' },
 ];
 
-const INVITE_ROLE_OPTIONS = [
+const ASSIGNABLE_ROLE_OPTIONS = [
   { id: 'employee', text: 'Employee' },
-  { id: 'regional_manager', text: 'Regional Manager' },
-  { id: 'sub_brand_admin', text: 'Sub-Brand Admin' },
+  { id: 'manager', text: 'Manager' },
+  { id: 'company_admin', text: 'Company Admin' },
 ];
 
-const CAN_MANAGE_USERS: UserRole[] = ['corporate_admin', 'sub_brand_admin'];
-
-const EDIT_ROLE_OPTIONS = [
-  { id: 'employee', text: 'Employee' },
-  { id: 'regional_manager', text: 'Regional Manager' },
-  { id: 'sub_brand_admin', text: 'Sub-Brand Admin' },
-  { id: 'corporate_admin', text: 'Corporate Admin' },
-];
+const CAN_MANAGE_USERS: UserRole[] = ['company_admin'];
 
 // ---------------------------------------------------------------------------
 // Users Tab
@@ -117,22 +107,18 @@ const EDIT_ROLE_OPTIONS = [
 
 function UsersTab({
   canManage,
-  subBrands,
   onToast,
 }: {
   canManage: boolean;
-  subBrands: SubBrand[];
   onToast: (kind: 'success' | 'error', message: string) => void;
 }) {
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(20);
   const [roleFilter, setRoleFilter] = useState('all');
 
-  // Edit modal state
   const [editUser, setEditUser] = useState<User | null>(null);
   const [editFullName, setEditFullName] = useState('');
   const [editRole, setEditRole] = useState('');
-  const [editSubBrandId, setEditSubBrandId] = useState<string | null>(null);
   const [editIsActive, setEditIsActive] = useState(true);
 
   const { data, isLoading, isError } = useUsers(page, perPage, roleFilter);
@@ -142,13 +128,10 @@ function UsersTab({
   const users: User[] = data?.data ?? [];
   const total = Number(data?.meta?.total ?? 0);
 
-  const activeSubBrands = subBrands.filter((sb) => sb.isActive);
-
   const openEditModal = (user: User) => {
     setEditUser(user);
     setEditFullName(user.fullName);
     setEditRole(user.role);
-    setEditSubBrandId(user.subBrandId);
     setEditIsActive(user.isActive);
   };
 
@@ -162,7 +145,6 @@ function UsersTab({
     const changes: Record<string, unknown> = {};
     if (editFullName !== editUser.fullName) changes.fullName = editFullName;
     if (editRole !== editUser.role) changes.role = editRole;
-    if (editSubBrandId !== editUser.subBrandId) changes.subBrandId = editSubBrandId;
     if (editIsActive !== editUser.isActive) changes.isActive = editIsActive;
 
     if (Object.keys(changes).length === 0) {
@@ -182,22 +164,10 @@ function UsersTab({
     );
   };
 
-  const handleRoleChange = (role: string) => {
-    setEditRole(role);
-    if (role === 'corporate_admin') {
-      setEditSubBrandId(null);
-    } else if (editSubBrandId === null && activeSubBrands.length > 0) {
-      // Switching from corporate_admin to another role — pick first sub-brand
-      const defaultSb = activeSubBrands.find((sb) => sb.isDefault);
-      setEditSubBrandId(defaultSb?.id ?? activeSubBrands[0].id);
-    }
-  };
-
   const tableHeaders = [
     { key: 'fullName', header: 'Name' },
     { key: 'email', header: 'Email' },
     { key: 'role', header: 'Role' },
-    { key: 'subBrandName', header: 'Sub-Brand' },
     { key: 'status', header: 'Status' },
     { key: 'createdAt', header: 'Joined' },
     { key: 'actions', header: '' },
@@ -208,7 +178,6 @@ function UsersTab({
     fullName: u.fullName,
     email: u.email,
     role: u.role,
-    subBrandName: u.subBrandName ?? '—',
     status: u.isActive,
     createdAt: u.createdAt,
   }));
@@ -220,11 +189,7 @@ function UsersTab({
     });
   };
 
-  const editSubBrandRequired = editRole !== 'corporate_admin';
-  const editSubmitDisabled =
-    updateUser.isPending ||
-    !editFullName.trim() ||
-    (editSubBrandRequired && !editSubBrandId);
+  const editSubmitDisabled = updateUser.isPending || !editFullName.trim();
 
   return (
     <>
@@ -382,32 +347,13 @@ function UsersTab({
               id="edit-role"
               titleText="Role"
               label="Select role"
-              items={EDIT_ROLE_OPTIONS}
+              items={ASSIGNABLE_ROLE_OPTIONS}
               itemToString={(item) => item?.text ?? ''}
-              selectedItem={EDIT_ROLE_OPTIONS.find((r) => r.id === editRole) ?? null}
+              selectedItem={ASSIGNABLE_ROLE_OPTIONS.find((r) => r.id === editRole) ?? null}
               onChange={({ selectedItem }) => {
-                if (selectedItem) handleRoleChange(selectedItem.id);
+                if (selectedItem) setEditRole(selectedItem.id);
               }}
             />
-            {editRole === 'corporate_admin' ? (
-              <TextInput
-                id="edit-sub-brand-display"
-                labelText="Sub-Brand"
-                value="All Sub-Brands (Company-wide)"
-                readOnly
-                helperText="Corporate admins operate across all sub-brands"
-              />
-            ) : (
-              <Dropdown
-                id="edit-sub-brand"
-                titleText="Sub-Brand"
-                label="Select sub-brand"
-                items={activeSubBrands}
-                itemToString={(item) => item?.name ?? ''}
-                selectedItem={activeSubBrands.find((sb) => sb.id === editSubBrandId) ?? null}
-                onChange={({ selectedItem }) => setEditSubBrandId(selectedItem?.id ?? null)}
-              />
-            )}
             <Toggle
               id="edit-active"
               labelText="Active"
@@ -428,10 +374,8 @@ function UsersTab({
 // ---------------------------------------------------------------------------
 
 function InvitesTab({
-  subBrands,
   onToast,
 }: {
-  subBrands: SubBrand[];
   onToast: (kind: 'success' | 'error', message: string) => void;
 }) {
   const [page, setPage] = useState(1);
@@ -443,12 +387,9 @@ function InvitesTab({
   const invites: Invite[] = data?.data ?? [];
   const total = Number(data?.meta?.total ?? 0);
 
-  const subBrandMap = new Map(subBrands.map((sb) => [sb.id, sb.name]));
-
   const tableHeaders = [
     { key: 'email', header: 'Email' },
     { key: 'role', header: 'Role' },
-    { key: 'subBrand', header: 'Sub-Brand' },
     { key: 'status', header: 'Status' },
     { key: 'token', header: 'Token' },
     { key: 'createdAt', header: 'Created' },
@@ -459,7 +400,6 @@ function InvitesTab({
     id: inv.id,
     email: inv.email,
     role: inv.role,
-    subBrand: subBrandMap.get(inv.targetSubBrandId) ?? inv.targetSubBrandId,
     status: inviteStatus(inv),
     token: inv.token,
     createdAt: inv.createdAt,
@@ -687,24 +627,12 @@ export default function UsersPage() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('employee');
-  const [inviteSubBrandId, setInviteSubBrandId] = useState('');
   const [toast, setToast] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
 
   const createInvite = useCreateInvite();
-  const { data: subBrandsData } = useSubBrands();
-  const subBrands: SubBrand[] = subBrandsData?.data ?? [];
 
   const role = user?.tenantContext.role;
   const canManage = role ? CAN_MANAGE_USERS.includes(role) : false;
-  const isCorporateAdmin = role === 'corporate_admin';
-  const isSubBrandAdmin = role === 'sub_brand_admin';
-
-  // Auto-set sub-brand for sub_brand_admin
-  useEffect(() => {
-    if (isSubBrandAdmin && user?.tenantContext.subBrandId) {
-      setInviteSubBrandId(user.tenantContext.subBrandId);
-    }
-  }, [isSubBrandAdmin, user?.tenantContext.subBrandId]);
 
   const showToast = (kind: 'success' | 'error', message: string) => {
     setToast({ kind, message });
@@ -714,16 +642,11 @@ export default function UsersPage() {
   const resetInviteForm = () => {
     setInviteEmail('');
     setInviteRole('employee');
-    if (isSubBrandAdmin && user?.tenantContext.subBrandId) {
-      setInviteSubBrandId(user.tenantContext.subBrandId);
-    } else {
-      setInviteSubBrandId('');
-    }
   };
 
   const handleInviteSubmit = () => {
     createInvite.mutate(
-      { email: inviteEmail, targetSubBrandId: inviteSubBrandId, role: inviteRole },
+      { email: inviteEmail, role: inviteRole },
       {
         onSuccess: () => {
           showToast('success', 'Invite sent successfully');
@@ -739,11 +662,8 @@ export default function UsersPage() {
 
   if (!user) return null;
 
-  const subBrandDropdownItems = subBrands.filter((sb) => sb.isActive);
-
   return (
     <div className="flex flex-col gap-6">
-      {/* Page Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <UserProfile size={24} className="text-interactive" />
@@ -756,25 +676,24 @@ export default function UsersPage() {
         )}
       </div>
 
-      {/* Tabs */}
       <Tabs>
         <TabList aria-label="User management tabs">
           <Tab>Users</Tab>
           <Tab>Invites</Tab>
-          {isCorporateAdmin && <Tab>Org Code</Tab>}
+          {canManage && <Tab>Org Code</Tab>}
         </TabList>
         <TabPanels>
           <TabPanel>
             <div className="pt-4">
-              <UsersTab canManage={canManage} subBrands={subBrands} onToast={showToast} />
+              <UsersTab canManage={canManage} onToast={showToast} />
             </div>
           </TabPanel>
           <TabPanel>
             <div className="pt-4">
-              <InvitesTab subBrands={subBrands} onToast={showToast} />
+              <InvitesTab onToast={showToast} />
             </div>
           </TabPanel>
-          {isCorporateAdmin && (
+          {canManage && (
             <TabPanel>
               <div className="pt-4">
                 <OrgCodeTab onToast={showToast} />
@@ -784,7 +703,6 @@ export default function UsersPage() {
         </TabPanels>
       </Tabs>
 
-      {/* Invite Modal */}
       <Modal
         open={inviteOpen}
         onRequestClose={() => {
@@ -795,7 +713,7 @@ export default function UsersPage() {
         modalHeading="Invite User"
         primaryButtonText={createInvite.isPending ? 'Sending...' : 'Send Invite'}
         secondaryButtonText="Cancel"
-        primaryButtonDisabled={!inviteEmail || !inviteSubBrandId || createInvite.isPending}
+        primaryButtonDisabled={!inviteEmail || createInvite.isPending}
       >
         <div className="flex flex-col gap-4 mt-2">
           <TextInput
@@ -806,38 +724,18 @@ export default function UsersPage() {
             onChange={(e) => setInviteEmail(e.target.value)}
             required
           />
-          {!isSubBrandAdmin && (
-            <Dropdown
-              id="invite-sub-brand"
-              titleText="Sub-Brand"
-              label="Select sub-brand"
-              items={subBrandDropdownItems}
-              itemToString={(item) => item?.name ?? ''}
-              onChange={({ selectedItem }) => setInviteSubBrandId(selectedItem?.id ?? '')}
-              selectedItem={subBrandDropdownItems.find((sb) => sb.id === inviteSubBrandId) ?? null}
-            />
-          )}
-          {isSubBrandAdmin && (
-            <TextInput
-              id="invite-sub-brand-display"
-              labelText="Sub-Brand"
-              value={subBrands.find((sb) => sb.id === inviteSubBrandId)?.name ?? ''}
-              readOnly
-            />
-          )}
           <Dropdown
             id="invite-role"
             titleText="Role"
             label="Select role"
-            items={INVITE_ROLE_OPTIONS}
+            items={ASSIGNABLE_ROLE_OPTIONS}
             itemToString={(item) => item?.text ?? ''}
-            initialSelectedItem={INVITE_ROLE_OPTIONS[0]}
+            initialSelectedItem={ASSIGNABLE_ROLE_OPTIONS[0]}
             onChange={({ selectedItem }) => setInviteRole(selectedItem?.id ?? 'employee')}
           />
         </div>
       </Modal>
 
-      {/* Toast */}
       {toast && (
         <div className="fixed bottom-4 right-4 z-50">
           <ToastNotification

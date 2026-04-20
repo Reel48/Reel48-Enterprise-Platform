@@ -49,18 +49,18 @@ describe('API Client', () => {
     server.use(
       http.get('http://localhost:8000/api/v1/test', () => {
         return HttpResponse.json({
-          data: { company_id: '123', sub_brand_id: '456' },
+          data: { company_id: '123', nested_id: '456' },
           meta: { per_page: 20 },
           errors: [],
         });
       }),
     );
 
-    const response = await api.get<{ companyId: string; subBrandId: string }>(
+    const response = await api.get<{ companyId: string; nestedId: string }>(
       '/api/v1/test',
     );
     expect(response.data.companyId).toBe('123');
-    expect(response.data.subBrandId).toBe('456');
+    expect(response.data.nestedId).toBe('456');
   });
 
   it('transforms request body keys from camelCase to snake_case', async () => {
@@ -72,8 +72,8 @@ describe('API Client', () => {
       }),
     );
 
-    await api.post('/api/v1/test', { companyId: '123', subBrandId: '456' });
-    expect(capturedBody).toEqual({ company_id: '123', sub_brand_id: '456' });
+    await api.post('/api/v1/test', { companyId: '123', nestedId: '456' });
+    expect(capturedBody).toEqual({ company_id: '123', nested_id: '456' });
   });
 
   it('retries once on 401 with a forced token refresh', async () => {

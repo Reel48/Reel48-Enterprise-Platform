@@ -10,22 +10,12 @@ import {
 } from '@carbon/react';
 import {
   Dashboard,
-  Catalog,
-  ShoppingCart,
   UserProfile,
-  GroupResource,
-  Task,
-  Policy,
   Analytics,
-  Receipt,
   Enterprise,
   Settings,
-  Store,
   Notification,
-  FavoriteFilled,
   Product,
-  Idea,
-  AiGenerate,
   ArrowsHorizontal,
 } from '@carbon/react/icons';
 import { useQuery } from '@tanstack/react-query';
@@ -46,58 +36,33 @@ interface NavItem {
 
 const employeeNav: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: Dashboard },
-  { label: 'Catalog', href: '/catalog', icon: Catalog },
-  { label: 'Orders', href: '/orders', icon: ShoppingCart },
-  { label: 'Wishlist', href: '/wishlist', icon: FavoriteFilled },
+  { label: 'Products', href: '/products', icon: Product },
   { label: 'Notifications', href: '/notifications', icon: Notification },
   { label: 'Profile', href: '/profile', icon: UserProfile },
 ];
 
-const regionalManagerNav: NavItem[] = [
-  ...employeeNav,
-  { label: 'Bulk Orders', href: '/bulk-orders', icon: GroupResource },
-  { label: 'Approvals', href: '/admin/approvals', icon: Task },
-  { label: 'Invoices', href: '/invoices', icon: Receipt },
-];
+const managerNav: NavItem[] = [...employeeNav];
 
-const subBrandAdminNav: NavItem[] = [
-  ...regionalManagerNav,
-  { label: 'Manage Products', href: '/catalog/manage', icon: Catalog },
-  { label: 'Manage Catalogs', href: '/catalog/manage/catalogs', icon: Store },
-  { label: 'Users', href: '/admin/users', icon: UserProfile },
-  { label: 'Analytics', href: '/admin/analytics', icon: Analytics },
-  { label: 'Brand Settings', href: '/settings', icon: Settings },
-];
-
-const corporateAdminNav: NavItem[] = [
+const companyAdminNav: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: Dashboard },
-  { label: 'Orders', href: '/orders', icon: ShoppingCart },
-  { label: 'Catalogs', href: '/catalog', icon: Catalog },
-  { label: 'Wishlist', href: '/wishlist', icon: FavoriteFilled },
-  { label: 'Invoices', href: '/invoices', icon: Receipt },
+  { label: 'Products', href: '/products', icon: Product },
   { label: 'Notifications', href: '/notifications', icon: Notification },
   { label: 'Users', href: '/admin/users', icon: UserProfile },
-  { label: 'Approvals', href: '/admin/approvals', icon: Task },
-  { label: 'Brand Settings', href: '/settings', icon: Settings },
   { label: 'Analytics', href: '/admin/analytics', icon: Analytics },
-  { label: 'Products', href: '/products', icon: Product },
-  { label: 'InsideReel48+', href: '/inside', icon: Idea },
-  { label: 'Reel48+ AI', href: '/ai', icon: AiGenerate },
+  { label: 'Company Settings', href: '/settings', icon: Settings },
+  { label: 'Profile', href: '/profile', icon: UserProfile },
 ];
 
 const platformAdminNav: NavItem[] = [
   { label: 'Platform Dashboard', href: '/platform/dashboard', icon: Dashboard },
   { label: 'Companies', href: '/platform/companies', icon: Enterprise },
-  { label: 'Catalogs', href: '/platform/catalogs', icon: Catalog },
-  { label: 'Invoices', href: '/platform/invoices', icon: Receipt },
   { label: 'Analytics', href: '/platform/analytics', icon: Analytics },
 ];
 
 const navByRole: Record<UserRole, NavItem[]> = {
   employee: employeeNav,
-  regional_manager: regionalManagerNav,
-  sub_brand_admin: subBrandAdminNav,
-  corporate_admin: corporateAdminNav,
+  manager: managerNav,
+  company_admin: companyAdminNav,
   reel48_admin: platformAdminNav,
 };
 
@@ -132,7 +97,7 @@ export function Sidebar() {
   const role = user?.tenantContext.role ?? 'employee';
   const navItems = navByRole[role];
   const companyName = user?.companyName || '';
-  const showProfileSection = role === 'corporate_admin';
+  const showProfileSection = role === 'company_admin';
 
   const { data: profile } = useQuery({
     queryKey: ['my-profile'],
@@ -161,7 +126,6 @@ export function Sidebar() {
         }}
       >
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-          {/* Company name header area */}
           <div
             className="flex items-center px-4"
             style={{
@@ -179,7 +143,6 @@ export function Sidebar() {
             </span>
           </div>
 
-          {/* Scrollable nav items */}
           <div style={{ flex: 1, overflowY: 'auto' }}>
             <SideNavItems className="pt-2">
               {navItems.map((item) => {
@@ -217,7 +180,6 @@ export function Sidebar() {
             </SideNavItems>
           </div>
 
-          {/* Bottom profile section */}
           {showProfileSection && user && (
             <div
               className="flex items-center gap-3 px-4 py-3"
@@ -226,7 +188,6 @@ export function Sidebar() {
                 flexShrink: 0,
               }}
             >
-              {/* Profile photo or initial */}
               <div className="flex-shrink-0 rounded-full overflow-hidden">
                 {profilePhotoS3Key ? (
                   <S3Image
@@ -242,7 +203,6 @@ export function Sidebar() {
                 )}
               </div>
 
-              {/* Name and role */}
               <div className="flex-1 min-w-0">
                 <p
                   className="text-sm font-medium truncate"
@@ -258,7 +218,6 @@ export function Sidebar() {
                 </p>
               </div>
 
-              {/* Arrow link to profile page */}
               <Link
                 href="/profile"
                 className="flex-shrink-0 flex items-center justify-center rounded"

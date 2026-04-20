@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api, ApiRequestError } from '@/lib/api/client';
 
-import type { User, Invite, OrgCode, SubBrand } from './_types';
+import type { User, Invite, OrgCode } from './_types';
 
 // ---------------------------------------------------------------------------
 // Users
@@ -43,18 +43,6 @@ export function useUpdateUser() {
 }
 
 // ---------------------------------------------------------------------------
-// Sub-Brands (for invite modal dropdown)
-// ---------------------------------------------------------------------------
-
-export function useSubBrands() {
-  return useQuery({
-    queryKey: ['sub-brands'],
-    queryFn: () => api.get<SubBrand[]>('/api/v1/sub_brands/'),
-    staleTime: 5 * 60 * 1000,
-  });
-}
-
-// ---------------------------------------------------------------------------
 // Invites
 // ---------------------------------------------------------------------------
 
@@ -72,7 +60,7 @@ export function useInvites(page: number, perPage: number) {
 export function useCreateInvite() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: { email: string; targetSubBrandId: string; role: string }) =>
+    mutationFn: (data: { email: string; role: string }) =>
       api.post('/api/v1/invites/', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invites'] });

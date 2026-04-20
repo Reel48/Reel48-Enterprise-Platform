@@ -3,23 +3,16 @@
 import { useState } from 'react';
 import {
   Button,
-  InlineNotification,
   TextInput,
   Tile,
   ToastNotification,
 } from '@carbon/react';
-import { Enterprise, Password, Save } from '@carbon/react/icons';
-import Link from 'next/link';
+import { Password } from '@carbon/react/icons';
 
-import { useAuth, useHasRole } from '@/lib/auth/hooks';
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
+import { useAuth } from '@/lib/auth/hooks';
 
 export default function SettingsPage() {
   const { user } = useAuth();
-  const isCorporateAdmin = useHasRole(['corporate_admin']);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -65,18 +58,10 @@ export default function SettingsPage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-text-primary">
-          Brand Settings
+          Company Settings
         </h1>
-        {isCorporateAdmin && (
-          <Link href="/admin/brands">
-            <Button kind="primary" size="sm" renderIcon={Enterprise}>
-              Sub-Brands
-            </Button>
-          </Link>
-        )}
       </div>
 
-      {/* Account Info */}
       <Tile>
         <h2 className="text-base font-semibold text-text-primary mb-4">
           Account Information
@@ -102,18 +87,9 @@ export default function SettingsPage() {
               </p>
             </div>
           )}
-          {user.tenantContext.subBrandId && (
-            <div>
-              <p className="text-xs text-text-secondary mb-1">Sub-Brand ID</p>
-              <p className="text-sm text-text-primary font-mono">
-                {user.tenantContext.subBrandId}
-              </p>
-            </div>
-          )}
         </div>
       </Tile>
 
-      {/* Change Password */}
       <Tile>
         <h2 className="text-base font-semibold text-text-primary mb-4">
           Change Password
@@ -161,7 +137,6 @@ export default function SettingsPage() {
         </form>
       </Tile>
 
-      {/* Toast */}
       {toast && (
         <div className="fixed bottom-4 right-4 z-50">
           <ToastNotification

@@ -1,10 +1,8 @@
 export type NotificationType =
   | 'announcement'
-  | 'catalog_available'
-  | 'buying_window_reminder'
-  | 'order_update';
+  | 'buying_window_reminder';
 
-export type NotificationTargetScope = 'company' | 'sub_brand' | 'individual';
+export type NotificationTargetScope = 'company' | 'individual';
 
 export interface NotificationSummary {
   id: string;
@@ -28,18 +26,4 @@ export interface NotificationListResponse {
   data: NotificationSummary[];
   meta: NotificationListMeta;
   errors: unknown[];
-}
-
-export interface WishlistItem {
-  id: string;
-  productId: string;
-  catalogId: string | null;
-  productName: string;
-  productSku: string;
-  productUnitPrice: number;
-  productImageUrl: string | null;
-  productStatus: string;
-  isPurchasable: boolean;
-  notes: string | null;
-  createdAt: string;
 }

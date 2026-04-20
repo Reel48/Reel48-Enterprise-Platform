@@ -20,6 +20,12 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/dashboard',
 }));
 
+vi.mock('@/lib/api/client', () => ({
+  api: {
+    get: vi.fn().mockResolvedValue({ data: null, meta: {}, errors: [] }),
+  },
+}));
+
 import { AuthProvider } from '@/lib/auth/context';
 import { ProtectedRoute } from '@/components/features/auth/ProtectedRoute';
 
@@ -33,7 +39,6 @@ function mockAuthenticatedSession(role = 'employee') {
           email: 'test@example.com',
           name: 'Test User',
           'custom:company_id': 'comp-123',
-          'custom:sub_brand_id': 'sb-456',
           'custom:role': role,
         },
       },
@@ -98,7 +103,7 @@ describe('ProtectedRoute', () => {
 
     render(
       <AuthProvider>
-        <ProtectedRoute requiredRoles={['corporate_admin', 'reel48_admin']}>
+        <ProtectedRoute requiredRoles={['company_admin', 'reel48_admin']}>
           <div>Admin Content</div>
         </ProtectedRoute>
       </AuthProvider>,
@@ -112,11 +117,11 @@ describe('ProtectedRoute', () => {
   });
 
   it('renders children when user role matches requiredRoles', async () => {
-    mockAuthenticatedSession('corporate_admin');
+    mockAuthenticatedSession('company_admin');
 
     render(
       <AuthProvider>
-        <ProtectedRoute requiredRoles={['corporate_admin', 'reel48_admin']}>
+        <ProtectedRoute requiredRoles={['company_admin', 'reel48_admin']}>
           <div>Admin Content</div>
         </ProtectedRoute>
       </AuthProvider>,

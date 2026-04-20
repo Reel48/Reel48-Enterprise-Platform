@@ -30,15 +30,33 @@ export interface AuthContextValue {
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
 
+// TODO: Remove legacy role mapping once all dev Cognito users have been
+// re-attributed to the 4-role model (reel48_admin, company_admin, manager, employee).
+function normalizeRole(rawRole: string): UserRole {
+  switch (rawRole) {
+    case 'reel48_admin':
+    case 'company_admin':
+    case 'manager':
+    case 'employee':
+      return rawRole;
+    case 'corporate_admin':
+    case 'sub_brand_admin':
+      return 'company_admin';
+    case 'regional_manager':
+      return 'manager';
+    default:
+      return 'employee';
+  }
+}
+
 function extractTenantContext(
   userId: string,
   payload: Record<string, unknown>,
 ): TenantContext {
   const companyId = (payload['custom:company_id'] as string) || null;
-  const subBrandId = (payload['custom:sub_brand_id'] as string) || null;
-  const role = (payload['custom:role'] as UserRole) || 'employee';
+  const role = normalizeRole((payload['custom:role'] as string) || 'employee');
 
-  return { userId, companyId, subBrandId, role };
+  return { userId, companyId, role };
 }
 
 interface AuthProviderProps {

@@ -1,7 +1,6 @@
 export interface Profile {
   id: string;
   companyId: string;
-  subBrandId: string | null;
   userId: string;
   department: string | null;
   jobTitle: string | null;

@@ -51,7 +51,6 @@ function mockAuthenticatedSession() {
           email: 'test@example.com',
           name: 'Test User',
           'custom:company_id': 'comp-123',
-          'custom:sub_brand_id': 'sb-456',
           'custom:role': 'employee',
         },
       },

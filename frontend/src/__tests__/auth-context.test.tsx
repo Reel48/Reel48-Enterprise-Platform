@@ -18,6 +18,12 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/dashboard',
 }));
 
+vi.mock('@/lib/api/client', () => ({
+  api: {
+    get: vi.fn().mockResolvedValue({ data: null, meta: {}, errors: [] }),
+  },
+}));
+
 import { AuthProvider } from '@/lib/auth/context';
 import { useAuth } from '@/lib/auth/hooks';
 
@@ -32,7 +38,6 @@ function TestConsumer() {
           <span data-testid="user-email">{user.email}</span>
           <span data-testid="user-role">{user.tenantContext.role}</span>
           <span data-testid="company-id">{user.tenantContext.companyId ?? 'null'}</span>
-          <span data-testid="sub-brand-id">{user.tenantContext.subBrandId ?? 'null'}</span>
         </>
       )}
     </div>
@@ -42,11 +47,9 @@ function TestConsumer() {
 function mockAuthenticatedSession(overrides?: {
   role?: string;
   companyId?: string | null;
-  subBrandId?: string | null;
 }) {
   const role = overrides?.role ?? 'employee';
   const companyId = overrides && 'companyId' in overrides ? overrides.companyId : 'comp-123';
-  const subBrandId = overrides && 'subBrandId' in overrides ? overrides.subBrandId : 'sb-456';
 
   mockGetCurrentUser.mockResolvedValue({ userId: 'user-001' });
   mockFetchAuthSession.mockResolvedValue({
@@ -57,7 +60,6 @@ function mockAuthenticatedSession(overrides?: {
           email: 'test@example.com',
           name: 'Test User',
           'custom:company_id': companyId,
-          'custom:sub_brand_id': subBrandId,
           'custom:role': role,
         },
       },
@@ -97,7 +99,6 @@ describe('AuthProvider', () => {
     expect(screen.getByTestId('user-email').textContent).toBe('test@example.com');
     expect(screen.getByTestId('user-role').textContent).toBe('employee');
     expect(screen.getByTestId('company-id').textContent).toBe('comp-123');
-    expect(screen.getByTestId('sub-brand-id').textContent).toBe('sb-456');
   });
 
   it('sets unauthenticated state when no session exists', async () => {
@@ -116,11 +117,10 @@ describe('AuthProvider', () => {
     expect(screen.getByTestId('is-authenticated').textContent).toBe('false');
   });
 
-  it('extracts tenant context for corporate_admin with null sub_brand_id', async () => {
+  it('extracts tenant context for company_admin', async () => {
     mockAuthenticatedSession({
-      role: 'corporate_admin',
+      role: 'company_admin',
       companyId: 'comp-789',
-      subBrandId: null,
     });
 
     render(
@@ -130,18 +130,16 @@ describe('AuthProvider', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId('user-role').textContent).toBe('corporate_admin');
+      expect(screen.getByTestId('user-role').textContent).toBe('company_admin');
     });
 
     expect(screen.getByTestId('company-id').textContent).toBe('comp-789');
-    expect(screen.getByTestId('sub-brand-id').textContent).toBe('null');
   });
 
-  it('extracts tenant context for reel48_admin with null company_id and sub_brand_id', async () => {
+  it('extracts tenant context for reel48_admin with null company_id', async () => {
     mockAuthenticatedSession({
       role: 'reel48_admin',
       companyId: null,
-      subBrandId: null,
     });
 
     render(
@@ -155,7 +153,34 @@ describe('AuthProvider', () => {
     });
 
     expect(screen.getByTestId('company-id').textContent).toBe('null');
-    expect(screen.getByTestId('sub-brand-id').textContent).toBe('null');
+  });
+
+  it('maps legacy corporate_admin role to company_admin', async () => {
+    mockAuthenticatedSession({ role: 'corporate_admin' });
+
+    render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('user-role').textContent).toBe('company_admin');
+    });
+  });
+
+  it('maps legacy regional_manager role to manager', async () => {
+    mockAuthenticatedSession({ role: 'regional_manager' });
+
+    render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('user-role').textContent).toBe('manager');
+    });
   });
 
   it('clears state on signOut', async () => {
