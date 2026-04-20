@@ -1,7 +1,13 @@
 # ADR-001: Shared-Database Multi-Tenancy
 
+> ⚠ **PARTIALLY SUPERSEDED** — the shared-database + RLS decision still stands. However,
+> the **two-dimensional tenant model** (`company_id` + `sub_brand_id`) described in parts
+> of this ADR is being collapsed to a single dimension (`company_id` only). The sub-brand
+> portions of this ADR are superseded by ADR-009 (pending, to be authored in Session D).
+> See `~/.claude/plans/yes-please-write-the-memoized-karp.md`.
+
 ## Status
-Accepted
+Accepted (with sub-brand portions superseded by ADR-009)
 
 ## Date
 2026-04-05

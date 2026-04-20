@@ -1,7 +1,12 @@
 # ADR-003: Default Sub-Brand Auto-Creation
 
+> ⚠ **SUPERSEDED** by ADR-009 (pending, to be authored in Session D). The sub-brand
+> dimension is being removed from the platform. Any tenant needing brand separation
+> will be created as its own company. See
+> `~/.claude/plans/yes-please-write-the-memoized-karp.md`.
+
 ## Status
-Accepted
+Superseded by ADR-009
 
 ## Date
 2026-04-05

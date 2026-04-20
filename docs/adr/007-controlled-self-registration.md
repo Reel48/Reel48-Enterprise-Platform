@@ -1,4 +1,12 @@
 # ADR-007: Controlled Self-Registration via Org Code
+
+> ⚠ **PARTIALLY SUPERSEDED** — the org-code self-registration concept stands. However,
+> the **two-step flow with sub-brand selection** described in this ADR is being collapsed
+> to a **single-step flow** (org code + email + name + password on one form). Sub-brand
+> selection is removed per ADR-009 (pending). Users registered via org code are assigned
+> `role = employee` at the company level. See
+> `~/.claude/plans/yes-please-write-the-memoized-karp.md`.
+
 #
 # ╔══════════════════════════════════════════════════════════════════════════════╗
 # ║  This ADR documents the decision to add a controlled self-registration     ║

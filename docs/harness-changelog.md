@@ -30,6 +30,38 @@
 
 ---
 
+## 2026-04-20 — Session 0: Harness Teardown (Simplification Refactor)
+
+**Type:** Preemptive teardown before major architectural simplification.
+**Session:** Session 0 of the four-session plan at `~/.claude/plans/yes-please-write-the-memoized-karp.md`.
+
+### Why
+The platform is being simplified before launch:
+- Sub-brand dimension (`sub_brand_id`) is being removed from every table, endpoint, and UI.
+- Catalog, Products, Orders, Bulk Orders, Wishlists, and Approvals are being deleted entirely.
+- Stripe invoicing (all three flows, the webhook, `StripeService`, local `invoices` table) is being removed — Shopify will own commerce.
+- Role model collapses from 5 to 4: `reel48_admin`, `company_admin`, `manager`, `employee`.
+
+The existing harness (~800 lines of sub-brand rules in the root CLAUDE.md alone, multiple rule files, 3 ADRs, ~10 prompts) would actively mislead Sessions A and B if left in place — Claude Code would faithfully re-implement what we are trying to remove. This session neutralizes the stale guidance first.
+
+### Changes Made
+
+- **Deleted:** `.claude/rules/stripe-invoicing.md` (Stripe integration removed).
+- **Deleted prompts (12 files):** `module4-ordering-flow.md`, `module5-bulk-ordering.md`, `module6-approval-workflows.md`, `module7-invoicing-billing.md`, `module9-employee-engagement.md`, all `frontend-crud-session{1,2,3,4,5,6,7}-*.md`.
+- **Rewrote rule files** down to only rules that are still true today, with a top-of-file "SIMPLIFICATION IN PROGRESS" banner: `.claude/rules/authentication.md`, `.claude/rules/database-migrations.md`, `.claude/rules/testing.md`, `.claude/rules/api-endpoints.md`, `.claude/rules/s3-storage.md`.
+- **Rewrote the three CLAUDE.md files** (root, backend, frontend) with the same banner. Stripped Module 3–9 table schemas, `TenantBase` references, Stripe integration patterns, invoice lifecycle rules, order/bulk-order state machines, 5-role authorization examples, two-step registration, sub-brand-scoped routing, and `{sub_brand_slug}` in S3 paths.
+- **Added superseded banners to ADRs:**
+  - ADR-001 (shared-database multi-tenancy) — partially superseded (RLS decision stands; sub-brand dimension removed).
+  - ADR-003 (default sub-brand pattern) — superseded by ADR-009 (pending).
+  - ADR-006 (Stripe for invoicing) — superseded by ADR-010 (pending).
+  - ADR-007 (controlled self-registration) — partially superseded (org-code concept stands; two-step flow + sub-brand selection removed).
+- **Memory:** Added `project_simplification_plan.md` memory; updated `MEMORY.md` index; flagged `project_production_infra.md` (Stripe being decommissioned) and `project_frontend_pages.md` (superseded by simplification plan).
+
+### Impact
+Sessions A (backend), B (frontend), and D (authoritative harness rewrite) can now proceed without being misled by the old harness. ADRs 009 and 010 will be authored in Session D to make the "superseded by" pointers real. The top-of-file banners in each CLAUDE.md will be removed in Session D once the code matches the final architecture.
+
+---
+
 ## 2026-04-13 — Corporate Admin Sidebar Redesign (Session Audit)
 
 **Type:** End-of-session audit (Trigger 1) — redesigned sidebar navigation for

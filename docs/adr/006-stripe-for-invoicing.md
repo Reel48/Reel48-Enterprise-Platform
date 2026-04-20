@@ -1,4 +1,13 @@
 # ADR-006: Stripe for Invoicing and Client Billing
+
+> ⚠ **SUPERSEDED** by ADR-010 (pending, to be authored in Session D). In-app invoicing
+> and Stripe integration are being removed entirely. Commerce (checkout, invoicing,
+> payments) will be owned by a future Shopify integration. See
+> `~/.claude/plans/yes-please-write-the-memoized-karp.md`.
+
+## Status
+Superseded by ADR-010
+
 #
 # ╔══════════════════════════════════════════════════════════════════════════════╗
 # ║  This ADR documents the decision to use Stripe as the invoicing and        ║
