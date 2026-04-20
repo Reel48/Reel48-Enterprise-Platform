@@ -4,7 +4,7 @@ from pydantic import BaseModel, field_validator
 
 
 class UploadUrlRequest(BaseModel):
-    category: Literal["logos", "products", "catalog", "profiles"]
+    category: Literal["logos", "profiles"]
     content_type: str
     file_extension: str
 

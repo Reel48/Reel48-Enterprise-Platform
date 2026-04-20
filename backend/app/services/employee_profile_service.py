@@ -19,7 +19,6 @@ class EmployeeProfileService:
         self,
         user_id: UUID,
         company_id: UUID,
-        sub_brand_id: UUID | None,
         data: EmployeeProfileCreate,
     ) -> EmployeeProfile:
         existing = await self.db.execute(
@@ -34,7 +33,6 @@ class EmployeeProfileService:
         profile = EmployeeProfile(
             user_id=user_id,
             company_id=company_id,
-            sub_brand_id=sub_brand_id,
             **data.model_dump(exclude_unset=True),
         )
         self.db.add(profile)
@@ -89,7 +87,6 @@ class EmployeeProfileService:
     async def list_profiles(
         self,
         company_id: UUID,
-        sub_brand_id: UUID | None,
         page: int,
         per_page: int,
     ) -> tuple[list[EmployeeProfile], int]:
@@ -97,8 +94,6 @@ class EmployeeProfileService:
             EmployeeProfile.company_id == company_id,
             EmployeeProfile.deleted_at.is_(None),
         )
-        if sub_brand_id is not None:
-            query = query.where(EmployeeProfile.sub_brand_id == sub_brand_id)
 
         total = await self.db.scalar(select(func.count()).select_from(query.subquery()))
         query = query.offset((page - 1) * per_page).limit(per_page)
@@ -118,7 +113,6 @@ class EmployeeProfileService:
         self,
         user_id: UUID,
         company_id: UUID,
-        sub_brand_id: UUID | None,
     ) -> EmployeeProfile:
         """Mark onboarding as complete. Creates profile if none exists. Idempotent."""
         result = await self.db.execute(
@@ -136,7 +130,6 @@ class EmployeeProfileService:
             profile = EmployeeProfile(
                 user_id=user_id,
                 company_id=company_id,
-                sub_brand_id=sub_brand_id,
                 onboarding_complete=True,
             )
             self.db.add(profile)
@@ -149,7 +142,6 @@ class EmployeeProfileService:
         self,
         user_id: UUID,
         company_id: UUID,
-        sub_brand_id: UUID | None,
         data: EmployeeProfileCreate,
     ) -> EmployeeProfile:
         result = await self.db.execute(
@@ -168,7 +160,6 @@ class EmployeeProfileService:
             profile = EmployeeProfile(
                 user_id=user_id,
                 company_id=company_id,
-                sub_brand_id=sub_brand_id,
                 **data.model_dump(exclude_unset=True),
             )
             self.db.add(profile)
@@ -188,17 +179,15 @@ class EmployeeProfileService:
         Validates:
         - Profile exists for the user
         - s3_key starts with the correct company_id prefix
-        - s3_key is in the 'profiles' category path
+        - s3_key is in the 'profiles' category path ({company_id}/profiles/...)
         """
         profile = await self.get_profile_by_user_id(user_id, company_id)
 
-        # Validate s3_key starts with the correct company_id prefix
         if not s3_key.startswith(f"{company_id}/"):
             raise ForbiddenError("S3 key does not match your company scope")
 
-        # Validate s3_key is in the profiles category path
         parts = s3_key.split("/")
-        if len(parts) < 4 or parts[2] != "profiles":
+        if len(parts) < 3 or parts[1] != "profiles":
             raise ValidationError("S3 key must be in the profiles category path")
 
         profile.profile_photo_url = s3_key  # type: ignore[assignment]

@@ -74,7 +74,6 @@ class EmployeeProfileResponse(BaseModel):
 
     id: UUID
     company_id: UUID
-    sub_brand_id: UUID | None
     user_id: UUID
     department: str | None
     job_title: str | None

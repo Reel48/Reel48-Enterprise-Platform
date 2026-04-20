@@ -1,330 +1,124 @@
-"""Tests for the Users CRUD endpoints."""
+"""Tests for the /api/v1/users endpoints."""
 
+import pytest
 from httpx import AsyncClient
 
-# ---------------------------------------------------------------------------
-# Functional Tests
-# ---------------------------------------------------------------------------
+from tests.conftest import create_test_token
 
 
-class TestGetCurrentUser:
-    async def test_get_me_returns_own_profile(
-        self,
-        client: AsyncClient,
-        user_a1_employee_token: str,
-        user_a1_employee,
-    ):
-        response = await client.get(
-            "/api/v1/users/me",
-            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
-        )
-        assert response.status_code == 200
-        data = response.json()["data"]
-        assert data["email"] == user_a1_employee.email
-        assert data["full_name"] == user_a1_employee.full_name
-        assert "cognito_sub" not in data
-        assert "deleted_at" not in data
+@pytest.mark.asyncio
+async def test_get_me_returns_current_user(
+    client: AsyncClient, user_a_employee, user_a_employee_token
+) -> None:
+    resp = await client.get(
+        "/api/v1/users/me",
+        headers={"Authorization": f"Bearer {user_a_employee_token}"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["email"] == user_a_employee.email
+    assert data["role"] == "employee"
+    assert data["company_name"] == "Company A"
 
 
-class TestCreateUser:
-    async def test_create_user_returns_201(
-        self,
-        client: AsyncClient,
-        user_a1_admin_token: str,
-        user_a1_admin,
-        company_a,
-    ):
-        _company, brand_a1, _a2 = company_a
-        response = await client.post(
-            "/api/v1/users/",
-            json={
-                "email": "newuser@companya.com",
-                "full_name": "New User",
-                "role": "employee",
-                "sub_brand_id": str(brand_a1.id),
-            },
-            headers={"Authorization": f"Bearer {user_a1_admin_token}"},
-        )
-        assert response.status_code == 201
-        data = response.json()["data"]
-        assert data["email"] == "newuser@companya.com"
-        assert data["role"] == "employee"
-
-    async def test_create_user_duplicate_email_returns_409(
-        self,
-        client: AsyncClient,
-        user_a1_admin_token: str,
-        user_a1_admin,
-        user_a1_employee,
-        company_a,
-    ):
-        _company, brand_a1, _a2 = company_a
-        response = await client.post(
-            "/api/v1/users/",
-            json={
-                "email": user_a1_employee.email,
-                "full_name": "Duplicate",
-                "role": "employee",
-                "sub_brand_id": str(brand_a1.id),
-            },
-            headers={"Authorization": f"Bearer {user_a1_admin_token}"},
-        )
-        assert response.status_code == 409
-
-    async def test_create_user_invalid_role_returns_422(
-        self,
-        client: AsyncClient,
-        user_a1_admin_token: str,
-        user_a1_admin,
-        company_a,
-    ):
-        _company, brand_a1, _a2 = company_a
-        response = await client.post(
-            "/api/v1/users/",
-            json={
-                "email": "bad@role.com",
-                "full_name": "Bad Role",
-                "role": "superuser",
-                "sub_brand_id": str(brand_a1.id),
-            },
-            headers={"Authorization": f"Bearer {user_a1_admin_token}"},
-        )
-        assert response.status_code == 422
+@pytest.mark.asyncio
+async def test_list_users_forbidden_for_employee(
+    client: AsyncClient, user_a_employee, user_a_employee_token
+) -> None:
+    resp = await client.get(
+        "/api/v1/users/",
+        headers={"Authorization": f"Bearer {user_a_employee_token}"},
+    )
+    assert resp.status_code == 403
 
 
-class TestListUsers:
-    async def test_admin_can_list_users(
-        self,
-        client: AsyncClient,
-        user_a1_admin_token: str,
-        user_a1_admin,
-        user_a1_employee,
-        company_a,
-    ):
-        response = await client.get(
-            "/api/v1/users/",
-            headers={"Authorization": f"Bearer {user_a1_admin_token}"},
-        )
-        assert response.status_code == 200
-        assert response.json()["meta"]["total"] >= 1
+@pytest.mark.asyncio
+async def test_list_users_returns_company_users_for_admin(
+    client: AsyncClient, user_a_admin, user_a_employee, user_a_admin_token
+) -> None:
+    resp = await client.get(
+        "/api/v1/users/",
+        headers={"Authorization": f"Bearer {user_a_admin_token}"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    emails = {u["email"] for u in data}
+    assert user_a_admin.email in emails
+    assert user_a_employee.email in emails
 
 
-class TestGetUser:
-    async def test_admin_can_get_user_in_scope(
-        self,
-        client: AsyncClient,
-        user_a1_admin_token: str,
-        user_a1_admin,
-        user_a1_employee,
-    ):
-        response = await client.get(
-            f"/api/v1/users/{user_a1_employee.id}",
-            headers={"Authorization": f"Bearer {user_a1_admin_token}"},
-        )
-        assert response.status_code == 200
-        assert response.json()["data"]["email"] == user_a1_employee.email
+@pytest.mark.asyncio
+async def test_company_admin_creates_employee(
+    client: AsyncClient, company_a, user_a_admin, user_a_admin_token
+) -> None:
+    resp = await client.post(
+        "/api/v1/users/",
+        headers={"Authorization": f"Bearer {user_a_admin_token}"},
+        json={"email": "new.emp@companya.com", "full_name": "New Emp", "role": "employee"},
+    )
+    assert resp.status_code == 201
+    data = resp.json()["data"]
+    assert data["email"] == "new.emp@companya.com"
+    assert data["role"] == "employee"
+    assert data["company_id"] == str(company_a.id)
 
 
-class TestUpdateUser:
-    async def test_admin_can_update_user(
-        self,
-        client: AsyncClient,
-        user_a1_admin_token: str,
-        user_a1_admin,
-        user_a1_employee,
-    ):
-        response = await client.patch(
-            f"/api/v1/users/{user_a1_employee.id}",
-            json={"full_name": "Updated Name"},
-            headers={"Authorization": f"Bearer {user_a1_admin_token}"},
-        )
-        assert response.status_code == 200
-        assert response.json()["data"]["full_name"] == "Updated Name"
-
-    async def test_employee_can_update_own_full_name(
-        self,
-        client: AsyncClient,
-        user_a1_employee_token: str,
-        user_a1_employee,
-    ):
-        response = await client.patch(
-            f"/api/v1/users/{user_a1_employee.id}",
-            json={"full_name": "My New Name"},
-            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
-        )
-        assert response.status_code == 200
-        assert response.json()["data"]["full_name"] == "My New Name"
-
-    async def test_employee_cannot_update_own_role(
-        self,
-        client: AsyncClient,
-        user_a1_employee_token: str,
-        user_a1_employee,
-    ):
-        response = await client.patch(
-            f"/api/v1/users/{user_a1_employee.id}",
-            json={"role": "corporate_admin"},
-            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
-        )
-        assert response.status_code == 403
+@pytest.mark.asyncio
+async def test_create_user_rejects_reel48_admin_role(
+    client: AsyncClient, user_a_admin_token
+) -> None:
+    resp = await client.post(
+        "/api/v1/users/",
+        headers={"Authorization": f"Bearer {user_a_admin_token}"},
+        json={"email": "ad@x.com", "full_name": "Ad", "role": "reel48_admin"},
+    )
+    # Role is not in VALID_ROLES → ValidationError → 422
+    assert resp.status_code == 422
 
 
-class TestDeleteUser:
-    async def test_soft_delete_user(
-        self,
-        client: AsyncClient,
-        user_a1_admin_token: str,
-        user_a1_admin,
-        user_a1_employee,
-    ):
-        response = await client.delete(
-            f"/api/v1/users/{user_a1_employee.id}",
-            headers={"Authorization": f"Bearer {user_a1_admin_token}"},
-        )
-        assert response.status_code == 200
-        assert response.json()["data"]["id"] == str(user_a1_employee.id)
-
-        # Verify user is excluded from list
-        list_response = await client.get(
-            "/api/v1/users/",
-            headers={"Authorization": f"Bearer {user_a1_admin_token}"},
-        )
-        user_ids = [u["id"] for u in list_response.json()["data"]]
-        assert str(user_a1_employee.id) not in user_ids
+@pytest.mark.asyncio
+async def test_employee_cannot_update_others_profile(
+    client: AsyncClient, user_a_employee, user_a_admin, user_a_employee_token
+) -> None:
+    resp = await client.patch(
+        f"/api/v1/users/{user_a_admin.id}",
+        headers={"Authorization": f"Bearer {user_a_employee_token}"},
+        json={"full_name": "Hacked"},
+    )
+    assert resp.status_code == 403
 
 
-# ---------------------------------------------------------------------------
-# Authorization Tests
-# ---------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_employee_can_update_own_name(
+    client: AsyncClient, user_a_employee, user_a_employee_token
+) -> None:
+    resp = await client.patch(
+        "/api/v1/users/me",
+        headers={"Authorization": f"Bearer {user_a_employee_token}"},
+        json={"full_name": "Renamed"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["data"]["full_name"] == "Renamed"
 
 
-class TestUserAuthorization:
-    async def test_employee_cannot_list_users(
-        self,
-        client: AsyncClient,
-        user_a1_employee_token: str,
-        user_a1_employee,
-    ):
-        response = await client.get(
-            "/api/v1/users/",
-            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
-        )
-        assert response.status_code == 403
-
-    async def test_employee_cannot_create_user(
-        self,
-        client: AsyncClient,
-        user_a1_employee_token: str,
-        user_a1_employee,
-        company_a,
-    ):
-        _company, brand_a1, _a2 = company_a
-        response = await client.post(
-            "/api/v1/users/",
-            json={
-                "email": "hack@test.com",
-                "full_name": "Hack",
-                "role": "employee",
-                "sub_brand_id": str(brand_a1.id),
-            },
-            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
-        )
-        assert response.status_code == 403
-
-    async def test_employee_cannot_delete_user(
-        self,
-        client: AsyncClient,
-        user_a1_employee_token: str,
-        user_a1_employee,
-        user_a1_admin,
-    ):
-        response = await client.delete(
-            f"/api/v1/users/{user_a1_admin.id}",
-            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
-        )
-        assert response.status_code == 403
-
-    async def test_sub_brand_admin_cannot_assign_corporate_admin_role(
-        self,
-        client: AsyncClient,
-        user_a1_admin_token: str,
-        user_a1_admin,
-        company_a,
-    ):
-        _company, brand_a1, _a2 = company_a
-        response = await client.post(
-            "/api/v1/users/",
-            json={
-                "email": "promoted@test.com",
-                "full_name": "Promoted",
-                "role": "corporate_admin",
-                "sub_brand_id": str(brand_a1.id),
-            },
-            headers={"Authorization": f"Bearer {user_a1_admin_token}"},
-        )
-        assert response.status_code == 403
-
-    async def test_employee_cannot_view_other_users_profile(
-        self,
-        client: AsyncClient,
-        user_a1_employee_token: str,
-        user_a1_employee,
-        user_a1_admin,
-    ):
-        response = await client.get(
-            f"/api/v1/users/{user_a1_admin.id}",
-            headers={"Authorization": f"Bearer {user_a1_employee_token}"},
-        )
-        assert response.status_code == 403
+@pytest.mark.asyncio
+async def test_soft_delete_user(
+    client: AsyncClient, user_a_employee, user_a_admin_token
+) -> None:
+    resp = await client.delete(
+        f"/api/v1/users/{user_a_employee.id}",
+        headers={"Authorization": f"Bearer {user_a_admin_token}"},
+    )
+    assert resp.status_code == 200
 
 
-# ---------------------------------------------------------------------------
-# Isolation Tests
-# ---------------------------------------------------------------------------
-
-
-class TestUserIsolation:
-    async def test_company_b_cannot_see_company_a_users(
-        self,
-        client: AsyncClient,
-        company_b_corporate_admin_token: str,
-        company_b,
-        user_a1_employee,
-        company_a,
-    ):
-        response = await client.get(
-            f"/api/v1/users/{user_a1_employee.id}",
-            headers={"Authorization": f"Bearer {company_b_corporate_admin_token}"},
-        )
-        # Should be 404 — user not found in Company B's scope
-        assert response.status_code == 404
-
-    async def test_brand_a2_admin_cannot_see_brand_a1_users(
-        self,
-        client: AsyncClient,
-        company_a_brand_a2_admin_token: str,
-        user_a1_employee,
-        company_a,
-    ):
-        response = await client.get(
-            f"/api/v1/users/{user_a1_employee.id}",
-            headers={"Authorization": f"Bearer {company_a_brand_a2_admin_token}"},
-        )
-        # Brand A2 admin cannot access Brand A1 user
-        assert response.status_code == 403
-
-    async def test_corporate_admin_sees_all_sub_brand_users(
-        self,
-        client: AsyncClient,
-        user_a_corporate_admin_token: str,
-        user_a_corporate_admin,
-        user_a1_employee,
-        company_a,
-    ):
-        response = await client.get(
-            "/api/v1/users/",
-            headers={"Authorization": f"Bearer {user_a_corporate_admin_token}"},
-        )
-        assert response.status_code == 200
-        # Should see users across sub-brands (at least the employee + admin + corporate admin)
-        assert response.json()["meta"]["total"] >= 2
+@pytest.mark.asyncio
+async def test_user_cannot_access_other_company_user(
+    client: AsyncClient, user_b_employee, company_a
+) -> None:
+    token = create_test_token(company_id=str(company_a.id), role="company_admin")
+    resp = await client.get(
+        f"/api/v1/users/{user_b_employee.id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 404

@@ -30,7 +30,6 @@ class CognitoService:
         self,
         email: str,
         company_id: UUID | None,
-        sub_brand_id: UUID | None,
         role: str,
     ) -> list[dict[str, str]]:
         attrs = [
@@ -40,8 +39,9 @@ class CognitoService:
         ]
         if company_id is not None:
             attrs.append({"Name": "custom:company_id", "Value": str(company_id)})
-        if sub_brand_id is not None:
-            attrs.append({"Name": "custom:sub_brand_id", "Value": str(sub_brand_id)})
+        # NOTE: the custom:sub_brand_id attribute still exists in the Cognito
+        # user pool (AWS does not allow deleting custom attributes) but is no
+        # longer populated. The backend ignores it on login.
         return attrs
 
     def _extract_sub(self, response: dict[str, Any]) -> str:
@@ -56,7 +56,6 @@ class CognitoService:
         email: str,
         temporary_password: str,
         company_id: UUID | None,
-        sub_brand_id: UUID | None,
         role: str,
     ) -> str:
         """
@@ -70,9 +69,7 @@ class CognitoService:
                 UserPoolId=self._user_pool_id,
                 Username=email,
                 TemporaryPassword=temporary_password,
-                UserAttributes=self._build_user_attributes(
-                    email, company_id, sub_brand_id, role
-                ),
+                UserAttributes=self._build_user_attributes(email, company_id, role),
                 DesiredDeliveryMediums=["EMAIL"],
             )
             return self._extract_sub(response)
@@ -88,7 +85,6 @@ class CognitoService:
         email: str,
         password: str,
         company_id: UUID | None,
-        sub_brand_id: UUID | None,
         role: str,
     ) -> str:
         """
@@ -102,9 +98,7 @@ class CognitoService:
                 UserPoolId=self._user_pool_id,
                 Username=email,
                 TemporaryPassword=password,
-                UserAttributes=self._build_user_attributes(
-                    email, company_id, sub_brand_id, role
-                ),
+                UserAttributes=self._build_user_attributes(email, company_id, role),
                 MessageAction="SUPPRESS",  # Don't send temp password email
             )
             cognito_sub = self._extract_sub(response)

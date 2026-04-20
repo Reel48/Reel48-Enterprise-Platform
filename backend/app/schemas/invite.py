@@ -6,7 +6,6 @@ from pydantic import BaseModel, ConfigDict, field_validator
 
 class InviteCreate(BaseModel):
     email: str
-    target_sub_brand_id: UUID
     role: str = "employee"
 
     @field_validator("email", mode="before")
@@ -22,7 +21,6 @@ class InviteResponse(BaseModel):
 
     id: UUID
     company_id: UUID
-    target_sub_brand_id: UUID
     email: str
     role: str
     token: str
@@ -39,7 +37,6 @@ class InviteListItem(BaseModel):
 
     id: UUID
     company_id: UUID
-    target_sub_brand_id: UUID
     email: str
     role: str
     token: str

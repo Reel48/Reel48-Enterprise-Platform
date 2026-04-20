@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_db_session, require_corporate_admin
+from app.core.dependencies import get_db_session, require_company_admin
 from app.core.exceptions import ForbiddenError, NotFoundError
 from app.core.tenant import TenantContext
 from app.schemas.common import ApiResponse
@@ -28,7 +28,7 @@ def _require_company_id(context: TenantContext) -> UUID:
     status_code=status.HTTP_201_CREATED,
 )
 async def generate_org_code(
-    context: TenantContext = Depends(require_corporate_admin),
+    context: TenantContext = Depends(require_company_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> ApiResponse[OrgCodeResponse]:
     company_id = _require_company_id(context)
@@ -40,7 +40,7 @@ async def generate_org_code(
 
 @router.get("/current", response_model=ApiResponse[OrgCodeResponse])
 async def get_current_org_code(
-    context: TenantContext = Depends(require_corporate_admin),
+    context: TenantContext = Depends(require_company_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> ApiResponse[OrgCodeResponse]:
     company_id = _require_company_id(context)
@@ -54,7 +54,7 @@ async def get_current_org_code(
 @router.delete("/{org_code_id}", response_model=ApiResponse[OrgCodeResponse])
 async def deactivate_org_code(
     org_code_id: UUID,
-    context: TenantContext = Depends(require_corporate_admin),
+    context: TenantContext = Depends(require_company_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> ApiResponse[OrgCodeResponse]:
     company_id = _require_company_id(context)

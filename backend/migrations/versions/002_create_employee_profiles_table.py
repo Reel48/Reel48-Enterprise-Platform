@@ -3,7 +3,7 @@
 Creates the employee_profiles table for Module 2 (Employee Profiles).
 One profile per user storing sizing, department, delivery address, and preferences.
 
-Uses TenantBase shape (company_id + sub_brand_id) with standard RLS policies.
+Uses CompanyBase shape (company_id only) with the standard RLS policy.
 
 Revision ID: 002
 Revises: 001
@@ -22,9 +22,6 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # ──────────────────────────────────────────────────────────────────────
-    # 1. Create employee_profiles table (TenantBase — company_id + sub_brand_id)
-    # ──────────────────────────────────────────────────────────────────────
     op.create_table(
         "employee_profiles",
         sa.Column("id", UUID(as_uuid=True), primary_key=True),
@@ -33,12 +30,6 @@ def upgrade() -> None:
             UUID(as_uuid=True),
             sa.ForeignKey("companies.id", name="fk_employee_profiles_company_id_companies"),
             nullable=False,
-        ),
-        sa.Column(
-            "sub_brand_id",
-            UUID(as_uuid=True),
-            sa.ForeignKey("sub_brands.id", name="fk_employee_profiles_sub_brand_id_sub_brands"),
-            nullable=True,
         ),
         sa.Column(
             "user_id",
@@ -82,9 +73,7 @@ def upgrade() -> None:
         ),
     )
 
-    # 2. Create indexes
     op.create_index("ix_employee_profiles_company_id", "employee_profiles", ["company_id"])
-    op.create_index("ix_employee_profiles_sub_brand_id", "employee_profiles", ["sub_brand_id"])
     op.create_index("ix_employee_profiles_user_id", "employee_profiles", ["user_id"])
     op.create_index(
         "ix_employee_profiles_company_id_department",
@@ -92,7 +81,6 @@ def upgrade() -> None:
         ["company_id", "department"],
     )
 
-    # 3. Enable RLS and create policies
     op.execute("ALTER TABLE employee_profiles ENABLE ROW LEVEL SECURITY")
     op.execute("ALTER TABLE employee_profiles FORCE ROW LEVEL SECURITY")
     op.execute("""
@@ -103,27 +91,14 @@ def upgrade() -> None:
                 OR company_id = current_setting('app.current_company_id')::uuid
             )
     """)
-    op.execute("""
-        CREATE POLICY employee_profiles_sub_brand_scoping ON employee_profiles AS RESTRICTIVE
-            USING (
-                current_setting('app.current_sub_brand_id', true) IS NULL
-                OR current_setting('app.current_sub_brand_id', true) = ''
-                OR sub_brand_id = current_setting('app.current_sub_brand_id')::uuid
-            )
-    """)
 
 
 def downgrade() -> None:
-    # Drop RLS policies before table
-    op.execute("DROP POLICY IF EXISTS employee_profiles_sub_brand_scoping ON employee_profiles")
     op.execute("DROP POLICY IF EXISTS employee_profiles_company_isolation ON employee_profiles")
     op.execute("ALTER TABLE employee_profiles DISABLE ROW LEVEL SECURITY")
 
-    # Drop indexes
     op.drop_index("ix_employee_profiles_company_id_department", table_name="employee_profiles")
     op.drop_index("ix_employee_profiles_user_id", table_name="employee_profiles")
-    op.drop_index("ix_employee_profiles_sub_brand_id", table_name="employee_profiles")
     op.drop_index("ix_employee_profiles_company_id", table_name="employee_profiles")
 
-    # Drop table
     op.drop_table("employee_profiles")

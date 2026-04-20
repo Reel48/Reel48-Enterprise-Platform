@@ -4,6 +4,8 @@ S3 file storage service.
 This is the ONLY file that wraps boto3 S3 operations. All other code calls this
 service for pre-signed URL generation and file management. The service is injected
 as a FastAPI dependency, making it easily mockable in tests.
+
+S3 key structure is company-scoped: {company_id}/{category}/{uuid}.{ext}
 """
 
 from __future__ import annotations
@@ -14,28 +16,18 @@ from uuid import UUID, uuid4
 import structlog
 
 from app.core.config import settings
-from app.core.exceptions import ForbiddenError, ValidationError
+from app.core.exceptions import ValidationError
 
 logger = structlog.get_logger()
 
 # ---------------------------------------------------------------------------
-# File type validation rules per category
+# File type validation rules per surviving category
 # ---------------------------------------------------------------------------
 _CATEGORY_RULES: dict[str, dict[str, Any]] = {
     "logos": {
         "allowed_types": {"image/png", "image/svg+xml", "image/jpeg"},
         "allowed_extensions": {".png", ".svg", ".jpg", ".jpeg"},
         "max_size_mb": 5,
-    },
-    "products": {
-        "allowed_types": {"image/png", "image/jpeg", "image/webp"},
-        "allowed_extensions": {".png", ".jpg", ".jpeg", ".webp"},
-        "max_size_mb": 10,
-    },
-    "catalog": {
-        "allowed_types": {"application/pdf"},
-        "allowed_extensions": {".pdf"},
-        "max_size_mb": 25,
     },
     "profiles": {
         "allowed_types": {"image/png", "image/jpeg"},
@@ -46,13 +38,6 @@ _CATEGORY_RULES: dict[str, dict[str, Any]] = {
 
 
 class S3Service:
-    """Wraps boto3 S3 client for pre-signed URL generation and file management.
-
-    Follows the External Service Integration Pattern (see backend CLAUDE.md):
-    - boto3 import is lazy (inside dependency factory)
-    - Injected via FastAPI Depends() for easy test mocking
-    """
-
     def __init__(
         self,
         client: Any,
@@ -66,7 +51,6 @@ class S3Service:
     def generate_upload_url(
         self,
         company_id: UUID,
-        sub_brand_slug: str,
         category: str,
         content_type: str,
         file_extension: str,
@@ -76,38 +60,33 @@ class S3Service:
         Returns: (upload_url, s3_key)
         - Validates content_type against allowed types for the category
         - Generates a unique filename: {uuid}.{extension}
-        - Builds the S3 key: {company_id}/{sub_brand_slug}/{category}/{uuid}.{ext}
+        - Builds the S3 key: {company_id}/{category}/{uuid}.{ext}
         - Pre-signed URL expires in 15 minutes
         """
-        # Normalize extension
         ext = file_extension.lower().strip()
         if not ext.startswith("."):
             ext = f".{ext}"
 
-        # Validate category
         rules = _CATEGORY_RULES.get(category)
         if rules is None:
             raise ValidationError(
                 f"Invalid category '{category}'. Must be one of: {', '.join(_CATEGORY_RULES.keys())}"
             )
 
-        # Validate content type
         if content_type not in rules["allowed_types"]:
             raise ValidationError(
                 f"Content type '{content_type}' is not allowed for category '{category}'. "
                 f"Allowed: {', '.join(sorted(rules['allowed_types']))}"
             )
 
-        # Validate file extension
         if ext not in rules["allowed_extensions"]:
             raise ValidationError(
                 f"File extension '{ext}' is not allowed for category '{category}'. "
                 f"Allowed: {', '.join(sorted(rules['allowed_extensions']))}"
             )
 
-        # Generate unique filename to prevent collisions and path traversal
         unique_filename = f"{uuid4()}{ext}"
-        s3_key = f"{company_id}/{sub_brand_slug}/{category}/{unique_filename}"
+        s3_key = f"{company_id}/{category}/{unique_filename}"
 
         url = self._client.generate_presigned_url(
             "put_object",
@@ -116,7 +95,7 @@ class S3Service:
                 "Key": s3_key,
                 "ContentType": content_type,
             },
-            ExpiresIn=900,  # 15 minutes
+            ExpiresIn=900,
         )
 
         logger.info(
@@ -130,30 +109,15 @@ class S3Service:
         return url, s3_key
 
     def generate_download_url(self, s3_key: str) -> str:
-        """Generate a pre-signed GET URL for file download.
-
-        - Pre-signed URL expires in 1 hour (3600 seconds)
-        - TODO: Implement CloudFront signed URLs when key pair is configured.
-          Plain CloudFront URLs don't work with private S3 buckets.
-        """
+        """Generate a pre-signed GET URL for file download (1 hour)."""
         url = self._client.generate_presigned_url(
             "get_object",
             Params={"Bucket": self._bucket_name, "Key": s3_key},
-            ExpiresIn=3600,  # 1 hour
+            ExpiresIn=3600,
         )
 
         logger.info("download_url_generated", s3_key=s3_key)
         return url
-
-    def generate_shared_download_url(
-        self, company_id: UUID, file_path: str
-    ) -> str:
-        """Generate download URL for company-wide shared assets.
-
-        S3 key: {company_id}/shared/{file_path}
-        """
-        s3_key = f"{company_id}/shared/{file_path}"
-        return self.generate_download_url(s3_key)
 
 
 def get_s3_service() -> S3Service:

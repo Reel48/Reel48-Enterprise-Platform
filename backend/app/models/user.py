@@ -1,14 +1,16 @@
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 
-from app.models.base import TenantBase
+from app.models.base import CompanyBase
 
 
-class User(TenantBase):
+class User(CompanyBase):
     """
-    A platform user. Uses TenantBase (company_id + sub_brand_id).
-    sub_brand_id is NULL for corporate_admin and reel48_admin users.
-    RLS: users_company_isolation + users_sub_brand_scoping.
+    A platform user. Uses CompanyBase (company_id only).
+
+    reel48_admin users belong to an internal "Reel48 Operations" company in the
+    DB, but their JWT omits custom:company_id so the auth middleware sets
+    app.current_company_id = '' (cross-company RLS bypass).
     """
 
     __tablename__ = "users"

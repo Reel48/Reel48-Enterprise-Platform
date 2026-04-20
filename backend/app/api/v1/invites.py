@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_db_session, require_admin
+from app.core.dependencies import get_db_session, require_company_admin
 from app.core.exceptions import ForbiddenError
 from app.core.tenant import TenantContext
 from app.schemas.common import ApiListResponse, ApiResponse, PaginationMeta
@@ -26,16 +26,13 @@ def _require_company_id(context: TenantContext) -> UUID:
 async def list_invites(
     page: int = 1,
     per_page: int = 20,
-    context: TenantContext = Depends(require_admin),
+    context: TenantContext = Depends(require_company_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> ApiListResponse[InviteListItem]:
     company_id = _require_company_id(context)
     per_page = min(per_page, 100)
     service = InviteService(db)
-    # sub_brand_admin: filtered by their sub-brand. corporate_admin: all.
-    invites, total = await service.list_invites(
-        company_id, context.sub_brand_id, page, per_page
-    )
+    invites, total = await service.list_invites(company_id, page, per_page)
     return ApiListResponse(
         data=[InviteListItem.model_validate(inv) for inv in invites],
         meta=PaginationMeta(page=page, per_page=per_page, total=total),
@@ -49,19 +46,10 @@ async def list_invites(
 )
 async def create_invite(
     data: InviteCreate,
-    context: TenantContext = Depends(require_admin),
+    context: TenantContext = Depends(require_company_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> ApiResponse[InviteResponse]:
     company_id = _require_company_id(context)
-
-    # sub_brand_admin can only invite to their own sub-brand
-    if (
-        context.sub_brand_id is not None
-        and data.target_sub_brand_id != context.sub_brand_id
-        and not context.is_corporate_admin_or_above
-    ):
-        raise ForbiddenError("You can only create invites for your own sub-brand")
-
     created_by = await resolve_current_user_id(db, context.user_id)
     service = InviteService(db)
     invite = await service.create_invite(company_id, data, created_by)
@@ -71,7 +59,7 @@ async def create_invite(
 @router.delete("/{invite_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_invite(
     invite_id: UUID,
-    context: TenantContext = Depends(require_admin),
+    context: TenantContext = Depends(require_company_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> None:
     company_id = _require_company_id(context)

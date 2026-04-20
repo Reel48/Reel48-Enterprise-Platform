@@ -7,10 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.models.invite import Invite
-from app.models.sub_brand import SubBrand
 from app.schemas.invite import InviteCreate
 
-VALID_INVITE_ROLES = {"employee", "regional_manager", "sub_brand_admin"}
+VALID_INVITE_ROLES = {"employee", "manager", "company_admin"}
 
 
 class InviteService:
@@ -20,13 +19,10 @@ class InviteService:
     async def list_invites(
         self,
         company_id: UUID,
-        sub_brand_id: UUID | None,
         page: int,
         per_page: int,
     ) -> tuple[list[Invite], int]:
         query = select(Invite).where(Invite.company_id == company_id)
-        if sub_brand_id is not None:
-            query = query.where(Invite.target_sub_brand_id == sub_brand_id)
 
         total = await self.db.scalar(select(func.count()).select_from(query.subquery()))
         query = query.offset((page - 1) * per_page).limit(per_page)
@@ -39,24 +35,9 @@ class InviteService:
         data: InviteCreate,
         created_by_user_id: UUID,
     ) -> Invite:
-        # Validate role
         if data.role not in VALID_INVITE_ROLES:
             raise ValidationError(f"Invalid invite role: {data.role}", field="role")
 
-        # Validate target_sub_brand_id belongs to company
-        sb_result = await self.db.execute(
-            select(SubBrand).where(
-                SubBrand.id == data.target_sub_brand_id,
-                SubBrand.company_id == company_id,
-            )
-        )
-        if sb_result.scalar_one_or_none() is None:
-            raise ValidationError(
-                "target_sub_brand_id does not belong to this company",
-                field="target_sub_brand_id",
-            )
-
-        # Check for duplicate active invite (same email + company, not consumed, not expired)
         now = datetime.now(UTC)
         existing = await self.db.execute(
             select(Invite).where(
@@ -71,12 +52,10 @@ class InviteService:
                 f"An active invite already exists for '{data.email}' in this company"
             )
 
-        # Generate secure token (64 chars)
         token = secrets.token_hex(32)
 
         invite = Invite(
             company_id=company_id,
-            target_sub_brand_id=data.target_sub_brand_id,
             email=data.email,
             role=data.role,
             token=token,

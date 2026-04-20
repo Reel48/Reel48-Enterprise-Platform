@@ -6,7 +6,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ConflictError, NotFoundError
 from app.models.company import Company
-from app.models.sub_brand import SubBrand
 from app.schemas.company import CompanyCreate, CompanyUpdate
 
 
@@ -75,23 +74,11 @@ class CompanyService:
             slug = f"{base_slug}-{suffix}"
 
     async def create_company(self, data: CompanyCreate) -> Company:
-        # Auto-generate slug from name if not provided
         base_slug = data.slug if data.slug else _slugify(data.name)
         slug = await self._resolve_unique_slug(base_slug)
 
-        # Create company
         company = Company(name=data.name, slug=slug)
         self.db.add(company)
-        await self.db.flush()
-
-        # Atomically create default sub-brand (ADR-003)
-        default_sub_brand = SubBrand(
-            company_id=company.id,
-            name=f"{company.name} - Default",
-            slug="default",
-            is_default=True,
-        )
-        self.db.add(default_sub_brand)
         await self.db.flush()
         await self.db.refresh(company)
 

@@ -23,11 +23,6 @@ class Settings(BaseSettings):
     # Frontend (for email links)
     FRONTEND_BASE_URL: str = "https://app.reel48.com"
 
-    # Stripe (invoicing & client billing)
-    STRIPE_SECRET_KEY: str = ""
-    STRIPE_WEBHOOK_SECRET: str = ""
-    STRIPE_API_VERSION: str = "2024-06-20"
-
     # Amazon S3 (file storage)
     S3_BUCKET_NAME: str = "reel48-assets"
     CLOUDFRONT_DOMAIN: str | None = None  # If set, download URLs use CloudFront

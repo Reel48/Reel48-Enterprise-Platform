@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_db_session, get_tenant_context, require_admin
+from app.core.dependencies import get_db_session, get_tenant_context, require_company_admin
 from app.core.exceptions import ForbiddenError
 from app.core.tenant import TenantContext
 from app.schemas.common import ApiListResponse, ApiResponse, PaginationMeta
@@ -48,9 +48,7 @@ async def upsert_my_profile(
     company_id = _require_company_id(context)
     user_id = await resolve_current_user_id(db, context.user_id)
     service = EmployeeProfileService(db)
-    profile = await service.upsert_my_profile(
-        user_id, company_id, context.sub_brand_id, data
-    )
+    profile = await service.upsert_my_profile(user_id, company_id, data)
     return ApiResponse(data=EmployeeProfileResponse.model_validate(profile))
 
 
@@ -63,9 +61,7 @@ async def complete_onboarding(
     company_id = _require_company_id(context)
     user_id = await resolve_current_user_id(db, context.user_id)
     service = EmployeeProfileService(db)
-    profile = await service.complete_onboarding(
-        user_id, company_id, context.sub_brand_id
-    )
+    profile = await service.complete_onboarding(user_id, company_id)
     return ApiResponse(data=EmployeeProfileResponse.model_validate(profile))
 
 
@@ -99,16 +95,14 @@ async def remove_profile_photo(
 async def list_profiles(
     page: int = 1,
     per_page: int = 20,
-    context: TenantContext = Depends(require_admin),
+    context: TenantContext = Depends(require_company_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> ApiListResponse[EmployeeProfileResponse]:
-    """List employee profiles. Requires admin role."""
+    """List employee profiles. Requires company_admin role."""
     company_id = _require_company_id(context)
     per_page = min(per_page, 100)
     service = EmployeeProfileService(db)
-    profiles, total = await service.list_profiles(
-        company_id, context.sub_brand_id, page, per_page
-    )
+    profiles, total = await service.list_profiles(company_id, page, per_page)
     return ApiListResponse(
         data=[EmployeeProfileResponse.model_validate(p) for p in profiles],
         meta=PaginationMeta(page=page, per_page=per_page, total=total),
@@ -125,20 +119,10 @@ async def get_profile(
     service = EmployeeProfileService(db)
     profile = await service.get_profile(profile_id, context.company_id)
 
-    # Employees can only view their own profile
-    if not context.is_admin:
+    if not context.is_company_admin_or_above:
         user_id = await resolve_current_user_id(db, context.user_id)
         if profile.user_id != user_id:
             raise ForbiddenError("You can only view your own profile")
-
-    # Sub-brand-scoped admins can only see profiles in their sub-brand
-    if (
-        context.sub_brand_id is not None
-        and profile.sub_brand_id is not None
-        and profile.sub_brand_id != context.sub_brand_id
-        and not context.is_corporate_admin_or_above
-    ):
-        raise ForbiddenError("You can only view profiles in your sub-brand")
 
     return ApiResponse(data=EmployeeProfileResponse.model_validate(profile))
 
@@ -147,23 +131,12 @@ async def get_profile(
 async def update_profile(
     profile_id: UUID,
     data: EmployeeProfileUpdate,
-    context: TenantContext = Depends(require_admin),
+    context: TenantContext = Depends(require_company_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> ApiResponse[EmployeeProfileResponse]:
-    """Update an employee profile. Requires admin role."""
+    """Update an employee profile. Requires company_admin role."""
     company_id = _require_company_id(context)
     service = EmployeeProfileService(db)
-
-    # Sub-brand-scoped admins: verify profile is in their sub-brand
-    profile = await service.get_profile(profile_id, company_id)
-    if (
-        context.sub_brand_id is not None
-        and profile.sub_brand_id is not None
-        and profile.sub_brand_id != context.sub_brand_id
-        and not context.is_corporate_admin_or_above
-    ):
-        raise ForbiddenError("You can only update profiles in your sub-brand")
-
     updated = await service.update_profile(profile_id, company_id, data)
     return ApiResponse(data=EmployeeProfileResponse.model_validate(updated))
 
@@ -171,10 +144,10 @@ async def update_profile(
 @router.delete("/{profile_id}", response_model=ApiResponse[EmployeeProfileResponse])
 async def delete_profile(
     profile_id: UUID,
-    context: TenantContext = Depends(require_admin),
+    context: TenantContext = Depends(require_company_admin),
     db: AsyncSession = Depends(get_db_session),
 ) -> ApiResponse[EmployeeProfileResponse]:
-    """Soft-delete an employee profile. Requires admin role."""
+    """Soft-delete an employee profile. Requires company_admin role."""
     company_id = _require_company_id(context)
     service = EmployeeProfileService(db)
     profile = await service.soft_delete_profile(profile_id, company_id)

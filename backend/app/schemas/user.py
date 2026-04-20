@@ -8,7 +8,6 @@ class UserCreate(BaseModel):
     email: str
     full_name: str
     role: str
-    sub_brand_id: UUID
 
     @field_validator("email", mode="before")
     @classmethod
@@ -20,7 +19,6 @@ class UserUpdate(BaseModel):
     full_name: str | None = None
     email: str | None = None
     role: str | None = None
-    sub_brand_id: UUID | None = None
     is_active: bool | None = None
 
     @field_validator("email", mode="before")
@@ -36,7 +34,6 @@ class UserResponse(BaseModel):
 
     id: UUID
     company_id: UUID
-    sub_brand_id: UUID | None
     email: str
     full_name: str
     role: str

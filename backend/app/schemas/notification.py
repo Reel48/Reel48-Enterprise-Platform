@@ -3,8 +3,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from app.schemas.common import ApiListResponse
-
 
 class NotificationCreate(BaseModel):
     """Used by admins to create a notification."""
@@ -12,7 +10,7 @@ class NotificationCreate(BaseModel):
     title: str
     body: str
     notification_type: str
-    target_scope: str = "sub_brand"
+    target_scope: str = "company"
     target_user_id: UUID | None = None
     link_url: str | None = None
     expires_at: datetime | None = None
@@ -20,7 +18,7 @@ class NotificationCreate(BaseModel):
     @field_validator("notification_type")
     @classmethod
     def notification_type_must_be_valid(cls, v: str) -> str:
-        valid = {"announcement", "catalog_available", "buying_window_reminder", "order_update"}
+        valid = {"announcement", "system"}
         if v not in valid:
             raise ValueError(f"notification_type must be one of: {', '.join(sorted(valid))}")
         return v
@@ -28,7 +26,7 @@ class NotificationCreate(BaseModel):
     @field_validator("target_scope")
     @classmethod
     def target_scope_must_be_valid(cls, v: str) -> str:
-        valid = {"company", "sub_brand", "individual"}
+        valid = {"company", "individual"}
         if v not in valid:
             raise ValueError(f"target_scope must be one of: {', '.join(sorted(valid))}")
         return v
@@ -41,7 +39,6 @@ class NotificationResponse(BaseModel):
 
     id: UUID
     company_id: UUID
-    sub_brand_id: UUID | None
     title: str
     body: str
     notification_type: str

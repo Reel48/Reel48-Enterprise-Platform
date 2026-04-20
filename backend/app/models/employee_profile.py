@@ -1,14 +1,14 @@
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 
-from app.models.base import TenantBase
+from app.models.base import CompanyBase
 
 
-class EmployeeProfile(TenantBase):
+class EmployeeProfile(CompanyBase):
     """
     Employee profile storing sizing, department, delivery address, and preferences.
-    One profile per user. Uses TenantBase (company_id + sub_brand_id).
-    RLS: employee_profiles_company_isolation + employee_profiles_sub_brand_scoping.
+    One profile per user. Uses CompanyBase (company_id only).
+    RLS: employee_profiles_company_isolation.
     """
 
     __tablename__ = "employee_profiles"

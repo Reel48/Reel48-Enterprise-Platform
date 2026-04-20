@@ -16,7 +16,6 @@ from app.schemas.auth import (
     InviteRegisterRequest,
     RegisterResponse,
     SelfRegisterRequest,
-    SubBrandSummary,
     ValidateOrgCodeRequest,
     ValidateOrgCodeResponse,
 )
@@ -39,22 +38,17 @@ async def validate_org_code(
     _rate_limit: None = Depends(rate_limit_auth),
 ) -> ApiResponse[ValidateOrgCodeResponse]:
     """
-    Validate an org code and return the company name + sub-brand list.
+    Validate an org code and return the company name.
 
     Unauthenticated. Rate-limited (5 attempts per IP per 15 minutes, shared with /register).
     Returns a generic 400 on any failure to prevent enumeration.
     """
     try:
         service = RegistrationService(db)
-        _org_code, company, sub_brands = await service.validate_org_code(body.code)
+        _org_code, company = await service.validate_org_code(body.code)
 
         return ApiResponse(
-            data=ValidateOrgCodeResponse(
-                company_name=company.name,
-                sub_brands=[
-                    SubBrandSummary.model_validate(sb) for sb in sub_brands
-                ],
-            ),
+            data=ValidateOrgCodeResponse(company_name=company.name),
         )
     except Exception:
         logger.warning("validate_org_code_failed", code=body.code)
@@ -77,7 +71,7 @@ async def register(
     _rate_limit: None = Depends(rate_limit_auth),
 ) -> ApiResponse[RegisterResponse]:
     """
-    Self-registration via org code.
+    Single-step self-registration via org code.
 
     Unauthenticated. Rate-limited (shared "auth" group with /validate-org-code).
     Returns a generic 400 on ANY failure to prevent enumeration.
@@ -86,7 +80,6 @@ async def register(
         service = RegistrationService(db)
         await service.register_via_org_code(
             code=body.code,
-            sub_brand_id=body.sub_brand_id,
             email=body.email,
             full_name=body.full_name,
             password=body.password,

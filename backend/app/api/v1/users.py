@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_db_session, get_tenant_context, require_admin
+from app.core.dependencies import get_db_session, get_tenant_context, require_company_admin
 from app.core.exceptions import ForbiddenError, NotFoundError
 from app.core.tenant import TenantContext
 from app.models.company import Company
@@ -29,7 +29,6 @@ async def get_current_user(
         raise NotFoundError("User", context.user_id)
     response = UserResponse.model_validate(user)
 
-    # Resolve company name from the company table
     if user.company_id:
         result = await db.execute(
             select(Company.name).where(Company.id == user.company_id)
@@ -46,18 +45,15 @@ async def list_users(
     context: TenantContext = Depends(get_tenant_context),
     db: AsyncSession = Depends(get_db_session),
 ) -> ApiListResponse[UserResponse]:
-    # Employees cannot list other users
-    if not context.is_admin:
-        raise ForbiddenError("Admin role required to list users")
+    if not context.is_company_admin_or_above:
+        raise ForbiddenError("Company admin role required to list users")
 
     if context.company_id is None:
         raise ForbiddenError("Use platform endpoints to list users across companies")
 
     per_page = min(per_page, 100)
     service = UserService(db)
-    users, total = await service.list_users(
-        context.company_id, context.sub_brand_id, page, per_page
-    )
+    users, total = await service.list_users(context.company_id, page, per_page)
     return ApiListResponse(
         data=[UserResponse.model_validate(u) for u in users],
         meta=PaginationMeta(page=page, per_page=per_page, total=total),
@@ -73,18 +69,8 @@ async def get_user(
     service = UserService(db)
     user = await service.get_user(user_id, context.company_id)
 
-    # Employees can only view their own profile
-    if not context.is_admin and user.cognito_sub != context.user_id:
+    if not context.is_company_admin_or_above and user.cognito_sub != context.user_id:
         raise ForbiddenError("You can only view your own profile")
-
-    # Sub-brand-scoped admins can only see users in their sub-brand
-    if (
-        context.sub_brand_id is not None
-        and user.sub_brand_id is not None
-        and user.sub_brand_id != context.sub_brand_id
-        and not context.is_corporate_admin_or_above
-    ):
-        raise ForbiddenError("You can only view users in your sub-brand")
 
     return ApiResponse(data=UserResponse.model_validate(user))
 
@@ -94,20 +80,12 @@ async def get_user(
 )
 async def create_user(
     data: UserCreate,
-    context: TenantContext = Depends(require_admin),
+    context: TenantContext = Depends(require_company_admin),
     db: AsyncSession = Depends(get_db_session),
     cognito_service: CognitoService = Depends(get_cognito_service),
 ) -> ApiResponse[UserResponse]:
     if context.company_id is None:
         raise ForbiddenError("Use platform endpoints for cross-company user creation")
-
-    # sub_brand_admin can only create users in their own sub-brand
-    if (
-        context.sub_brand_id is not None
-        and data.sub_brand_id != context.sub_brand_id
-        and not context.is_corporate_admin_or_above
-    ):
-        raise ForbiddenError("You can only create users in your own sub-brand")
 
     service = UserService(db, cognito_service)
     user = await service.create_user(context.company_id, data, context.role)
@@ -124,8 +102,7 @@ async def update_current_user(
     """Update the authenticated user's own name and/or email."""
     user_id = await resolve_current_user_id(db, context.user_id)
 
-    # Non-admins can only update full_name and email
-    if not context.is_admin:
+    if not context.is_company_admin_or_above:
         allowed = data.model_dump(exclude_unset=True)
         disallowed = set(allowed.keys()) - {"full_name", "email"}
         if disallowed:
@@ -147,24 +124,13 @@ async def update_user(
     service = UserService(db, cognito_service)
     user = await service.get_user(user_id, context.company_id)
 
-    # Employees can only update their own full_name and email
-    if not context.is_admin:
+    if not context.is_company_admin_or_above:
         if user.cognito_sub != context.user_id:
             raise ForbiddenError("You can only update your own profile")
-        # Only allow full_name and email updates for employees
         allowed = data.model_dump(exclude_unset=True)
         disallowed = set(allowed.keys()) - {"full_name", "email"}
         if disallowed:
             raise ForbiddenError("Employees can only update their name and email")
-
-    # Sub-brand-scoped admins can only update users in their sub-brand
-    if (
-        context.sub_brand_id is not None
-        and user.sub_brand_id is not None
-        and user.sub_brand_id != context.sub_brand_id
-        and not context.is_corporate_admin_or_above
-    ):
-        raise ForbiddenError("You can only update users in your sub-brand")
 
     updated = await service.update_user(user_id, context.company_id, data, context.role)
     return ApiResponse(data=UserResponse.model_validate(updated))
@@ -173,7 +139,7 @@ async def update_user(
 @router.delete("/{user_id}", response_model=ApiResponse[UserResponse])
 async def delete_user(
     user_id: UUID,
-    context: TenantContext = Depends(require_admin),
+    context: TenantContext = Depends(require_company_admin),
     db: AsyncSession = Depends(get_db_session),
     cognito_service: CognitoService = Depends(get_cognito_service),
 ) -> ApiResponse[UserResponse]:

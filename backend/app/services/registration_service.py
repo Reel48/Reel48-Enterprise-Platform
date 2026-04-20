@@ -7,7 +7,6 @@ the auth router stays thin.
 """
 
 from datetime import UTC, datetime
-from uuid import UUID
 
 import structlog
 from sqlalchemy import select
@@ -17,7 +16,6 @@ from app.core.exceptions import AppException
 from app.models.company import Company
 from app.models.invite import Invite
 from app.models.org_code import OrgCode
-from app.models.sub_brand import SubBrand
 from app.models.user import User
 from app.services.cognito_service import CognitoService
 
@@ -28,11 +26,9 @@ class RegistrationService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
-    async def validate_org_code(
-        self, code: str
-    ) -> tuple[OrgCode, Company, list[SubBrand]]:
+    async def validate_org_code(self, code: str) -> tuple[OrgCode, Company]:
         """
-        Validate an org code and return the associated company + sub-brands.
+        Validate an org code and return the associated company.
 
         Raises AppException on any failure (invalid code, inactive, etc.).
         """
@@ -58,52 +54,24 @@ class RegistrationService:
                 status_code=400,
             )
 
-        sb_result = await self.db.execute(
-            select(SubBrand)
-            .where(
-                SubBrand.company_id == company.id,
-                SubBrand.is_active.is_(True),
-            )
-            .order_by(SubBrand.is_default.desc(), SubBrand.name.asc())
-        )
-        sub_brands = list(sb_result.scalars().all())
-
-        return org_code, company, sub_brands
+        return org_code, company
 
     async def register_via_org_code(
         self,
         code: str,
-        sub_brand_id: UUID,
         email: str,
         full_name: str,
         password: str,
         cognito_service: CognitoService,
     ) -> User:
         """
-        Self-registration flow via org code.
+        Single-step self-registration via org code.
 
-        Validates the code, sub-brand ownership, email uniqueness,
-        creates the Cognito user, and inserts the local User record.
+        Validates the code, checks email uniqueness, creates the Cognito user,
+        and inserts the local User record (role=employee).
         """
-        # 1. Validate org code
-        org_code, company, _sub_brands = await self.validate_org_code(code)
+        org_code, company = await self.validate_org_code(code)
 
-        # 2. Validate sub_brand_id belongs to the resolved company
-        sb_result = await self.db.execute(
-            select(SubBrand).where(
-                SubBrand.id == sub_brand_id,
-                SubBrand.company_id == company.id,
-                SubBrand.is_active.is_(True),
-            )
-        )
-        if sb_result.scalar_one_or_none() is None:
-            raise AppException(
-                code="REGISTRATION_FAILED",
-                message="Registration failed",
-                status_code=400,
-            )
-
-        # 3. Check email uniqueness in local DB
         existing = await self.db.execute(select(User).where(User.email == email))
         if existing.scalar_one_or_none() is not None:
             raise AppException(
@@ -112,19 +80,15 @@ class RegistrationService:
                 status_code=400,
             )
 
-        # 4. Create Cognito user with permanent password
         cognito_sub = await cognito_service.create_cognito_user_with_password(
             email=email,
             password=password,
             company_id=company.id,  # type: ignore[arg-type]
-            sub_brand_id=sub_brand_id,
             role="employee",
         )
 
-        # 5. Create local user record
         user = User(
             company_id=company.id,
-            sub_brand_id=sub_brand_id,
             cognito_sub=cognito_sub,
             email=email,
             full_name=full_name,
@@ -140,7 +104,6 @@ class RegistrationService:
             "user_self_registered",
             user_id=str(user.id),
             company_id=str(company.id),
-            sub_brand_id=str(sub_brand_id),
         )
 
         return user
@@ -162,7 +125,6 @@ class RegistrationService:
         """
         now = datetime.now(UTC)
 
-        # 1. Look up invite by token
         result = await self.db.execute(
             select(Invite).where(
                 Invite.token == token,
@@ -178,7 +140,6 @@ class RegistrationService:
                 status_code=400,
             )
 
-        # 2. Verify email matches (case-insensitive for safety with legacy data)
         if invite.email.lower() != email.lower():
             raise AppException(
                 code="REGISTRATION_FAILED",
@@ -186,7 +147,6 @@ class RegistrationService:
                 status_code=400,
             )
 
-        # 3. Check email uniqueness in local DB
         existing = await self.db.execute(select(User).where(User.email == email))
         if existing.scalar_one_or_none() is not None:
             raise AppException(
@@ -195,19 +155,15 @@ class RegistrationService:
                 status_code=400,
             )
 
-        # 4. Create Cognito user with permanent password
         cognito_sub = await cognito_service.create_cognito_user_with_password(
             email=email,
             password=password,
             company_id=invite.company_id,  # type: ignore[arg-type]
-            sub_brand_id=invite.target_sub_brand_id,  # type: ignore[arg-type]
             role=invite.role,  # type: ignore[arg-type]
         )
 
-        # 5. Create local user record
         user = User(
             company_id=invite.company_id,
-            sub_brand_id=invite.target_sub_brand_id,
             cognito_sub=cognito_sub,
             email=email,
             full_name=full_name,
@@ -217,7 +173,6 @@ class RegistrationService:
         self.db.add(user)
         await self.db.flush()
 
-        # 6. Mark invite as consumed
         invite.consumed_at = now  # type: ignore[assignment]
         await self.db.flush()
         await self.db.refresh(user)
@@ -226,7 +181,6 @@ class RegistrationService:
             "user_registered_via_invite",
             user_id=str(user.id),
             company_id=str(invite.company_id),
-            sub_brand_id=str(invite.target_sub_brand_id),
             invite_id=str(invite.id),
         )
 

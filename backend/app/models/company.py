@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, String, Text
+from sqlalchemy import Boolean, Column, String
 
 from app.models.base import GlobalBase
 
@@ -14,5 +14,4 @@ class Company(GlobalBase):
 
     name = Column(String(255), nullable=False)
     slug = Column(String(100), nullable=False, unique=True)
-    stripe_customer_id = Column(Text, nullable=True)
     is_active = Column(Boolean, nullable=False, server_default="true")
